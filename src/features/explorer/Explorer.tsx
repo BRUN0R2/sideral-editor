@@ -115,11 +115,13 @@ function TreeNode({
             <Icon name={node.expanded ? "chevronDown" : "chevronRight"} size={17} />
           ) : null}
         </span>
-        {isDirectory ? (
-          <Icon name={node.expanded ? "folderOpen" : "folder"} size={18} />
-        ) : (
-          <FileTypeIcon name={node.name} />
-        )}
+        <span className="tree-entry-icon">
+          {isDirectory ? (
+            <Icon name={node.expanded ? "folderOpen" : "folder"} size={18} />
+          ) : (
+            <FileTypeIcon name={node.name} />
+          )}
+        </span>
         <span className="tree-label">{node.name}</span>
       </button>
       {isDirectory && node.expanded && node.children !== null ? (

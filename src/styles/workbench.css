@@ -317,6 +317,14 @@
   animation: tree-pulse 850ms ease-in-out infinite;
 }
 
+.tree-entry-icon {
+  display: grid;
+  width: 18px;
+  height: 21px;
+  flex: 0 0 18px;
+  place-items: center;
+}
+
 @keyframes tree-pulse {
   50% {
     opacity: 0.25;
