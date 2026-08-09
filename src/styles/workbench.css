@@ -329,6 +329,73 @@
   white-space: nowrap;
 }
 
+.file-type-icon {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  place-items: center;
+  color: var(--text-subtle);
+  font-family: "Segoe UI", sans-serif;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.file-type-icon--typescript,
+.file-type-icon--readme {
+  color: var(--file-blue);
+}
+
+.file-type-icon--javascript,
+.file-type-icon--json {
+  color: var(--file-yellow);
+}
+
+.file-type-icon--package,
+.file-type-icon--shell {
+  color: var(--file-green);
+}
+
+.file-type-icon--html,
+.file-type-icon--rust {
+  color: var(--file-orange);
+}
+
+.file-type-icon--style,
+.file-type-icon--python,
+.file-type-icon--markdown {
+  color: var(--file-cyan);
+}
+
+.file-type-icon--config,
+.file-type-icon--database {
+  color: var(--file-purple);
+}
+
+.file-type-icon--git {
+  color: var(--file-red);
+  font-size: 8px;
+}
+
+.file-type-icon--vite {
+  color: var(--file-yellow);
+  font-size: 10px;
+  font-style: italic;
+}
+
+.file-type-icon--readme {
+  width: 13px;
+  height: 13px;
+  margin: 1.5px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-family: Georgia, serif;
+  font-size: 8px;
+  font-style: italic;
+}
+
 .tree-empty {
   margin: 13px 12px;
   color: var(--text-subtle);

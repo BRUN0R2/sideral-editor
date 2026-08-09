@@ -1,3 +1,4 @@
+import { FileTypeIcon } from "../../components/FileTypeIcon";
 import { Icon } from "../../components/Icon";
 import { useI18n } from "../i18n/I18nProvider";
 import { type EditorDocument, isDocumentDirty } from "../workspace/types";
@@ -35,7 +36,7 @@ export function EditorTabs({
               onClick={() => onActivate(document.id)}
               title={document.path ?? document.name}
             >
-              <Icon name="file" size={14} />
+              <FileTypeIcon name={document.name} />
               <span>{document.name}</span>
               {savingIds.has(document.id) ? (
                 <span className="tab-saving" aria-hidden="true" />

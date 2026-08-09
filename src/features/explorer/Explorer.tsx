@@ -1,3 +1,4 @@
+import { FileTypeIcon } from "../../components/FileTypeIcon";
 import { Icon } from "../../components/Icon";
 import { IconButton } from "../../components/IconButton";
 import { useI18n } from "../i18n/I18nProvider";
@@ -114,7 +115,11 @@ function TreeNode({
             <Icon name={node.expanded ? "chevronDown" : "chevronRight"} size={14} />
           ) : null}
         </span>
-        <Icon name={isDirectory ? (node.expanded ? "folderOpen" : "folder") : "file"} size={15} />
+        {isDirectory ? (
+          <Icon name={node.expanded ? "folderOpen" : "folder"} size={15} />
+        ) : (
+          <FileTypeIcon name={node.name} />
+        )}
         <span className="tree-label">{node.name}</span>
       </button>
       {isDirectory && node.expanded && node.children !== null ? (
