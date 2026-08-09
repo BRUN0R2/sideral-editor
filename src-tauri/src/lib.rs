@@ -94,11 +94,16 @@ where
 }
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let context = tauri::generate_context!();
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init());
-    let builder = updater::attach(builder);
+    let builder = if updater::is_configured(context.config()) {
+        updater::attach(builder)
+    } else {
+        builder
+    };
 
     builder
         .invoke_handler(tauri::generate_handler![
@@ -110,7 +115,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             write_text_file,
             list_directory,
         ])
-        .run(tauri::generate_context!())?;
+        .run(context)?;
 
     Ok(())
 }
