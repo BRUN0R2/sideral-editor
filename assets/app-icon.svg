@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <title>Sideral Editor application icon</title>
+  <defs>
+    <linearGradient id="background" x1="180" y1="100" x2="860" y2="940" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#303f70" />
+      <stop offset="1" stop-color="#121a2d" />
+    </linearGradient>
+    <linearGradient id="mark" x1="340" y1="255" x2="700" y2="790" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#d8dfff" />
+      <stop offset="1" stop-color="#8ea7ff" />
+    </linearGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="224" fill="url(#background)" />
+  <rect x="65" y="65" width="894" height="894" rx="223" fill="none" stroke="#7186c7" stroke-opacity=".42" stroke-width="10" />
+  <path d="M690 322c-52-61-129-88-218-74-105 17-169 79-165 154 5 77 69 119 203 138 112 16 171 48 166 119-6 74-79 124-178 119-92-4-166-38-218-101" fill="none" stroke="url(#mark)" stroke-width="112" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="m768 214 15 59 59 15-59 15-15 59-15-59-59-15 59-15 15-59Z" fill="#b7c5ff" />
+</svg>

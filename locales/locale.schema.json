@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sideral-editor.dev/schemas/locale.schema.json",
+  "title": "Sideral Editor locale",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "locale", "name", "direction", "messages"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "locale": {
+      "type": "string",
+      "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    "name": { "type": "string", "minLength": 1 },
+    "direction": { "enum": ["ltr", "rtl"] },
+    "messages": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "string" }
+    }
+  }
+}

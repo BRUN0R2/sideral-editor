@@ -21,6 +21,7 @@ Thumbs.db
 # Logs and generated output
 *.log
 build/
+src-tauri/gen/
 
 # External source used only for architecture research
 references/vscode/

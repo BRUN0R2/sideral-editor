@@ -1,0 +1,13 @@
+{
+  "bundle": {
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "REPLACE_WITH_TAURI_PUBLIC_KEY",
+      "endpoints": [
+        "https://updates.example.com/sideral-editor/{{target}}/{{arch}}/{{current_version}}"
+      ]
+    }
+  }
+}
