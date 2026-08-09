@@ -6,23 +6,21 @@ import type { DesktopPreferences } from "../../lib/contracts";
 import { toApplicationError } from "../../lib/errors";
 import { useI18n } from "../i18n/I18nProvider";
 import { useUpdates } from "../updates/UpdateProvider";
-import { useDesktopPreferences } from "./useDesktopPreferences";
+import type { DesktopPreferencesController } from "./useDesktopPreferences";
 
 export function SettingsView({
   active,
+  desktopPreferences,
   onOpenUpdate,
 }: {
   readonly active: boolean;
+  readonly desktopPreferences: DesktopPreferencesController;
   readonly onOpenUpdate: () => void;
 }) {
   const { selection, t, setPreference, refreshLocales, bootstrap } = useI18n();
   const { state: updateState, checkForUpdates } = useUpdates();
   const [operationError, setOperationError] = useState<string | null>(null);
   const [changingLanguage, setChangingLanguage] = useState(false);
-  const desktopPreferences = useDesktopPreferences(
-    bootstrap.desktopPreferences,
-    bootstrap.runtime === "desktop",
-  );
   const desktopPreferencesEnabled = bootstrap.runtime === "desktop";
 
   const updateDesktopPreferences = (preferences: DesktopPreferences): void => {
@@ -142,6 +140,18 @@ export function SettingsView({
                     updateDesktopPreferences({
                       ...desktopPreferences.preferences,
                       closeToTray,
+                    })
+                  }
+                />
+                <PreferenceCheckbox
+                  checked={desktopPreferences.preferences.autoSave === "afterDelay"}
+                  description={t("settings.autoSaveDescription")}
+                  disabled={!desktopPreferencesEnabled}
+                  label={t("settings.autoSave")}
+                  onChange={(enabled) =>
+                    updateDesktopPreferences({
+                      ...desktopPreferences.preferences,
+                      autoSave: enabled ? "afterDelay" : "off",
                     })
                   }
                 />

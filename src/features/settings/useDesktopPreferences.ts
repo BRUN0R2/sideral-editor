@@ -3,7 +3,7 @@ import { saveDesktopPreferences } from "../../lib/backend";
 import type { DesktopPreferences } from "../../lib/contracts";
 import { ApplicationError } from "../../lib/errors";
 
-interface DesktopPreferencesController {
+export interface DesktopPreferencesController {
   readonly preferences: DesktopPreferences;
   readonly saving: boolean;
   readonly save: (preferences: DesktopPreferences) => Promise<DesktopPreferences>;

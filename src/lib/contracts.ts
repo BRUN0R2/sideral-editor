@@ -36,11 +36,14 @@ export interface ApplicationBootstrap {
   readonly localization: LocaleSelection;
 }
 
+export type AutoSaveMode = "off" | "afterDelay";
+
 export interface DesktopPreferences {
   readonly schemaVersion: 1;
   readonly startWithWindows: boolean;
   readonly startMinimized: boolean;
   readonly closeToTray: boolean;
+  readonly autoSave: AutoSaveMode;
 }
 
 export type DirectoryEntryKind = "directory" | "file" | "symbolicLink";

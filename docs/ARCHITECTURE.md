@@ -26,9 +26,9 @@ React workbench
 
 The frontend owns presentation state. Rust owns filesystem access, settings,
 locale discovery and native integrations. Desktop preferences cross one
-explicit save command; Rust then owns autostart registration, the tray icon and
-the main-window close policy. Each Tauri command is small and describes one
-effect.
+explicit save command; Rust owns autostart registration, the tray icon and the
+main-window close policy, while the workspace owns the auto-save timer. Each
+Tauri command is small and describes one effect.
 
 ## Modules
 
@@ -68,16 +68,18 @@ effect.
 | Application shortcuts | `Workbench` | Remove listener on effect cleanup |
 | WebView shortcut guard | `App` | Remove listener on effect cleanup |
 | Desktop preference queue | `useDesktopPreferences` | Serial queue drains after every optimistic save |
+| Auto-save delays | `useWorkspace` | Clear and recreate on content, preference or close-state changes |
 | Tray icon and menu | Tauri application | Released when the application exits |
 | Locale focus listener | `SettingsView` | Exists only while the settings view is selected |
 | Updater `Resource` | `UpdateProvider` | Close on replacement or provider cleanup |
 | In-flight reads/saves | `useWorkspace` maps | Deduplicated and removed in `finally` |
 | Temporary files | Rust RAII | Closed automatically; persisted atomically |
 
-There is no timer or polling loop. Locale files are rescanned once when settings
-open and when the app regains focus after a user copies a file. Desktop
-preference changes remain interactive while complete snapshots are persisted in
-order. Update checks run
+There is no polling loop. Auto Save owns one cancellable 1-second timeout per
+dirty named document and never opens a save dialog for an untitled buffer.
+Locale files are rescanned once when settings open and when the app regains
+focus after a user copies a file. Desktop preference changes remain interactive
+while complete snapshots are persisted in order. Update checks run
 once per application session plus explicit user requests.
 
 ## WebView shortcut boundary

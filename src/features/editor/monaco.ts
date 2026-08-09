@@ -48,6 +48,7 @@ export function ensureSideralTheme(): void {
       "editor.selectionBackground": "#61677180",
       "editor.inactiveSelectionBackground": "#4b515b66",
       "editor.lineHighlightBackground": "#2c313a",
+      "editor.lineHighlightBorder": "#00000000",
       "editorIndentGuide.background1": "#373c45",
       "editorIndentGuide.activeBackground1": "#555b65",
       "editorGutter.background": "#282c34",

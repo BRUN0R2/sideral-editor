@@ -9,6 +9,7 @@ import { WelcomeView } from "../features/editor/WelcomeView";
 import { Explorer } from "../features/explorer/Explorer";
 import { useI18n } from "../features/i18n/I18nProvider";
 import { SettingsView } from "../features/settings/SettingsView";
+import { useDesktopPreferences } from "../features/settings/useDesktopPreferences";
 import { UpdateModal } from "../features/updates/UpdateModal";
 import { UpdateProvider, useUpdates } from "../features/updates/UpdateProvider";
 import { useWorkspace } from "../features/workspace/useWorkspace";
@@ -34,7 +35,11 @@ export function App() {
 
 function Workbench() {
   const { bootstrap, t } = useI18n();
-  const workspace = useWorkspace();
+  const desktopPreferences = useDesktopPreferences(
+    bootstrap.desktopPreferences,
+    bootstrap.runtime === "desktop",
+  );
+  const workspace = useWorkspace(desktopPreferences.preferences.autoSave);
   const [activeView, setActiveView] = useState<"editor" | "settings">("editor");
   const [updateOpen, setUpdateOpen] = useState(false);
 
@@ -115,13 +120,6 @@ function Workbench() {
             selected={activeView === "editor"}
             onClick={() => setActiveView("editor")}
           />
-          {workspace.activeDocument !== null ? (
-            <IconButton
-              label={t("action.save")}
-              icon="save"
-              onClick={() => void workspace.saveActiveDocument()}
-            />
-          ) : null}
           <div className="activity-bar__spacer" />
           <UpdateActivityButton
             label={t("updates.badgeLabel")}
@@ -187,6 +185,7 @@ function Workbench() {
           </main>
           <SettingsView
             active={activeView === "settings"}
+            desktopPreferences={desktopPreferences}
             onOpenUpdate={() => setUpdateOpen(true)}
           />
         </div>

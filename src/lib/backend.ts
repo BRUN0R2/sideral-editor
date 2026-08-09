@@ -124,6 +124,7 @@ async function createBrowserPreviewBootstrap(): Promise<ApplicationBootstrap> {
       startWithWindows: false,
       startMinimized: false,
       closeToTray: false,
+      autoSave: "off",
     },
     localization: {
       preference: "system",

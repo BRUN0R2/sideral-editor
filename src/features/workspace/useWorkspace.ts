@@ -1,8 +1,9 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isDesktopRuntime, listDirectory, readTextFile, writeTextFile } from "../../lib/backend";
-import type { DirectoryEntry } from "../../lib/contracts";
+import type { AutoSaveMode, DirectoryEntry } from "../../lib/contracts";
 import { ApplicationError, toApplicationError } from "../../lib/errors";
+import { AUTO_SAVE_DELAY_MS, autoSaveDocuments } from "./auto-save";
 import { languageForFile } from "./language";
 import {
   type CursorPosition,
@@ -14,7 +15,12 @@ import {
 
 const INITIAL_CURSOR: CursorPosition = { line: 1, column: 1 };
 
-export function useWorkspace() {
+interface AutoSaveTimer {
+  readonly content: string;
+  readonly timerId: number;
+}
+
+export function useWorkspace(autoSave: AutoSaveMode) {
   const [workspaceRoot, setWorkspaceRoot] = useState<WorkspaceRoot | null>(null);
   const [entries, setEntries] = useState<readonly WorkspaceNode[]>([]);
   const [documents, setDocuments] = useState<readonly EditorDocument[]>([]);
@@ -27,6 +33,7 @@ export function useWorkspace() {
   const directoryRequests = useRef(new Map<string, Promise<readonly DirectoryEntry[]>>());
   const fileRequests = useRef(new Map<string, Promise<void>>());
   const saveRequests = useRef(new Map<string, Promise<boolean>>());
+  const autoSaveTimers = useRef(new Map<string, AutoSaveTimer>());
   const documentsRef = useRef(documents);
   documentsRef.current = documents;
 
@@ -253,6 +260,42 @@ export function useWorkspace() {
       return saveDocument(activeDocumentId, forceSaveAs);
     },
     [activeDocumentId, saveDocument],
+  );
+
+  useEffect(() => {
+    const eligibleDocuments =
+      autoSave === "afterDelay" ? autoSaveDocuments(documents, pendingCloseId) : [];
+    const eligibleById = new Map(eligibleDocuments.map((document) => [document.id, document]));
+
+    for (const [id, timer] of autoSaveTimers.current) {
+      const document = eligibleById.get(id);
+      if (document === undefined || document.content !== timer.content) {
+        window.clearTimeout(timer.timerId);
+        autoSaveTimers.current.delete(id);
+      }
+    }
+
+    for (const document of eligibleDocuments) {
+      if (autoSaveTimers.current.has(document.id)) {
+        continue;
+      }
+      const id = document.id;
+      const timerId = window.setTimeout(() => {
+        autoSaveTimers.current.delete(id);
+        void saveDocument(id);
+      }, AUTO_SAVE_DELAY_MS);
+      autoSaveTimers.current.set(id, { content: document.content, timerId });
+    }
+  }, [autoSave, documents, pendingCloseId, saveDocument]);
+
+  useEffect(
+    () => () => {
+      for (const timer of autoSaveTimers.current.values()) {
+        window.clearTimeout(timer.timerId);
+      }
+      autoSaveTimers.current.clear();
+    },
+    [],
   );
 
   const requestCloseDocument = useCallback((id: string) => {

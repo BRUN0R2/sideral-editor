@@ -18,6 +18,14 @@ const DESKTOP_PREFERENCES_FILE_NAME: &str = "desktop-preferences.json";
 const DESKTOP_PREFERENCES_SCHEMA_VERSION: u8 = 1;
 const MAX_DESKTOP_PREFERENCES_BYTES: u64 = 16 * 1024;
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AutoSaveMode {
+    #[default]
+    Off,
+    AfterDelay,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DesktopPreferences {
@@ -25,6 +33,8 @@ pub struct DesktopPreferences {
     pub start_with_windows: bool,
     pub start_minimized: bool,
     pub close_to_tray: bool,
+    #[serde(default)]
+    pub auto_save: AutoSaveMode,
 }
 
 impl Default for DesktopPreferences {
@@ -34,6 +44,7 @@ impl Default for DesktopPreferences {
             start_with_windows: false,
             start_minimized: false,
             close_to_tray: false,
+            auto_save: AutoSaveMode::Off,
         }
     }
 }
@@ -184,7 +195,7 @@ fn desktop_preferences_path(app: &AppHandle) -> AppResult<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{DESKTOP_PREFERENCES_SCHEMA_VERSION, DesktopPreferences};
+    use super::{AutoSaveMode, DESKTOP_PREFERENCES_SCHEMA_VERSION, DesktopPreferences};
 
     #[test]
     fn rejects_minimized_start_without_windows_startup() {
@@ -193,6 +204,7 @@ mod tests {
             start_with_windows: false,
             start_minimized: true,
             close_to_tray: false,
+            auto_save: AutoSaveMode::Off,
         };
 
         assert!(preferences.validate().is_err());
@@ -205,9 +217,30 @@ mod tests {
             "startWithWindows": false,
             "startMinimized": false,
             "closeToTray": false,
+            "autoSave": "off",
             "legacy": true
         }"#;
 
         assert!(serde_json::from_str::<DesktopPreferences>(source).is_err());
+    }
+
+    #[test]
+    fn defaults_auto_save_to_off_when_omitted() {
+        let source = r#"{
+            "schemaVersion": 1,
+            "startWithWindows": false,
+            "startMinimized": false,
+            "closeToTray": false
+        }"#;
+
+        let preferences = serde_json::from_str::<DesktopPreferences>(source);
+
+        assert!(matches!(
+            preferences,
+            Ok(DesktopPreferences {
+                auto_save: AutoSaveMode::Off,
+                ..
+            })
+        ));
     }
 }

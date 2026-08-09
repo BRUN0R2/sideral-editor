@@ -14,7 +14,6 @@ export type IconName =
   | "more"
   | "newFile"
   | "refresh"
-  | "save"
   | "settings"
   | "spark"
   | "update";
@@ -126,14 +125,6 @@ function IconPath({ name }: { readonly name: IconName }) {
         <>
           <path d="M20 7v5h-5" />
           <path d="M19 12a7 7 0 1 0-2 5" />
-        </>
-      );
-    case "save":
-      return (
-        <>
-          <path d="M4 3h13l3 3v15H4z" />
-          <path d="M8 3v6h8V3" />
-          <path d="M8 21v-7h8v7" />
         </>
       );
     case "settings":
