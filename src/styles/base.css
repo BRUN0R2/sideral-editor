@@ -26,6 +26,8 @@
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 16px;
+  --window-chrome-height: 34px;
+  --window-control-width: 46px;
   --shadow-lg: 0 24px 80px rgb(0 0 0 / 45%);
 }
 
@@ -195,11 +197,12 @@ kbd {
 .startup-state {
   display: flex;
   width: 100%;
-  height: 100%;
+  height: calc(100% - var(--window-chrome-height));
   align-items: center;
   justify-content: center;
   flex-direction: column;
   gap: 12px;
+  margin-top: var(--window-chrome-height);
   padding: 32px;
   color: var(--text);
   text-align: center;

@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "../../components/Icon";
 import { Modal } from "../../components/Modal";
+import { PreferenceSwitch } from "../../components/PreferenceSwitch";
 import { openLocaleDirectory } from "../../lib/backend";
+import type { DesktopPreferences } from "../../lib/contracts";
 import { toApplicationError } from "../../lib/errors";
 import { useI18n } from "../i18n/I18nProvider";
 import { useUpdates } from "../updates/UpdateProvider";
+import { useDesktopPreferences } from "./useDesktopPreferences";
 
 export function SettingsModal({
   open,
@@ -18,6 +21,18 @@ export function SettingsModal({
   const { selection, t, setPreference, refreshLocales, changingLanguage, bootstrap } = useI18n();
   const { state: updateState, checkForUpdates } = useUpdates();
   const [operationError, setOperationError] = useState<string | null>(null);
+  const desktopPreferences = useDesktopPreferences(
+    bootstrap.desktopPreferences,
+    bootstrap.runtime === "desktop",
+  );
+  const desktopPreferencesEnabled = bootstrap.runtime === "desktop" && !desktopPreferences.saving;
+
+  const updateDesktopPreferences = (preferences: DesktopPreferences): void => {
+    setOperationError(null);
+    void desktopPreferences.save(preferences).catch((error: unknown) => {
+      setOperationError(toApplicationError(error).message);
+    });
+  };
 
   useEffect(() => {
     if (!open) {
@@ -87,6 +102,62 @@ export function SettingsModal({
       ) : null}
 
       <div className="settings-content">
+        <section className="settings-section">
+          <div className="settings-section__icon">
+            <Icon name="settings" size={19} />
+          </div>
+          <div className="settings-section__body">
+            <h3>{t("settings.applicationSection")}</h3>
+            <p>{t("settings.applicationDescription")}</p>
+            <div className="desktop-preferences" aria-busy={desktopPreferences.saving}>
+              <PreferenceSwitch
+                checked={desktopPreferences.preferences.startWithWindows}
+                description={t("settings.startWithWindowsDescription")}
+                disabled={!desktopPreferencesEnabled}
+                label={t("settings.startWithWindows")}
+                onChange={(startWithWindows) =>
+                  updateDesktopPreferences({
+                    ...desktopPreferences.preferences,
+                    startWithWindows,
+                    startMinimized: startWithWindows
+                      ? desktopPreferences.preferences.startMinimized
+                      : false,
+                  })
+                }
+              />
+              <PreferenceSwitch
+                checked={desktopPreferences.preferences.startMinimized}
+                description={t("settings.startMinimizedDescription")}
+                disabled={
+                  !desktopPreferencesEnabled || !desktopPreferences.preferences.startWithWindows
+                }
+                label={t("settings.startMinimized")}
+                onChange={(startMinimized) =>
+                  updateDesktopPreferences({
+                    ...desktopPreferences.preferences,
+                    startMinimized,
+                  })
+                }
+              />
+              <PreferenceSwitch
+                checked={desktopPreferences.preferences.closeToTray}
+                description={t("settings.closeToTrayDescription")}
+                disabled={!desktopPreferencesEnabled}
+                label={t("settings.closeToTray")}
+                onChange={(closeToTray) =>
+                  updateDesktopPreferences({
+                    ...desktopPreferences.preferences,
+                    closeToTray,
+                  })
+                }
+              />
+            </div>
+            <span className="desktop-preferences__status" aria-live="polite">
+              {desktopPreferences.saving ? t("settings.savingDesktopPreferences") : ""}
+            </span>
+          </div>
+        </section>
+
         <section className="settings-section">
           <div className="settings-section__icon">
             <Icon name="globe" size={19} />

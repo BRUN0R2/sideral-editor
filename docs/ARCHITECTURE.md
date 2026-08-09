@@ -22,8 +22,10 @@ React workbench
 ```
 
 The frontend owns presentation state. Rust owns filesystem access, settings,
-locale discovery and native integrations. Each Tauri command is small and
-describes one effect.
+locale discovery and native integrations. Desktop preferences cross one
+explicit save command; Rust then owns autostart registration, the tray icon and
+the main-window close policy. Each Tauri command is small and describes one
+effect.
 
 ## Modules
 
@@ -42,6 +44,8 @@ describes one effect.
 ### Native backend
 
 - `documents.rs`: bounded UTF-8 reads, lazy directory lists and atomic writes.
+- `desktop_integration`: versioned desktop preferences, official autostart,
+  system tray and main-window lifecycle policy.
 - `i18n.rs`: strict locale schema, discovery, matching and validation.
 - `settings.rs`: versioned settings with atomic persistence.
 - `updater.rs`: official updater registration and configuration detection.
@@ -57,6 +61,8 @@ describes one effect.
 | Monaco listeners | `EditorPane` | Effect cleanup before model change |
 | Resize observer | `EditorPane` | Disconnect on pane cleanup |
 | Global shortcuts | `Workbench` | Remove listener on effect cleanup |
+| Desktop preference request | `useDesktopPreferences` | Settled promise clears the owned request |
+| Tray icon and menu | Tauri application | Released when the application exits |
 | Locale focus listener | `SettingsModal` | Exists only while the modal is open |
 | Updater `Resource` | `UpdateProvider` | Close on replacement or provider cleanup |
 | In-flight reads/saves | `useWorkspace` maps | Deduplicated and removed in `finally` |

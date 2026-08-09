@@ -3,6 +3,7 @@ import english from "../../locales/en.json";
 import portugueseBrazil from "../../locales/pt-BR.json";
 import type {
   ApplicationBootstrap,
+  DesktopPreferences,
   DirectoryEntry,
   LocaleBundle,
   LocaleSelection,
@@ -55,6 +56,13 @@ export function setLanguagePreference(preference: string): Promise<LocaleSelecti
 export function openLocaleDirectory(): Promise<void> {
   assertDesktopRuntime();
   return invoke<void>("open_locale_directory");
+}
+
+export function saveDesktopPreferences(
+  preferences: DesktopPreferences,
+): Promise<DesktopPreferences> {
+  assertDesktopRuntime();
+  return invoke<DesktopPreferences>("save_desktop_preferences", { preferences });
 }
 
 export function readTextFile(path: string): Promise<TextDocumentPayload> {
@@ -111,6 +119,12 @@ async function createBrowserPreviewBootstrap(): Promise<ApplicationBootstrap> {
     version: "0.1.0-dev",
     runtime: "browser-preview",
     updaterEnabled: false,
+    desktopPreferences: {
+      schemaVersion: 1,
+      startWithWindows: false,
+      startMinimized: false,
+      closeToTray: false,
+    },
     localization: {
       preference: "system",
       active,

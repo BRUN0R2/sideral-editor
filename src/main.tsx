@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
 import { ErrorBoundary } from "./app/ErrorBoundary";
+import { WindowChrome } from "./components/WindowChrome";
 import { I18nProvider } from "./features/i18n/I18nProvider";
 import "./styles/base.css";
 import "./styles/workbench.css";
@@ -14,6 +15,7 @@ if (rootElement === null) {
 
 createRoot(rootElement).render(
   <StrictMode>
+    <WindowChrome />
     <ErrorBoundary>
       <I18nProvider>
         <App />

@@ -87,10 +87,6 @@ function Workbench() {
   return (
     <div className="app-shell">
       <header className="top-bar">
-        <div className="brand">
-          <span className="brand-mark">S</span>
-          <span className="brand-name">{t("app.name")}</span>
-        </div>
         <div className="workspace-breadcrumb" title={workspace.workspaceRoot?.path}>
           <span>{t("topbar.workspace")}</span>
           <Icon name="chevronRight" size={13} />

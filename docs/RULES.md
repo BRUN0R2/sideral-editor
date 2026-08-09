@@ -260,6 +260,17 @@ Performance deve ser intencional, nunca acidental.
 * Manter integracoes externas isoladas.
 * Atualizar dependencias regularmente para versoes modernas e seguras.
 
+## Prioridade de solucoes oficiais
+
+* Priorizar sempre APIs, plugins, SDKs, bibliotecas e fluxos mantidos
+  oficialmente pela plataforma ou tecnologia proprietaria da integracao.
+* Consultar a documentacao oficial atual antes de implementar ou alterar uma
+  integracao externa.
+* Solucoes manuais, comunitarias ou de terceiros so podem ser adotadas quando
+  nao existir alternativa oficial capaz de atender ao requisito real.
+* Quando uma alternativa nao oficial for inevitavel, isolar sua responsabilidade
+  e registrar de forma explicita o motivo tecnico da escolha.
+
 ---
 
 # Regras de UI e UX

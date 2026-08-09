@@ -1,8 +1,9 @@
 .app-shell {
   display: grid;
   width: 100%;
-  height: 100%;
+  height: calc(100% - var(--window-chrome-height));
   grid-template-rows: 43px minmax(0, 1fr) 24px;
+  margin-top: var(--window-chrome-height);
   color: var(--text);
   background: var(--bg-root);
 }
@@ -11,44 +12,90 @@
   grid-template-rows: 43px 28px minmax(0, 1fr) 24px;
 }
 
+.window-chrome {
+  position: fixed;
+  z-index: 40;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--window-chrome-height);
+  border-bottom: 1px solid #20262f;
+  color: #939dab;
+  background: #0f1318;
+  pointer-events: none;
+  user-select: none;
+}
+
+.window-chrome__drag-region {
+  position: absolute;
+  z-index: 0;
+  inset: 0 calc(var(--window-control-width) * 3) 0 0;
+  pointer-events: auto;
+}
+
+.window-chrome__controls {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  display: flex;
+  height: 100%;
+  color: #87909d;
+  pointer-events: auto;
+}
+
+.window-chrome__controls button {
+  display: grid;
+  width: var(--window-control-width);
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  place-items: center;
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+  opacity: 1;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+
+.window-chrome__controls button:disabled {
+  cursor: default;
+}
+
+.window-chrome__controls button:not(:disabled):hover {
+  color: #d8dde7;
+  background: #20262e;
+}
+
+.window-chrome__controls .window-chrome__close:not(:disabled):hover {
+  color: #fff;
+  background: #c44552;
+}
+
+.window-chrome__controls svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.2;
+}
+
+.window-chrome__controls[data-suppress-hover] button:hover,
+.window-chrome__controls[data-suppress-hover] .window-chrome__close:hover {
+  color: inherit;
+  background: transparent;
+}
+
 .top-bar {
   display: grid;
   min-width: 0;
-  grid-template-columns: 230px minmax(180px, 1fr) 230px;
+  grid-template-columns: minmax(130px, 1fr) minmax(180px, 620px) minmax(130px, 1fr);
   align-items: center;
   border-bottom: 1px solid var(--border);
   background: #11151b;
   user-select: none;
-}
-
-.brand {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 9px;
-  padding-inline: 12px;
-}
-
-.brand-mark {
-  display: grid;
-  width: 25px;
-  height: 25px;
-  place-items: center;
-  border: 1px solid #46588f;
-  border-radius: 7px;
-  color: #c6d0ff;
-  background: linear-gradient(145deg, #2d3a62, #1a223a);
-  font-size: 12px;
-  font-weight: 750;
-}
-
-.brand-name {
-  overflow: hidden;
-  color: #cfd5df;
-  font-size: 12px;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .workspace-breadcrumb {
@@ -57,6 +104,7 @@
   max-width: 620px;
   height: 28px;
   align-items: center;
+  grid-column: 2;
   justify-self: center;
   gap: 7px;
   border: 1px solid #242c38;
@@ -78,6 +126,7 @@
 .top-actions {
   display: flex;
   align-items: center;
+  grid-column: 3;
   justify-content: flex-end;
   gap: 5px;
   padding-inline: 10px;
@@ -636,6 +685,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .window-chrome__controls button,
   .update-indicator--active svg,
   .tree-chevron--loading,
   .tab-saving,
@@ -646,7 +696,7 @@
 
 @media (max-width: 1100px) {
   .top-bar {
-    grid-template-columns: 190px minmax(180px, 1fr) 130px;
+    grid-template-columns: minmax(100px, 1fr) minmax(180px, 520px) minmax(100px, 1fr);
   }
 
   .workbench {

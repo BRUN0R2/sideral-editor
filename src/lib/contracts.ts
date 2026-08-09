@@ -32,7 +32,15 @@ export interface ApplicationBootstrap {
   readonly version: string;
   readonly runtime: "desktop" | "browser-preview";
   readonly updaterEnabled: boolean;
+  readonly desktopPreferences: DesktopPreferences;
   readonly localization: LocaleSelection;
+}
+
+export interface DesktopPreferences {
+  readonly schemaVersion: 1;
+  readonly startWithWindows: boolean;
+  readonly startMinimized: boolean;
+  readonly closeToTray: boolean;
 }
 
 export type DirectoryEntryKind = "directory" | "file" | "symbolicLink";
