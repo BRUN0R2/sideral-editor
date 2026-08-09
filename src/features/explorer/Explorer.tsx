@@ -55,7 +55,7 @@ export function Explorer({
       ) : (
         <section className="tree" aria-label={root.name}>
           <div className="workspace-root">
-            <Icon name="folderOpen" size={15} />
+            <Icon name="folderOpen" size={18} />
             <span title={root.path}>{root.name}</span>
           </div>
           {entries.length === 0 ? (
@@ -105,18 +105,18 @@ function TreeNode({
         type="button"
         className={`tree-row ${isSymbolicLink ? "tree-row--disabled" : ""}`}
         aria-expanded={isDirectory ? node.expanded : undefined}
-        style={{ paddingInlineStart: `${8 + depth * 14}px` }}
+        style={{ paddingInlineStart: `${6 + depth * 13}px` }}
         onClick={activate}
         disabled={isSymbolicLink}
         title={isSymbolicLink ? t("explorer.symlink") : node.path}
       >
         <span className={`tree-chevron ${node.loading ? "tree-chevron--loading" : ""}`}>
           {isDirectory ? (
-            <Icon name={node.expanded ? "chevronDown" : "chevronRight"} size={14} />
+            <Icon name={node.expanded ? "chevronDown" : "chevronRight"} size={17} />
           ) : null}
         </span>
         {isDirectory ? (
-          <Icon name={node.expanded ? "folderOpen" : "folder"} size={15} />
+          <Icon name={node.expanded ? "folderOpen" : "folder"} size={18} />
         ) : (
           <FileTypeIcon name={node.name} />
         )}
@@ -127,7 +127,7 @@ function TreeNode({
           {node.children.length === 0 ? (
             <div
               className="tree-empty tree-empty--nested"
-              style={{ paddingInlineStart: `${34 + depth * 14}px` }}
+              style={{ paddingInlineStart: `${32 + depth * 13}px` }}
             >
               {t("explorer.empty")}
             </div>
