@@ -1,14 +1,11 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$ProjectRoot,
-
     [ValidateRange(1, 65535)]
     [int]$Port = 1420
 )
 
 $ErrorActionPreference = 'Stop'
-$resolvedRoot = [System.IO.Path]::GetFullPath($ProjectRoot).TrimEnd('\', '/')
+$resolvedRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..')).TrimEnd('\', '/')
 $listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
 
 if ($listeners.Count -eq 0) {

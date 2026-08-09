@@ -87,7 +87,7 @@ if errorlevel 1 (
 exit /b 0
 
 :prepare_dev_port
-powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_DIR%scripts\prepare-dev-port.ps1" -ProjectRoot "%PROJECT_DIR%" -Port 1420
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_DIR%scripts\prepare-dev-port.ps1" -Port 1420
 exit /b %errorlevel%
 
 :action_failed
