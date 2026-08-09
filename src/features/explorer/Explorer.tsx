@@ -14,6 +14,10 @@ interface ExplorerProps {
   readonly onToggleDirectory: (path: string) => void;
 }
 
+const TREE_ROOT_INDENT_PIXELS = 16;
+const TREE_LEVEL_INDENT_PIXELS = 13;
+const TREE_LEADING_COLUMN_WITH_GAP_PIXELS = 21;
+
 export function Explorer({
   root,
   entries,
@@ -105,19 +109,18 @@ function TreeNode({
         type="button"
         className={`tree-row ${isSymbolicLink ? "tree-row--disabled" : ""}`}
         aria-expanded={isDirectory ? node.expanded : undefined}
-        style={{ paddingInlineStart: `${6 + depth * 13}px` }}
+        style={{
+          paddingInlineStart: `${TREE_ROOT_INDENT_PIXELS + depth * TREE_LEVEL_INDENT_PIXELS}px`,
+        }}
         onClick={activate}
         disabled={isSymbolicLink}
         title={isSymbolicLink ? t("explorer.symlink") : node.path}
       >
-        <span className={`tree-chevron ${node.loading ? "tree-chevron--loading" : ""}`}>
+        <span
+          className={`tree-leading ${isDirectory && node.loading ? "tree-leading--loading" : ""}`}
+        >
           {isDirectory ? (
             <Icon name={node.expanded ? "chevronDown" : "chevronRight"} size={17} />
-          ) : null}
-        </span>
-        <span className="tree-entry-icon">
-          {isDirectory ? (
-            <Icon name={node.expanded ? "folderOpen" : "folder"} size={18} />
           ) : (
             <FileTypeIcon name={node.name} />
           )}
@@ -129,7 +132,9 @@ function TreeNode({
           {node.children.length === 0 ? (
             <div
               className="tree-empty tree-empty--nested"
-              style={{ paddingInlineStart: `${32 + depth * 13}px` }}
+              style={{
+                paddingInlineStart: `${TREE_ROOT_INDENT_PIXELS + TREE_LEADING_COLUMN_WITH_GAP_PIXELS + depth * TREE_LEVEL_INDENT_PIXELS}px`,
+              }}
             >
               {t("explorer.empty")}
             </div>

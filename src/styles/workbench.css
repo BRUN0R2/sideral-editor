@@ -305,24 +305,16 @@
   color: var(--text-subtle);
 }
 
-.tree-chevron {
-  display: grid;
-  width: 17px;
-  height: 17px;
-  flex: 0 0 17px;
-  place-items: center;
-}
-
-.tree-chevron--loading {
-  animation: tree-pulse 850ms ease-in-out infinite;
-}
-
-.tree-entry-icon {
+.tree-leading {
   display: grid;
   width: 18px;
   height: 21px;
   flex: 0 0 18px;
   place-items: center;
+}
+
+.tree-leading--loading {
+  animation: tree-pulse 850ms ease-in-out infinite;
 }
 
 @keyframes tree-pulse {
@@ -683,7 +675,7 @@
 @media (prefers-reduced-motion: reduce) {
   .window-chrome__controls button,
   .update-indicator--active svg,
-  .tree-chevron--loading,
+  .tree-leading--loading,
   .tab-saving,
   .welcome-orbit__star {
     animation: none;

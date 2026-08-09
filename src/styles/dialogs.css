@@ -324,7 +324,7 @@
 @media (prefers-reduced-motion: reduce) {
   .startup-mark--loading,
   .update-indicator--active svg,
-  .tree-chevron--loading,
+  .tree-leading--loading,
   .tab-saving,
   .progress-track--installing > span {
     animation: none;
