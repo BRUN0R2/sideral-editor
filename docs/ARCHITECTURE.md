@@ -31,7 +31,8 @@ effect.
 
 ### Frontend
 
-- `src/app`: composition, global shortcuts and failure boundary.
+- `src/app`: composition, application shortcuts, WebView shortcut policy and
+  failure boundary.
 - `src/components`: reusable visual primitives with no business rules.
 - `src/features/editor`: Monaco worker setup, theme and resource lifecycle.
 - `src/features/explorer`: recursive presentation of lazily loaded entries.
@@ -61,7 +62,8 @@ effect.
 | Monaco models | `EditorPane` model map | Tab removal or pane cleanup |
 | Monaco listeners | `EditorPane` | Effect cleanup before model change |
 | Resize observer | `EditorPane` | Disconnect on pane cleanup |
-| Global shortcuts | `Workbench` | Remove listener on effect cleanup |
+| Application shortcuts | `Workbench` | Remove listener on effect cleanup |
+| WebView shortcut guard | `App` | Remove listener on effect cleanup |
 | Desktop preference queue | `useDesktopPreferences` | Serial queue drains after every optimistic save |
 | Tray icon and menu | Tauri application | Released when the application exits |
 | Locale focus listener | `SettingsView` | Exists only while the settings view is selected |
@@ -74,6 +76,21 @@ open and when the app regains focus after a user copies a file. Desktop
 preference changes remain interactive while complete snapshots are persisted in
 order. Update checks run
 once per application session plus explicit user requests.
+
+## WebView shortcut boundary
+
+The main window disables DevTools and native page-zoom hotkeys through Tauri's
+window configuration. A single capture-phase listener also cancels the browser
+defaults documented by WebView2, including reload, browser find/print, history,
+caret browsing and developer-tool shortcuts.
+
+The listener deliberately does not stop event propagation. Monaco and Sideral
+commands can still own shortcuts such as `Ctrl+F`, `Ctrl+P`, `F3` and `F5`
+without triggering the equivalent browser action. The native context menu is
+also preserved because it is part of the editor's copy, paste and command
+experience. Shortcut suppression is a UX boundary, not a security boundary;
+Tauri capabilities, the CSP and the Rust command surface remain responsible for
+application security.
 
 ## Internationalization contract
 

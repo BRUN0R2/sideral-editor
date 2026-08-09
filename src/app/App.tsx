@@ -12,6 +12,7 @@ import { SettingsView } from "../features/settings/SettingsView";
 import { UpdateModal } from "../features/updates/UpdateModal";
 import { UpdateProvider, useUpdates } from "../features/updates/UpdateProvider";
 import { useWorkspace } from "../features/workspace/useWorkspace";
+import { installWebViewShortcutGuard } from "./webview-shortcuts";
 
 const loadEditorPane = async () => {
   const editorModule = await import("../features/editor/EditorPane");
@@ -21,6 +22,9 @@ const EditorPane = lazy(loadEditorPane);
 
 export function App() {
   const { bootstrap } = useI18n();
+
+  useEffect(() => installWebViewShortcutGuard(), []);
+
   return (
     <UpdateProvider enabled={bootstrap.updaterEnabled} currentVersion={bootstrap.version}>
       <Workbench />
