@@ -1,0 +1,26 @@
+# JavaScript
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Rust
+target/
+src-tauri/target/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs and generated output
+*.log
+build/
+
+# External source used only for architecture research
+references/vscode/

@@ -132,6 +132,17 @@ manutencao proporcional ao beneficio.
 
 # Regras de Codigo
 
+## Modernidade tecnica
+
+* Usar somente versoes estaveis, atuais, suportadas e nao depreciadas das
+  linguagens, ferramentas e APIs adotadas pelo projeto.
+* Verificar documentacao oficial, notas de versao e compatibilidade antes de
+  adicionar ou atualizar uma tecnologia.
+* Nao manter codigo legado, shims, polyfills ou retrocompatibilidade sem uma
+  necessidade de produto atual e documentada.
+* Recursos modernos devem ser usados quando reduzirem complexidade, risco ou
+  custo operacional; novidade sem beneficio mensuravel nao e justificativa.
+
 ## Rust
 
 * Usar Rust estavel moderno com `edition = "2024"`.
@@ -177,6 +188,12 @@ Evitar:
 * Ownership implicito
 * Manipulacao insegura de recursos
 
+Cada acao deve atravessar uma unica fronteira publica quando uma unica chamada
+for suficiente. Chamadas duplicadas, requisicoes concorrentes equivalentes,
+polling desnecessario e efeitos colaterais repetidos sao proibidos. Operacoes
+simultaneas inevitaveis devem possuir deduplicacao, ownership e cancelamento
+explicitos.
+
 Constantes devem sempre possuir:
 
 * significado semantico
@@ -201,6 +218,21 @@ O sistema deve validar continuamente:
 * correcao de ownership
 * ordem de inicializacao
 * visibilidade de falhas
+
+## Recursos e vazamentos de memoria
+
+* Todo listener, watcher, timer, worker, stream, arquivo, processo e tarefa
+  assincrona deve possuir um owner e um ponto de descarte deterministico.
+* Rust deve usar RAII e concorrencia estruturada; tarefas soltas sem estrategia
+  de cancelamento e encerramento sao proibidas.
+* TypeScript deve remover listeners, cancelar requisicoes e destruir instancias
+  imperativas no cleanup do ciclo de vida que as criou.
+* Modelos, buffers e recursos nativos nao podem sobreviver ao workspace ou a
+  janela que os possui.
+* Fluxos de longa duracao devem ser observados em desenvolvimento quanto a
+  crescimento de heap, handles, threads e tarefas.
+* Qualquer crescimento continuo de recursos sem owner identificado bloqueia a
+  entrega ate ser corrigido.
 
 Operacoes que alteram configuracoes ou arquivos devem ser explicitas, reversiveis
 quando possivel e precedidas por validacao de alvo.
