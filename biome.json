@@ -6,7 +6,13 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!!references", "!!src-tauri/gen", "!!src-tauri/target"]
+    "includes": [
+      "**",
+      "!!assets/vscode-theme-seti",
+      "!!references",
+      "!!src-tauri/gen",
+      "!!src-tauri/target"
+    ]
   },
   "formatter": {
     "enabled": true,

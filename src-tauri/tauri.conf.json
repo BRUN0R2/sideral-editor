@@ -34,6 +34,9 @@
     "active": true,
     "targets": ["nsis"],
     "createUpdaterArtifacts": false,
+    "resources": {
+      "../assets/vscode-theme-seti/THIRD_PARTY_NOTICES.txt": "licenses/vscode-theme-seti.txt"
+    },
     "shortDescription": "A focused, native code editor",
     "icon": [
       "icons/32x32.png",
