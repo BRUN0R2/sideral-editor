@@ -8,6 +8,9 @@ const { TAURI_DEV_HOST: developmentHost } = process.env;
 export default defineConfig({
   plugins: [react()],
   clearScreen: false,
+  optimizeDeps: {
+    entries: ["index.html"],
+  },
   server: {
     host: developmentHost ?? "127.0.0.1",
     port: 1420,
