@@ -4,6 +4,7 @@ import CssWorker from "monaco-editor/language/css/css.worker.js?worker";
 import HtmlWorker from "monaco-editor/language/html/html.worker.js?worker";
 import JsonWorker from "monaco-editor/language/json/json.worker.js?worker";
 import TypeScriptWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
+import type { ResolvedJsonSchema } from "../../lib/contracts";
 
 window.MonacoEnvironment = {
   getWorker(_moduleId: string, label: string): Worker {
@@ -22,6 +23,19 @@ window.MonacoEnvironment = {
     return new EditorWorker();
   },
 };
+
+const jsonDiagnosticsDefaults = monaco.json.jsonDefaults.diagnosticsOptions;
+
+export function applyResolvedJsonSchemas(schemas: readonly ResolvedJsonSchema[]): void {
+  monaco.json.jsonDefaults.setDiagnosticsOptions({
+    ...jsonDiagnosticsDefaults,
+    enableSchemaRequest: false,
+    schemaRequest: "ignore",
+    schemas: schemas.map(({ uri, schema }) => ({ uri, schema })),
+  });
+}
+
+applyResolvedJsonSchemas([]);
 
 let themeDefined = false;
 

@@ -29,6 +29,7 @@ crate-type = ["rlib"]
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
+reqwest = { version = "0.13.4", default-features = false, features = ["rustls-no-provider", "stream", "system-proxy"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sideral-extension-core = { path = "crates/sideral-extension-core" }
@@ -40,6 +41,7 @@ tauri-plugin-process = "2.3.1"
 tauri-plugin-updater = "2.10.1"
 tempfile = "3.27.0"
 thiserror = { workspace = true }
+url = { workspace = true }
 vscode-legacy-core = { path = "crates/vscode-legacy-core" }
 
 [lints.rust]

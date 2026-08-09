@@ -6,15 +6,18 @@ import type { DesktopPreferences } from "../../lib/contracts";
 import { toApplicationError } from "../../lib/errors";
 import { useI18n } from "../i18n/I18nProvider";
 import { useUpdates } from "../updates/UpdateProvider";
+import { JsonSchemaSettings } from "./JsonSchemaSettings";
 import type { DesktopPreferencesController } from "./useDesktopPreferences";
 
 export function SettingsView({
   active,
   desktopPreferences,
+  onJsonSchemaTrustChange,
   onOpenUpdate,
 }: {
   readonly active: boolean;
   readonly desktopPreferences: DesktopPreferencesController;
+  readonly onJsonSchemaTrustChange: () => void;
   readonly onOpenUpdate: () => void;
 }) {
   const { selection, t, setPreference, refreshLocales, bootstrap } = useI18n();
@@ -242,6 +245,10 @@ export function SettingsView({
               )}
             </div>
           </section>
+
+          {desktopPreferencesEnabled ? (
+            <JsonSchemaSettings active={active} onTrustChange={onJsonSchemaTrustChange} />
+          ) : null}
 
           <section className="settings-section">
             <div className="settings-section__body">

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { DiscardChangesDialog } from "../components/DiscardChangesDialog";
 import { ErrorToast } from "../components/ErrorToast";
 import { Icon } from "../components/Icon";
@@ -42,6 +42,11 @@ function Workbench() {
   const workspace = useWorkspace(desktopPreferences.preferences.autoSave);
   const [activeView, setActiveView] = useState<"editor" | "settings">("editor");
   const [updateOpen, setUpdateOpen] = useState(false);
+  const [jsonSchemaTrustRevision, setJsonSchemaTrustRevision] = useState(0);
+  const notifyJsonSchemaTrustChange = useCallback(
+    () => setJsonSchemaTrustRevision((current) => current + 1),
+    [],
+  );
 
   useEffect(() => {
     void loadEditorPane();
@@ -176,8 +181,12 @@ function Workbench() {
                   <EditorPane
                     documents={workspace.documents}
                     activeDocumentId={workspace.activeDocument.id}
+                    active={activeView === "editor"}
+                    workspaceRootPath={workspace.workspaceRoot?.path ?? null}
+                    jsonSchemaTrustRevision={jsonSchemaTrustRevision}
                     onContentChange={workspace.updateDocumentContent}
                     onCursorChange={workspace.setCursor}
+                    onJsonSchemaTrustChange={notifyJsonSchemaTrustChange}
                   />
                 </Suspense>
               </>
@@ -186,6 +195,7 @@ function Workbench() {
           <SettingsView
             active={activeView === "settings"}
             desktopPreferences={desktopPreferences}
+            onJsonSchemaTrustChange={notifyJsonSchemaTrustChange}
             onOpenUpdate={() => setUpdateOpen(true)}
           />
         </div>

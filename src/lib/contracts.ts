@@ -64,3 +64,28 @@ export interface SavedDocumentPayload {
   readonly path: string;
   readonly bytesWritten: number;
 }
+
+export type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly JsonValue[]
+  | { readonly [key: string]: JsonValue };
+
+export interface ResolvedJsonSchema {
+  readonly uri: string;
+  readonly schema: JsonValue;
+}
+
+export type JsonSchemaResolution =
+  | { readonly status: "resolved"; readonly schemas: readonly ResolvedJsonSchema[] }
+  | { readonly status: "trustRequired"; readonly uri: string; readonly origin: string };
+
+export type JsonSchemaTrustScope = "uri" | "origin";
+
+export interface JsonSchemaTrustSettings {
+  readonly builtInOrigins: readonly string[];
+  readonly origins: readonly string[];
+  readonly uris: readonly string[];
+}

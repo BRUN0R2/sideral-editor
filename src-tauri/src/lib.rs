@@ -3,6 +3,7 @@ mod documents;
 mod error;
 mod extension_systems;
 mod i18n;
+mod json_schemas;
 mod settings;
 mod updater;
 
@@ -12,6 +13,9 @@ use desktop_integration::{DesktopPreferences, DesktopPreferencesState};
 use documents::{DirectoryEntry, SavedDocument, TextDocument};
 use error::{AppError, CommandError, CommandResult};
 use i18n::LocaleSelection;
+use json_schemas::{
+    JsonSchemaResolution, JsonSchemaState, JsonSchemaTrustScope, JsonSchemaTrustSettings,
+};
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_opener::OpenerExt;
@@ -103,6 +107,48 @@ async fn inspect_vscode_legacy_manifest(
     run_blocking(move || extension_systems::inspect_legacy_manifest(&source)).await
 }
 
+#[tauri::command(rename_all = "camelCase")]
+async fn resolve_json_schema(
+    state: State<'_, JsonSchemaState>,
+    schema_uri: String,
+    document_path: Option<String>,
+    workspace_root: Option<String>,
+) -> CommandResult<JsonSchemaResolution> {
+    state
+        .resolve(schema_uri, document_path, workspace_root)
+        .await
+        .map_err(CommandError::from)
+}
+
+#[tauri::command]
+fn json_schema_trust_settings(
+    state: State<'_, JsonSchemaState>,
+) -> CommandResult<JsonSchemaTrustSettings> {
+    state.trust_settings().map_err(CommandError::from)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+fn trust_json_schema_location(
+    state: State<'_, JsonSchemaState>,
+    uri: String,
+    scope: JsonSchemaTrustScope,
+) -> CommandResult<JsonSchemaTrustSettings> {
+    state
+        .trust_location(&uri, scope)
+        .map_err(CommandError::from)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+fn revoke_json_schema_trust(
+    state: State<'_, JsonSchemaState>,
+    value: String,
+    scope: JsonSchemaTrustScope,
+) -> CommandResult<JsonSchemaTrustSettings> {
+    state
+        .revoke_trust(&value, scope)
+        .map_err(CommandError::from)
+}
+
 async fn run_blocking<T, Operation>(operation: Operation) -> CommandResult<T>
 where
     T: Send + 'static,
@@ -140,6 +186,13 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .into());
             }
 
+            let json_schemas = JsonSchemaState::load(app.handle())?;
+            if !app.manage(json_schemas) {
+                return Err(
+                    AppError::Runtime("JSON schema state is already managed".to_owned()).into(),
+                );
+            }
+
             desktop_integration::setup_tray_icon(app.handle())?;
             let main_window = app
                 .get_webview_window("main")
@@ -158,6 +211,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             list_directory,
             validate_sideral_extension_manifest,
             inspect_vscode_legacy_manifest,
+            resolve_json_schema,
+            json_schema_trust_settings,
+            trust_json_schema_location,
+            revoke_json_schema_trust,
         ])
         .on_window_event(desktop_integration::handle_main_window_event)
         .run(context)?;

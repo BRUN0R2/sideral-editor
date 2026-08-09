@@ -5,6 +5,9 @@ import type {
   ApplicationBootstrap,
   DesktopPreferences,
   DirectoryEntry,
+  JsonSchemaResolution,
+  JsonSchemaTrustScope,
+  JsonSchemaTrustSettings,
   LocaleBundle,
   LocaleSelection,
   SavedDocumentPayload,
@@ -78,6 +81,40 @@ export function writeTextFile(path: string, content: string): Promise<SavedDocum
 export function listDirectory(path: string): Promise<readonly DirectoryEntry[]> {
   assertDesktopRuntime();
   return invoke<readonly DirectoryEntry[]>("list_directory", { path });
+}
+
+export function resolveJsonSchema(
+  schemaUri: string,
+  documentPath: string | null,
+  workspaceRoot: string | null,
+): Promise<JsonSchemaResolution> {
+  assertDesktopRuntime();
+  return invoke<JsonSchemaResolution>("resolve_json_schema", {
+    schemaUri,
+    documentPath,
+    workspaceRoot,
+  });
+}
+
+export function getJsonSchemaTrustSettings(): Promise<JsonSchemaTrustSettings> {
+  assertDesktopRuntime();
+  return invoke<JsonSchemaTrustSettings>("json_schema_trust_settings");
+}
+
+export function trustJsonSchemaLocation(
+  uri: string,
+  scope: JsonSchemaTrustScope,
+): Promise<JsonSchemaTrustSettings> {
+  assertDesktopRuntime();
+  return invoke<JsonSchemaTrustSettings>("trust_json_schema_location", { uri, scope });
+}
+
+export function revokeJsonSchemaTrust(
+  value: string,
+  scope: JsonSchemaTrustScope,
+): Promise<JsonSchemaTrustSettings> {
+  assertDesktopRuntime();
+  return invoke<JsonSchemaTrustSettings>("revoke_json_schema_trust", { value, scope });
 }
 
 function assertDesktopRuntime(): void {

@@ -9,6 +9,8 @@ The first working foundation includes:
 - a native Tauri 2 shell for Windows;
 - Monaco editing with explicit model and listener disposal;
 - native open-folder, open-file and atomic save flows;
+- secure JSON schema validation with real file URIs, native resolution,
+  bounded caching and revocable remote trust;
 - a lazy workspace explorer that does not crawl an entire project up front;
 - English as the primary language and automatic system-language detection;
 - drop-in JSON translations discovered from the app's locale directory;

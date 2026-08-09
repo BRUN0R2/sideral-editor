@@ -20,7 +20,7 @@ target is declared supported.
 React workbench
   ├─ workspace feature ── explicit Tauri commands ── Rust filesystem modules
   ├─ i18n provider ────── one bootstrap command ─── locale/settings modules
-  ├─ Monaco pane ──────── owned editor + model map + deterministic cleanup
+  ├─ Monaco pane ──────── owned models + native JSON schema resolver
   └─ update provider ──── official Tauri updater ── signed release endpoint
 ```
 
@@ -73,6 +73,8 @@ The complete decision and package constraints are recorded in
 ### Native backend
 
 - `documents.rs`: bounded UTF-8 reads, lazy directory lists and atomic writes.
+- `json_schemas.rs`: trusted HTTPS and workspace-local schema resolution,
+  bounded dependency graphs, memory caching and atomic trust persistence.
 - `desktop_integration`: versioned desktop preferences, official autostart,
   system tray and main-window lifecycle policy.
 - `i18n.rs`: strict locale schema, discovery, matching and validation.
@@ -99,6 +101,8 @@ The complete decision and package constraints are recorded in
 | Monaco editor | `EditorPane` | React effect cleanup |
 | Monaco models | `EditorPane` model map | Tab removal or pane cleanup |
 | Monaco listeners | `EditorPane` | Effect cleanup before model change |
+| JSON schema registrations | `useJsonSchemaSupport` | Removed with the document or pane cleanup |
+| JSON schema cache | `JsonSchemaState` | Bounded eviction; released on application exit |
 | Resize observer | `EditorPane` | Disconnect on pane cleanup |
 | Application shortcuts | `Workbench` | Remove listener on effect cleanup |
 | WebView shortcut guard | `App` | Remove listener on effect cleanup |
@@ -116,6 +120,30 @@ Locale files are rescanned once when settings open and when the app regains
 focus after a user copies a file. Desktop preference changes remain interactive
 while complete snapshots are persisted in order. Update checks run
 once per application session plus explicit user requests.
+
+## JSON schema boundary
+
+Monaco never downloads JSON schemas. Its schema-request service remains
+disabled, and resolved schema documents are supplied through the public JSON
+language defaults API. Saved editor models use real `file://` URIs so
+relative `$schema`, `$id` and `$ref` values have a real base; untitled buffers
+use an isolated `untitled:` URI.
+
+Rust owns all schema I/O. Workspace-local references are canonicalized and must
+remain inside the active workspace (or the saved document directory when no
+folder is open). Remote references require HTTPS, reject credentials and local
+network destinations, follow a bounded number of independently validated
+redirects, and enforce per-document and graph-wide size limits. The resolver
+preloads transitive `$ref`, `$dynamicRef` and `$recursiveRef` resources before
+returning plain JSON data to the WebView, so the CSP does not need a general
+network exception.
+
+A small set of established schema providers is trusted by the application.
+Every other remote URL pauses resolution until the user trusts either that
+exact URL or its origin. Additional trust is versioned and written atomically;
+Settings exposes every user-added entry for explicit revocation. Remote schema
+content is cached in memory with a short TTL and HTTP validators, never treated
+as executable code, and discarded when the application exits.
 
 ## WebView shortcut boundary
 

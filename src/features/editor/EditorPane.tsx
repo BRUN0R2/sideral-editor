@@ -1,19 +1,29 @@
 import { useEffect, useRef } from "react";
 import type { CursorPosition, EditorDocument } from "../workspace/types";
+import { JsonSchemaTrustDialog } from "./JsonSchemaTrustDialog";
 import { ensureSideralTheme, monaco } from "./monaco";
+import { useJsonSchemaSupport } from "./useJsonSchemaSupport";
 
 interface EditorPaneProps {
   readonly documents: readonly EditorDocument[];
   readonly activeDocumentId: string;
+  readonly active: boolean;
+  readonly workspaceRootPath: string | null;
+  readonly jsonSchemaTrustRevision: number;
   readonly onContentChange: (id: string, content: string) => void;
   readonly onCursorChange: (position: CursorPosition) => void;
+  readonly onJsonSchemaTrustChange: () => void;
 }
 
 export function EditorPane({
   documents,
   activeDocumentId,
+  active,
+  workspaceRootPath,
+  jsonSchemaTrustRevision,
   onContentChange,
   onCursorChange,
+  onJsonSchemaTrustChange,
 }: EditorPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -21,6 +31,8 @@ export function EditorPane({
   const contentListenerRef = useRef<monaco.IDisposable | null>(null);
   const cursorCallbackRef = useRef(onCursorChange);
   cursorCallbackRef.current = onCursorChange;
+  const activeDocument = documents.find((document) => document.id === activeDocumentId);
+  const activeModelUri = activeDocument === undefined ? null : modelUri(activeDocument).toString();
 
   useEffect(() => {
     const container = containerRef.current;
@@ -88,8 +100,16 @@ export function EditorPane({
 
     for (const document of documents) {
       let model = modelsRef.current.get(document.id);
+      const uri = modelUri(document);
+      if (model !== undefined && model.uri.toString() !== uri.toString()) {
+        if (editorRef.current?.getModel() === model) {
+          editorRef.current.setModel(null);
+        }
+        model.dispose();
+        modelsRef.current.delete(document.id);
+        model = undefined;
+      }
       if (model === undefined) {
-        const uri = monaco.Uri.from({ scheme: "sideral", path: `/documents/${document.id}` });
         model = monaco.editor.createModel(document.content, document.languageId, uri);
         modelsRef.current.set(document.id, model);
       } else {
@@ -106,7 +126,7 @@ export function EditorPane({
   useEffect(() => {
     const editor = editorRef.current;
     const model = modelsRef.current.get(activeDocumentId);
-    if (editor === null || model === undefined) {
+    if (editor === null || model === undefined || model.uri.toString() !== activeModelUri) {
       return;
     }
     contentListenerRef.current?.dispose();
@@ -119,7 +139,27 @@ export function EditorPane({
       contentListenerRef.current?.dispose();
       contentListenerRef.current = null;
     };
-  }, [activeDocumentId, onContentChange]);
+  }, [activeDocumentId, activeModelUri, onContentChange]);
 
-  return <div ref={containerRef} className="editor-pane" />;
+  const jsonSchemaSupport = useJsonSchemaSupport({
+    active,
+    documents,
+    workspaceRootPath,
+    trustRevision: jsonSchemaTrustRevision,
+    models: modelsRef,
+    onTrustChange: onJsonSchemaTrustChange,
+  });
+
+  return (
+    <>
+      <div ref={containerRef} className="editor-pane" />
+      <JsonSchemaTrustDialog controller={jsonSchemaSupport} />
+    </>
+  );
+}
+
+function modelUri(document: EditorDocument): monaco.Uri {
+  return document.path === null
+    ? monaco.Uri.from({ scheme: "untitled", path: `/${document.id}` })
+    : monaco.Uri.file(document.path);
 }

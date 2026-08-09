@@ -22,6 +22,8 @@ pub enum AppError {
     InvalidSideralExtension(String),
     #[error("invalid legacy extension: {0}")]
     InvalidLegacyExtension(String),
+    #[error("JSON schema error: {0}")]
+    JsonSchema(String),
     #[error("file exceeds the {limit_megabytes} MiB safety limit")]
     FileTooLarge { limit_megabytes: u64 },
     #[error("binary files are not supported")]
@@ -48,6 +50,7 @@ impl AppError {
             Self::InvalidSettings(_) => "invalid_settings",
             Self::InvalidSideralExtension(_) => "invalid_sideral_extension",
             Self::InvalidLegacyExtension(_) => "invalid_legacy_extension",
+            Self::JsonSchema(_) => "json_schema_error",
             Self::FileTooLarge { .. } => "file_too_large",
             Self::BinaryFile => "binary_file",
             Self::InvalidUtf8 => "invalid_utf8",
