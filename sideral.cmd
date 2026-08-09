@@ -34,6 +34,8 @@ call :require_tool npm
 if errorlevel 1 goto action_failed
 call :require_tool cargo
 if errorlevel 1 goto action_failed
+call :prepare_dev_port
+if errorlevel 1 goto action_failed
 
 echo.
 echo Iniciando o Sideral Editor em modo dev...
@@ -41,6 +43,8 @@ echo Use Ctrl+C para encerrar o servidor e voltar ao menu.
 echo.
 call npm run tauri dev
 set "ACTION_EXIT=%errorlevel%"
+call :prepare_dev_port
+if errorlevel 1 set "ACTION_EXIT=1"
 goto action_finished
 
 :release
@@ -81,6 +85,10 @@ if errorlevel 1 (
   exit /b 1
 )
 exit /b 0
+
+:prepare_dev_port
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_DIR%scripts\prepare-dev-port.ps1" -ProjectRoot "%PROJECT_DIR%" -Port 1420
+exit /b %errorlevel%
 
 :action_failed
 set "ACTION_EXIT=1"
