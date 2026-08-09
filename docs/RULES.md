@@ -1,4 +1,4 @@
-# Constituicao do Projeto - CODEX APP
+# Constituicao do Projeto - SIDERAL EDITOR
 
 ## Regra Suprema
 
