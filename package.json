@@ -3,22 +3,27 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "workspaces": [
+    "packages/sideral-extension-sdk"
+  ],
   "packageManager": "npm@11.17.0",
   "engines": {
     "node": ">=22.12.0"
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && npm run sdk:build && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "biome check .",
     "format": "biome check --write .",
+    "architecture": "node scripts/check-extension-boundaries.mjs",
+    "sdk:build": "tsc --project packages/sideral-extension-sdk/tsconfig.json",
     "rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
-    "rust:check": "cargo check --manifest-path src-tauri/Cargo.toml",
-    "rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings",
-    "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml",
-    "check": "npm run lint && npm run typecheck && npm run test && npm run rust:fmt && npm run rust:clippy && npm run rust:test",
+    "rust:check": "cargo check --manifest-path src-tauri/Cargo.toml --workspace",
+    "rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings",
+    "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml --workspace",
+    "check": "npm run architecture && npm run lint && npm run typecheck && npm run sdk:build && npm run test && npm run rust:fmt && npm run rust:clippy && npm run rust:test",
     "tauri": "tauri"
   },
   "dependencies": {

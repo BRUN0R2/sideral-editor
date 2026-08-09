@@ -1,0 +1,26 @@
+{
+  "name": "@sideral/extension-sdk",
+  "version": "0.1.0",
+  "description": "Type-only contracts for modern Sideral extensions",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist/**/*.d.ts",
+    "README.md"
+  ],
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

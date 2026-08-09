@@ -1,6 +1,7 @@
 mod desktop_integration;
 mod documents;
 mod error;
+mod extension_systems;
 mod i18n;
 mod settings;
 mod updater;
@@ -88,6 +89,20 @@ async fn list_directory(path: String) -> CommandResult<Vec<DirectoryEntry>> {
     run_blocking(move || documents::list_directory(PathBuf::from(path))).await
 }
 
+#[tauri::command(rename_all = "camelCase")]
+async fn validate_sideral_extension_manifest(
+    source: String,
+) -> CommandResult<sideral_extension_core::ExtensionInspection> {
+    run_blocking(move || extension_systems::validate_sideral_manifest(&source)).await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn inspect_vscode_legacy_manifest(
+    source: String,
+) -> CommandResult<vscode_legacy_core::LegacyInspection> {
+    run_blocking(move || extension_systems::inspect_legacy_manifest(&source)).await
+}
+
 async fn run_blocking<T, Operation>(operation: Operation) -> CommandResult<T>
 where
     T: Send + 'static,
@@ -141,6 +156,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             read_text_file,
             write_text_file,
             list_directory,
+            validate_sideral_extension_manifest,
+            inspect_vscode_legacy_manifest,
         ])
         .on_window_event(desktop_integration::handle_main_window_event)
         .run(context)?;

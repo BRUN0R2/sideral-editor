@@ -18,6 +18,10 @@ pub enum AppError {
     InvalidLocale(String),
     #[error("invalid settings: {0}")]
     InvalidSettings(String),
+    #[error("invalid Sideral extension: {0}")]
+    InvalidSideralExtension(String),
+    #[error("invalid legacy extension: {0}")]
+    InvalidLegacyExtension(String),
     #[error("file exceeds the {limit_megabytes} MiB safety limit")]
     FileTooLarge { limit_megabytes: u64 },
     #[error("binary files are not supported")]
@@ -42,6 +46,8 @@ impl AppError {
             Self::InvalidPath(_) => "invalid_path",
             Self::InvalidLocale(_) => "invalid_locale",
             Self::InvalidSettings(_) => "invalid_settings",
+            Self::InvalidSideralExtension(_) => "invalid_sideral_extension",
+            Self::InvalidLegacyExtension(_) => "invalid_legacy_extension",
             Self::FileTooLarge { .. } => "file_too_large",
             Self::BinaryFile => "binary_file",
             Self::InvalidUtf8 => "invalid_utf8",

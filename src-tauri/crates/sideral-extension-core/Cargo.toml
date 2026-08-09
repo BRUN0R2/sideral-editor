@@ -1,0 +1,22 @@
+[package]
+name = "sideral-extension-core"
+version = "0.1.0"
+description = "Capability-based manifest core for modern Sideral extensions"
+edition = "2024"
+rust-version = "1.97"
+publish = false
+
+[dependencies]
+semver = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+expect_used = "deny"
+panic = "deny"
+unwrap_used = "deny"

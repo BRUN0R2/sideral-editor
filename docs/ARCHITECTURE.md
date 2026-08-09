@@ -30,6 +30,26 @@ explicit save command; Rust owns autostart registration, the tray icon and the
 main-window close policy, while the workspace owns the auto-save timer. Each
 Tauri command is small and describes one effect.
 
+## Extension systems
+
+The modern Sideral extension system and the VS Code compatibility system are
+separate products inside the repository. The modern native core, frontend
+contracts and type-only SDK cannot reference compatibility code. The
+compatibility core and frontend contracts cannot reference modern extension
+code. `src-tauri/src/extension_systems.rs` is the only native composition point
+allowed to know both public APIs.
+
+The modern manifest is strict, capability-based and limited to a bundled ESM
+worker entry. Its native validation enforces manifest, bundle and compressed
+package size budgets before runtime construction. The compatibility manifest
+reader is intentionally tolerant of unrelated package fields, classifies the
+required host, and treats any Node entry as a trusted-process requirement.
+Manifest inspection never authorizes execution.
+
+The complete decision and package constraints are recorded in
+`docs/decisions/0001-independent-extension-systems.md` and protected by
+`npm run architecture`.
+
 ## Modules
 
 ### Frontend
@@ -42,7 +62,11 @@ Tauri command is small and describes one effect.
 - `src/features/i18n`: typed message keys, interpolation and active locale.
 - `src/features/settings`: dedicated workbench view for desktop, language,
   translation and update preferences.
+- `src/features/sideral-extensions`: modern manifest boundary; it never imports
+  compatibility modules.
 - `src/features/updates`: updater resource ownership and progress state machine.
+- `src/features/vscode-legacy`: compatibility inspection boundary; it never
+  imports modern extension modules.
 - `src/features/workspace`: documents, saves, tabs and directory requests.
 - `src/lib`: typed native boundary and error normalization.
 
@@ -55,7 +79,18 @@ Tauri command is small and describes one effect.
 - `settings.rs`: versioned settings with atomic persistence.
 - `updater.rs`: official updater registration and configuration detection.
 - `error.rs`: structured operational failures exposed to TypeScript.
+- `extension_systems.rs`: sole composition point for the two independent
+  extension cores.
 - `lib.rs`: command boundary and blocking-work isolation.
+
+### Extension crates and SDK
+
+- `src-tauri/crates/sideral-extension-core`: strict modern manifest,
+  capabilities and executable size budgets.
+- `src-tauri/crates/vscode-legacy-core`: isolated third-party manifest
+  inspection and host classification.
+- `packages/sideral-extension-sdk`: declaration-only authoring contract that
+  contributes zero runtime bytes to extension bundles.
 
 ## Ownership and resource lifetime
 
