@@ -32,7 +32,13 @@ export function DiscardChangesDialog({
         <button type="button" className="ghost-button" onClick={onCancel}>
           {t("action.cancel")}
         </button>
-        <button type="button" className="primary-button" disabled={saving} onClick={onSave}>
+        <button
+          type="button"
+          className={`primary-button ${saving ? "primary-button--busy" : ""}`}
+          disabled={saving}
+          aria-busy={saving}
+          onClick={onSave}
+        >
           {saving ? t("status.saving") : t("action.save")}
         </button>
         <button type="button" className="danger-button" onClick={onDiscard}>

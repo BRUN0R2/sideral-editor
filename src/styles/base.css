@@ -1,28 +1,28 @@
 :root {
-  color: #d8dde7;
-  background: #0d1015;
+  color: #c8ccd4;
+  background: #282c34;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --bg-root: #0d1015;
-  --bg-editor: #11151b;
-  --bg-panel: #141920;
-  --bg-raised: #191f28;
-  --bg-hover: #202732;
-  --bg-active: #252e3b;
-  --border: #242b35;
-  --border-strong: #303947;
-  --text: #d8dde7;
-  --text-muted: #8993a3;
-  --text-subtle: #626d7e;
-  --accent: #8ea7ff;
-  --accent-strong: #a8b9ff;
-  --accent-soft: #27345a;
+  --bg-root: #1e2228;
+  --bg-editor: #282c34;
+  --bg-panel: #21252b;
+  --bg-raised: #2c313a;
+  --bg-hover: #323842;
+  --bg-active: #3a404a;
+  --border: #30343b;
+  --border-strong: #414750;
+  --text: #c8ccd4;
+  --text-muted: #9aa0aa;
+  --text-subtle: #707782;
+  --accent: #aeb4bd;
+  --accent-strong: #d0d3d8;
+  --accent-soft: #373c45;
   --success: #71c69a;
   --warning: #e8b872;
   --danger: #ef8585;
-  --status: #687fcf;
+  --status: #1f2329;
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 16px;
@@ -76,7 +76,7 @@ button:disabled {
 
 ::selection {
   color: #fff;
-  background: #526cad;
+  background: #616771;
 }
 
 ::-webkit-scrollbar {
@@ -87,12 +87,12 @@ button:disabled {
 ::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: #3b4554;
+  background: #484e57;
   background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #4a5566;
+  background: #5b626c;
   background-clip: padding-box;
 }
 
@@ -122,8 +122,13 @@ button:disabled {
 }
 
 .primary-button:not(:disabled):hover {
-  background: #c0ccff;
+  background: #e2e4e7;
   transform: translateY(-1px);
+}
+
+.primary-button--busy:disabled {
+  cursor: progress;
+  opacity: 1;
 }
 
 .secondary-button {
@@ -184,11 +189,11 @@ button:disabled {
 
 kbd {
   border: 1px solid var(--border-strong);
-  border-bottom-color: #465161;
+  border-bottom-color: #505660;
   border-radius: 5px;
   padding: 3px 6px;
   color: var(--text-subtle);
-  background: #11161d;
+  background: #20242a;
   font-family: inherit;
   font-size: 10px;
   box-shadow: 0 1px 0 #000;
@@ -197,16 +202,15 @@ kbd {
 .startup-state {
   display: flex;
   width: 100%;
-  height: calc(100% - var(--window-chrome-height));
+  height: 100%;
   align-items: center;
   justify-content: center;
   flex-direction: column;
   gap: 12px;
-  margin-top: var(--window-chrome-height);
-  padding: 32px;
+  padding: calc(32px + var(--window-chrome-height)) 32px 32px;
   color: var(--text);
   text-align: center;
-  background: var(--bg-root);
+  background: var(--bg-editor);
 }
 
 .startup-state h1 {
@@ -225,10 +229,10 @@ kbd {
   width: 52px;
   height: 52px;
   place-items: center;
-  border: 1px solid #566aab;
+  border: 1px solid #505660;
   border-radius: 15px;
-  color: #c8d2ff;
-  background: linear-gradient(145deg, #303d69, #192139);
+  color: #d6d8dc;
+  background: linear-gradient(145deg, #3a3f47, #292d34);
   font-size: 23px;
   font-weight: 700;
   box-shadow: 0 12px 32px rgb(0 0 0 / 35%);

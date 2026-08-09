@@ -15,7 +15,11 @@ export function useDesktopPreferences(
 ): DesktopPreferencesController {
   const [preferences, setPreferences] = useState(initialPreferences);
   const [saving, setSaving] = useState(false);
-  const requestReference = useRef<Promise<DesktopPreferences> | null>(null);
+  const preferencesReference = useRef(initialPreferences);
+  const confirmedPreferencesReference = useRef(initialPreferences);
+  const queueReference = useRef<Promise<void>>(Promise.resolve());
+  const latestRequestIdReference = useRef(0);
+  const pendingRequestCountReference = useRef(0);
 
   const save = useCallback(
     (nextPreferences: DesktopPreferences): Promise<DesktopPreferences> => {
@@ -24,33 +28,47 @@ export function useDesktopPreferences(
           new ApplicationError("native_only", "Desktop preferences require the native runtime."),
         );
       }
-      if (requestReference.current !== null) {
-        return requestReference.current;
+      const requestId = latestRequestIdReference.current + 1;
+      latestRequestIdReference.current = requestId;
+      preferencesReference.current = nextPreferences;
+      setPreferences(nextPreferences);
+      pendingRequestCountReference.current += 1;
+      if (pendingRequestCountReference.current === 1) {
+        setSaving(true);
       }
 
-      const previousPreferences = preferences;
-      setPreferences(nextPreferences);
-      setSaving(true);
-
-      const request = saveDesktopPreferences(nextPreferences)
+      const persistenceRequest = queueReference.current.then(() =>
+        saveDesktopPreferences(nextPreferences),
+      );
+      const result = persistenceRequest
         .then((storedPreferences) => {
-          setPreferences(storedPreferences);
+          confirmedPreferencesReference.current = storedPreferences;
+          if (latestRequestIdReference.current === requestId) {
+            preferencesReference.current = storedPreferences;
+            setPreferences(storedPreferences);
+          }
           return storedPreferences;
         })
         .catch((error: unknown) => {
-          setPreferences(previousPreferences);
-          throw error;
-        })
-        .finally(() => {
-          if (requestReference.current === request) {
-            requestReference.current = null;
-            setSaving(false);
+          if (latestRequestIdReference.current === requestId) {
+            preferencesReference.current = confirmedPreferencesReference.current;
+            setPreferences(confirmedPreferencesReference.current);
           }
+          throw error;
         });
-      requestReference.current = request;
-      return request;
+      queueReference.current = result.then(
+        () => undefined,
+        () => undefined,
+      );
+
+      return result.finally(() => {
+        pendingRequestCountReference.current -= 1;
+        if (pendingRequestCountReference.current === 0) {
+          setSaving(false);
+        }
+      });
     },
-    [enabled, preferences],
+    [enabled],
   );
 
   return { preferences, saving, save };

@@ -88,30 +88,30 @@ export function WindowChrome() {
     };
   }, [appWindow, cancelScheduledRelease, releaseHoverAfterPaint, suppressHover]);
 
+  if (appWindow === null) {
+    return null;
+  }
+
   return (
     <div className="window-chrome">
       {/* biome-ignore lint/a11y/noStaticElementInteractions: Native title-bar drag regions intentionally use platform pointer behavior. */}
       <div
         className="window-chrome__drag-region"
-        data-tauri-drag-region={appWindow === null ? undefined : true}
-        onDoubleClick={
-          appWindow === null ? undefined : () => runControlAction(() => appWindow.toggleMaximize())
-        }
+        data-tauri-drag-region
+        onDoubleClick={() => runControlAction(() => appWindow.toggleMaximize())}
       />
       <div className="window-chrome__controls" ref={controlsReference}>
         <button
           type="button"
           aria-label="Minimize window"
-          disabled={appWindow === null}
-          onClick={() => runControlAction(() => appWindow?.minimize() ?? Promise.resolve())}
+          onClick={() => runControlAction(() => appWindow.minimize())}
         >
           <MinimizeIcon />
         </button>
         <button
           type="button"
           aria-label="Maximize or restore window"
-          disabled={appWindow === null}
-          onClick={() => runControlAction(() => appWindow?.toggleMaximize() ?? Promise.resolve())}
+          onClick={() => runControlAction(() => appWindow.toggleMaximize())}
         >
           <MaximizeIcon />
         </button>
@@ -119,8 +119,7 @@ export function WindowChrome() {
           type="button"
           className="window-chrome__close"
           aria-label="Close window"
-          disabled={appWindow === null}
-          onClick={() => runControlAction(() => appWindow?.close() ?? Promise.resolve())}
+          onClick={() => runControlAction(() => appWindow.close())}
         >
           <CloseIcon />
         </button>

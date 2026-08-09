@@ -6,6 +6,7 @@ import { WindowChrome } from "./components/WindowChrome";
 import { I18nProvider } from "./features/i18n/I18nProvider";
 import "./styles/base.css";
 import "./styles/workbench.css";
+import "./styles/settings.css";
 import "./styles/dialogs.css";
 
 const rootElement = document.getElementById("root");

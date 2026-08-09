@@ -36,7 +36,8 @@ effect.
 - `src/features/editor`: Monaco worker setup, theme and resource lifecycle.
 - `src/features/explorer`: recursive presentation of lazily loaded entries.
 - `src/features/i18n`: typed message keys, interpolation and active locale.
-- `src/features/settings`: language, translation and update preferences UI.
+- `src/features/settings`: dedicated workbench view for desktop, language,
+  translation and update preferences.
 - `src/features/updates`: updater resource ownership and progress state machine.
 - `src/features/workspace`: documents, saves, tabs and directory requests.
 - `src/lib`: typed native boundary and error normalization.
@@ -61,15 +62,17 @@ effect.
 | Monaco listeners | `EditorPane` | Effect cleanup before model change |
 | Resize observer | `EditorPane` | Disconnect on pane cleanup |
 | Global shortcuts | `Workbench` | Remove listener on effect cleanup |
-| Desktop preference request | `useDesktopPreferences` | Settled promise clears the owned request |
+| Desktop preference queue | `useDesktopPreferences` | Serial queue drains after every optimistic save |
 | Tray icon and menu | Tauri application | Released when the application exits |
-| Locale focus listener | `SettingsModal` | Exists only while the modal is open |
+| Locale focus listener | `SettingsView` | Exists only while the settings view is selected |
 | Updater `Resource` | `UpdateProvider` | Close on replacement or provider cleanup |
 | In-flight reads/saves | `useWorkspace` maps | Deduplicated and removed in `finally` |
 | Temporary files | Rust RAII | Closed automatically; persisted atomically |
 
 There is no timer or polling loop. Locale files are rescanned once when settings
-open and when the app regains focus after a user copies a file. Update checks run
+open and when the app regains focus after a user copies a file. Desktop
+preference changes remain interactive while complete snapshots are persisted in
+order. Update checks run
 once per application session plus explicit user requests.
 
 ## Internationalization contract

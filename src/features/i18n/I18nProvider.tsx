@@ -18,6 +18,7 @@ import {
 import type { ApplicationBootstrap, LocaleBundle, LocaleSelection } from "../../lib/contracts";
 import { toApplicationError } from "../../lib/errors";
 import { formatMessage } from "./format-message";
+import { localeSelectionsEqual } from "./locale-selection";
 import type { MessageKey, MessageVariables, Translate } from "./types";
 
 interface I18nContextValue {
@@ -26,7 +27,6 @@ interface I18nContextValue {
   readonly t: Translate;
   readonly setPreference: (preference: string) => Promise<void>;
   readonly refreshLocales: () => Promise<void>;
-  readonly changingLanguage: boolean;
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null);
@@ -35,9 +35,24 @@ export function I18nProvider({ children }: { readonly children: ReactNode }) {
   const [bootstrap, setBootstrap] = useState<ApplicationBootstrap | null>(null);
   const [selection, setSelection] = useState<LocaleSelection | null>(null);
   const [startupError, setStartupError] = useState<string | null>(null);
-  const [changingLanguage, setChangingLanguage] = useState(false);
+  const selectionReference = useRef<LocaleSelection | null>(null);
+  const languageRequest = useRef<Promise<void> | null>(null);
   const refreshRequest = useRef<Promise<void> | null>(null);
   const mounted = useRef(true);
+
+  const applySelection = useCallback((nextSelection: LocaleSelection): void => {
+    if (!mounted.current) {
+      return;
+    }
+    setSelection((current) => {
+      if (current !== null && localeSelectionsEqual(current, nextSelection)) {
+        selectionReference.current = current;
+        return current;
+      }
+      selectionReference.current = nextSelection;
+      return nextSelection;
+    });
+  }, []);
 
   const load = useCallback(() => {
     setStartupError(null);
@@ -45,7 +60,7 @@ export function I18nProvider({ children }: { readonly children: ReactNode }) {
       .then((result) => {
         if (mounted.current) {
           setBootstrap(result);
-          setSelection(result.localization);
+          applySelection(result.localization);
         }
       })
       .catch((error: unknown) => {
@@ -53,7 +68,7 @@ export function I18nProvider({ children }: { readonly children: ReactNode }) {
           setStartupError(toApplicationError(error).message);
         }
       });
-  }, []);
+  }, [applySelection]);
 
   useEffect(() => {
     mounted.current = true;
@@ -72,21 +87,30 @@ export function I18nProvider({ children }: { readonly children: ReactNode }) {
   }, [selection]);
 
   const setPreference = useCallback(
-    async (preference: string) => {
-      if (selection === null || changingLanguage) {
-        return;
+    (preference: string): Promise<void> => {
+      const currentSelection = selectionReference.current;
+      if (currentSelection === null) {
+        return Promise.resolve();
       }
-      setChangingLanguage(true);
-      try {
-        const nextSelection = isDesktopRuntime()
-          ? await setLanguagePreferenceCommand(preference)
-          : selectPreviewLocale(selection, preference);
-        setSelection(nextSelection);
-      } finally {
-        setChangingLanguage(false);
+      if (languageRequest.current !== null) {
+        return languageRequest.current;
       }
+      const request = Promise.resolve()
+        .then(async () => {
+          const nextSelection = isDesktopRuntime()
+            ? await setLanguagePreferenceCommand(preference)
+            : selectPreviewLocale(currentSelection, preference);
+          applySelection(nextSelection);
+        })
+        .finally(() => {
+          if (languageRequest.current === request) {
+            languageRequest.current = null;
+          }
+        });
+      languageRequest.current = request;
+      return request;
     },
-    [changingLanguage, selection],
+    [applySelection],
   );
 
   const refreshLocales = useCallback((): Promise<void> => {
@@ -96,7 +120,7 @@ export function I18nProvider({ children }: { readonly children: ReactNode }) {
     if (refreshRequest.current === null) {
       const request = refreshLocalesCommand()
         .then((nextSelection) => {
-          setSelection(nextSelection);
+          applySelection(nextSelection);
         })
         .finally(() => {
           if (refreshRequest.current === request) {
@@ -106,7 +130,7 @@ export function I18nProvider({ children }: { readonly children: ReactNode }) {
       refreshRequest.current = request;
     }
     return refreshRequest.current;
-  }, []);
+  }, [applySelection]);
 
   const t = useCallback<Translate>(
     (key: MessageKey, variables?: MessageVariables) => {
@@ -129,9 +153,8 @@ export function I18nProvider({ children }: { readonly children: ReactNode }) {
       t,
       setPreference,
       refreshLocales,
-      changingLanguage,
     };
-  }, [bootstrap, changingLanguage, refreshLocales, selection, setPreference, t]);
+  }, [bootstrap, refreshLocales, selection, setPreference, t]);
 
   if (startupError !== null) {
     return (

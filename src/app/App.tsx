@@ -8,15 +8,16 @@ import { StatusBar } from "../features/editor/StatusBar";
 import { WelcomeView } from "../features/editor/WelcomeView";
 import { Explorer } from "../features/explorer/Explorer";
 import { useI18n } from "../features/i18n/I18nProvider";
-import { SettingsModal } from "../features/settings/SettingsModal";
+import { SettingsView } from "../features/settings/SettingsView";
 import { UpdateModal } from "../features/updates/UpdateModal";
 import { UpdateProvider, useUpdates } from "../features/updates/UpdateProvider";
 import { useWorkspace } from "../features/workspace/useWorkspace";
 
-const EditorPane = lazy(async () => {
+const loadEditorPane = async () => {
   const editorModule = await import("../features/editor/EditorPane");
   return { default: editorModule.EditorPane };
-});
+};
+const EditorPane = lazy(loadEditorPane);
 
 export function App() {
   const { bootstrap } = useI18n();
@@ -28,11 +29,14 @@ export function App() {
 }
 
 function Workbench() {
-  const { bootstrap, selection, t } = useI18n();
-  const updates = useUpdates();
+  const { bootstrap, t } = useI18n();
   const workspace = useWorkspace();
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activeView, setActiveView] = useState<"editor" | "settings">("editor");
   const [updateOpen, setUpdateOpen] = useState(false);
+
+  useEffect(() => {
+    void loadEditorPane();
+  }, []);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -42,19 +46,22 @@ function Workbench() {
       const key = event.key.toLowerCase();
       if (key === "n" && !event.shiftKey) {
         event.preventDefault();
+        setActiveView("editor");
         workspace.createFile();
       } else if (key === "o" && event.shiftKey) {
         event.preventDefault();
+        setActiveView("editor");
         void workspace.openFolder();
       } else if (key === "o") {
         event.preventDefault();
+        setActiveView("editor");
         void workspace.openFile();
       } else if (key === "s") {
         event.preventDefault();
         void workspace.saveActiveDocument(event.shiftKey);
       } else if (event.key === ",") {
         event.preventDefault();
-        setSettingsOpen(true);
+        setActiveView("settings");
       }
     };
     window.addEventListener("keydown", handleShortcut);
@@ -86,36 +93,6 @@ function Workbench() {
 
   return (
     <div className="app-shell">
-      <header className="top-bar">
-        <div className="workspace-breadcrumb" title={workspace.workspaceRoot?.path}>
-          <span>{t("topbar.workspace")}</span>
-          <Icon name="chevronRight" size={13} />
-          <strong>{workspace.workspaceRoot?.name ?? t("topbar.untitledWorkspace")}</strong>
-        </div>
-        <div className="top-actions">
-          {workspace.activeDocument !== null ? (
-            <IconButton
-              label={t("action.save")}
-              icon="save"
-              disabled={activeSaving}
-              onClick={() => void workspace.saveActiveDocument()}
-            />
-          ) : null}
-          {updates.indicatorVisible ? (
-            <button
-              type="button"
-              className={`update-indicator ${updates.transferActive ? "update-indicator--active" : ""}`}
-              onClick={() => setUpdateOpen(true)}
-              aria-label={t("updates.badgeLabel")}
-              title={t("updates.badgeLabel")}
-            >
-              <Icon name="update" size={17} />
-              <span />
-            </button>
-          ) : null}
-        </div>
-      </header>
-
       {bootstrap.runtime === "browser-preview" ? (
         <div className="preview-banner">
           <Icon name="alert" size={14} />
@@ -128,56 +105,87 @@ function Workbench() {
         data-preview={bootstrap.runtime === "browser-preview" || undefined}
       >
         <nav className="activity-bar" aria-label="Primary navigation">
-          <IconButton label={t("activity.explorer")} icon="folderOpen" selected />
+          <IconButton
+            label={t("activity.explorer")}
+            icon="folderOpen"
+            selected={activeView === "editor"}
+            onClick={() => setActiveView("editor")}
+          />
+          {workspace.activeDocument !== null ? (
+            <IconButton
+              label={t("action.save")}
+              icon="save"
+              onClick={() => void workspace.saveActiveDocument()}
+            />
+          ) : null}
           <div className="activity-bar__spacer" />
-          <span className="locale-chip" title={selection.active.name}>
-            {selection.active.locale.split("-")[0]?.toUpperCase()}
-          </span>
+          <UpdateActivityButton
+            label={t("updates.badgeLabel")}
+            onOpen={() => setUpdateOpen(true)}
+          />
           <IconButton
             label={t("activity.settings")}
             icon="settings"
-            selected={settingsOpen}
-            onClick={() => setSettingsOpen(true)}
+            selected={activeView === "settings"}
+            onClick={() => setActiveView("settings")}
           />
         </nav>
 
         <Explorer
           root={workspace.workspaceRoot}
           entries={workspace.entries}
-          onNewFile={workspace.createFile}
-          onOpenFile={() => void workspace.openFile()}
-          onOpenFolder={() => void workspace.openFolder()}
-          onOpenWorkspaceFile={(path) => void workspace.openFile(path)}
+          onNewFile={() => {
+            setActiveView("editor");
+            workspace.createFile();
+          }}
+          onOpenFile={() => {
+            setActiveView("editor");
+            void workspace.openFile();
+          }}
+          onOpenFolder={() => {
+            setActiveView("editor");
+            void workspace.openFolder();
+          }}
+          onOpenWorkspaceFile={(path) => {
+            setActiveView("editor");
+            void workspace.openFile(path);
+          }}
           onToggleDirectory={(path) => void workspace.toggleDirectory(path)}
         />
 
-        <main className="editor-area">
-          {workspace.activeDocument === null ? (
-            <WelcomeView
-              onNewFile={workspace.createFile}
-              onOpenFile={() => void workspace.openFile()}
-              onOpenFolder={() => void workspace.openFolder()}
-            />
-          ) : (
-            <>
-              <EditorTabs
-                documents={workspace.documents}
-                activeDocumentId={workspace.activeDocument.id}
-                savingIds={workspace.savingIds}
-                onActivate={workspace.setActiveDocumentId}
-                onClose={workspace.requestCloseDocument}
+        <div className="workspace-content">
+          <main className="editor-area" hidden={activeView !== "editor"}>
+            {workspace.activeDocument === null ? (
+              <WelcomeView
+                onNewFile={workspace.createFile}
+                onOpenFile={() => void workspace.openFile()}
+                onOpenFolder={() => void workspace.openFolder()}
               />
-              <Suspense fallback={<div className="editor-pane" aria-busy="true" />}>
-                <EditorPane
+            ) : (
+              <>
+                <EditorTabs
                   documents={workspace.documents}
                   activeDocumentId={workspace.activeDocument.id}
-                  onContentChange={workspace.updateDocumentContent}
-                  onCursorChange={workspace.setCursor}
+                  savingIds={workspace.savingIds}
+                  onActivate={workspace.setActiveDocumentId}
+                  onClose={workspace.requestCloseDocument}
                 />
-              </Suspense>
-            </>
-          )}
-        </main>
+                <Suspense fallback={<div className="editor-pane" aria-busy="true" />}>
+                  <EditorPane
+                    documents={workspace.documents}
+                    activeDocumentId={workspace.activeDocument.id}
+                    onContentChange={workspace.updateDocumentContent}
+                    onCursorChange={workspace.setCursor}
+                  />
+                </Suspense>
+              </>
+            )}
+          </main>
+          <SettingsView
+            active={activeView === "settings"}
+            onOpenUpdate={() => setUpdateOpen(true)}
+          />
+        </div>
       </div>
 
       <StatusBar
@@ -186,14 +194,6 @@ function Workbench() {
         saving={activeSaving}
       />
 
-      <SettingsModal
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        onOpenUpdate={() => {
-          setSettingsOpen(false);
-          setUpdateOpen(true);
-        }}
-      />
       <UpdateModal open={updateOpen} onClose={() => setUpdateOpen(false)} />
       <DiscardChangesDialog
         document={workspace.pendingCloseDocument}
@@ -214,5 +214,30 @@ function Workbench() {
         />
       ) : null}
     </div>
+  );
+}
+
+function UpdateActivityButton({
+  label,
+  onOpen,
+}: {
+  readonly label: string;
+  readonly onOpen: () => void;
+}) {
+  const updates = useUpdates();
+  if (!updates.indicatorVisible) {
+    return null;
+  }
+  return (
+    <button
+      type="button"
+      className={`update-indicator ${updates.transferActive ? "update-indicator--active" : ""}`}
+      onClick={onOpen}
+      aria-label={label}
+      title={label}
+    >
+      <Icon name="update" size={21} />
+      <span />
+    </button>
   );
 }
