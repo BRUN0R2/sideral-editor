@@ -2,9 +2,11 @@ mod desktop_integration;
 mod documents;
 mod error;
 mod extension_systems;
+mod external_links;
 mod i18n;
 mod json_schemas;
 mod settings;
+mod sideral_extensions;
 mod updater;
 
 use std::path::PathBuf;
@@ -17,6 +19,7 @@ use json_schemas::{
     JsonSchemaResolution, JsonSchemaState, JsonSchemaTrustScope, JsonSchemaTrustSettings,
 };
 use serde::Serialize;
+use sideral_extensions::SideralExtensionState;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 
@@ -79,8 +82,18 @@ fn open_locale_directory(app: AppHandle) -> CommandResult<()> {
 }
 
 #[tauri::command(rename_all = "camelCase")]
+fn open_external_url(app: AppHandle, url: String) -> CommandResult<()> {
+    external_links::open(&app, &url).map_err(CommandError::from)
+}
+
+#[tauri::command(rename_all = "camelCase")]
 async fn read_text_file(path: String) -> CommandResult<TextDocument> {
     run_blocking(move || documents::read_text_file(PathBuf::from(path))).await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn create_text_file(directory: String, name: String) -> CommandResult<TextDocument> {
+    run_blocking(move || documents::create_text_file(PathBuf::from(directory), name)).await
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -193,6 +206,14 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
 
+            let sideral_extensions = SideralExtensionState::load(app.handle())?;
+            if !app.manage(sideral_extensions) {
+                return Err(AppError::Runtime(
+                    "Sideral extension state is already managed".to_owned(),
+                )
+                .into());
+            }
+
             desktop_integration::setup_tray_icon(app.handle())?;
             let main_window = app
                 .get_webview_window("main")
@@ -206,7 +227,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             refresh_locales,
             set_language_preference,
             open_locale_directory,
+            open_external_url,
             read_text_file,
+            create_text_file,
             write_text_file,
             list_directory,
             validate_sideral_extension_manifest,
@@ -215,8 +238,28 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             json_schema_trust_settings,
             trust_json_schema_location,
             revoke_json_schema_trust,
+            sideral_extensions::initialize_extension_system,
+            sideral_extensions::connect_extension_client,
+            sideral_extensions::disconnect_extension_client,
+            sideral_extensions::connect_extension_host,
+            sideral_extensions::execute_extension_command,
+            sideral_extensions::activate_extension_event,
+            sideral_extensions::extension_host_event,
+            sideral_extensions::extension_host_bundle,
+            sideral_extensions::extension_broker_request,
+            sideral_extensions::cancel_extension_broker_request,
+            sideral_extensions::set_extension_workspace,
+            sideral_extensions::inspect_extension_package,
+            sideral_extensions::install_extension_package,
+            sideral_extensions::set_extension_enabled,
+            sideral_extensions::restart_extension,
+            sideral_extensions::rollback_extension,
+            sideral_extensions::uninstall_extension,
         ])
-        .on_window_event(desktop_integration::handle_main_window_event)
+        .on_window_event(|window, event| {
+            sideral_extensions::handle_window_event(window, event);
+            desktop_integration::handle_main_window_event(window, event);
+        })
         .run(context)?;
 
     Ok(())

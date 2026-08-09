@@ -1,9 +1,16 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { isDesktopRuntime, listDirectory, readTextFile, writeTextFile } from "../../lib/backend";
+import {
+  createTextFile,
+  isDesktopRuntime,
+  listDirectory,
+  readTextFile,
+  writeTextFile,
+} from "../../lib/backend";
 import type { AutoSaveMode, DirectoryEntry } from "../../lib/contracts";
 import { ApplicationError, toApplicationError } from "../../lib/errors";
 import { AUTO_SAVE_DELAY_MS, autoSaveDocuments } from "./auto-save";
+import { reorderDocumentAt } from "./document-order";
 import { languageForFile } from "./language";
 import {
   type CursorPosition,
@@ -34,7 +41,9 @@ export function useWorkspace(autoSave: AutoSaveMode) {
   const fileRequests = useRef(new Map<string, Promise<void>>());
   const saveRequests = useRef(new Map<string, Promise<boolean>>());
   const autoSaveTimers = useRef(new Map<string, AutoSaveTimer>());
+  const workspaceRootRef = useRef(workspaceRoot);
   const documentsRef = useRef(documents);
+  workspaceRootRef.current = workspaceRoot;
   documentsRef.current = documents;
 
   const activeDocument = useMemo(
@@ -61,6 +70,36 @@ export function useWorkspace(autoSave: AutoSaveMode) {
     setDocuments((current) => [...current, document]);
     setActiveDocumentId(document.id);
     setCursor(INITIAL_CURSOR);
+  }, []);
+
+  const createWorkspaceFile = useCallback(async (name: string) => {
+    const root = workspaceRootRef.current;
+    if (root === null) {
+      throw new ApplicationError("workspace_required", "Open a folder before creating a file.");
+    }
+    if (!isDesktopRuntime()) {
+      throw new ApplicationError("native_only", "Creating files requires the desktop app.");
+    }
+
+    const payload = await createTextFile(root.path, name);
+    const document: EditorDocument = {
+      id: `file:${pathKey(payload.path)}`,
+      path: payload.path,
+      name: payload.name,
+      content: payload.content,
+      savedContent: payload.content,
+      languageId: languageForFile(payload.name),
+    };
+
+    setDocuments((current) =>
+      current.some((item) => item.id === document.id) ? current : [...current, document],
+    );
+    setActiveDocumentId(document.id);
+    setCursor(INITIAL_CURSOR);
+
+    if (pathKey(workspaceRootRef.current?.path ?? "") === pathKey(root.path)) {
+      setEntries((current) => insertWorkspaceFile(current, payload.path, payload.name));
+    }
   }, []);
 
   const openFile = useCallback(
@@ -186,6 +225,10 @@ export function useWorkspace(autoSave: AutoSaveMode) {
     setDocuments((current) =>
       current.map((document) => (document.id === id ? { ...document, content } : document)),
     );
+  }, []);
+
+  const reorderDocument = useCallback((id: string, insertionIndex: number) => {
+    setDocuments((current) => reorderDocumentAt(current, id, insertionIndex));
   }, []);
 
   const saveDocument = useCallback(
@@ -339,10 +382,12 @@ export function useWorkspace(autoSave: AutoSaveMode) {
     cursor,
     error,
     createFile,
+    createWorkspaceFile,
     openFile,
     openFolder,
     toggleDirectory,
     updateDocumentContent,
+    reorderDocument,
     setActiveDocumentId,
     requestCloseDocument,
     discardPendingDocument,
@@ -377,6 +422,53 @@ function toWorkspaceNodes(entries: readonly DirectoryEntry[]): readonly Workspac
     loading: false,
     children: null,
   }));
+}
+
+function insertWorkspaceFile(
+  nodes: readonly WorkspaceNode[],
+  path: string,
+  name: string,
+): readonly WorkspaceNode[] {
+  if (nodes.some((node) => pathKey(node.path) === pathKey(path))) {
+    return nodes;
+  }
+
+  return [
+    ...nodes,
+    {
+      path,
+      name,
+      kind: "file" as const,
+      expanded: false,
+      loading: false,
+      children: null,
+    },
+  ].sort(compareWorkspaceNodes);
+}
+
+function compareWorkspaceNodes(left: WorkspaceNode, right: WorkspaceNode): number {
+  const rankDifference = workspaceNodeRank(left) - workspaceNodeRank(right);
+  if (rankDifference !== 0) {
+    return rankDifference;
+  }
+
+  const foldedDifference = compareText(left.name.toLowerCase(), right.name.toLowerCase());
+  return foldedDifference !== 0 ? foldedDifference : compareText(left.name, right.name);
+}
+
+function workspaceNodeRank(node: WorkspaceNode): number {
+  switch (node.kind) {
+    case "directory":
+      return 0;
+    case "file":
+      return 1;
+    case "symbolicLink":
+      return 2;
+  }
+}
+
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : Number(left > right);
 }
 
 function findNode(nodes: readonly WorkspaceNode[], path: string): WorkspaceNode | undefined {

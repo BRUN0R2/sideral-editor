@@ -1,7 +1,7 @@
 use std::{
-    fs,
+    fs::{self, OpenOptions},
     io::Write,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 use serde::Serialize;
@@ -80,6 +80,38 @@ pub fn read_text_file(path: PathBuf) -> AppResult<TextDocument> {
         path: display_path(&path),
         name: name.to_owned(),
         content,
+    })
+}
+
+pub fn create_text_file(directory: PathBuf, name: String) -> AppResult<TextDocument> {
+    validate_non_empty_path(&directory)?;
+    validate_file_name(&name)?;
+    if !directory.is_dir() {
+        return Err(AppError::InvalidPath(format!(
+            "{} is not an existing directory",
+            directory.display()
+        )));
+    }
+
+    let path = directory.join(&name);
+    let file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .map_err(|source| {
+            if source.kind() == std::io::ErrorKind::AlreadyExists {
+                AppError::FileAlreadyExists(name.clone())
+            } else {
+                AppError::io(format!("could not create {}", path.display()), source)
+            }
+        })?;
+    file.sync_all()
+        .map_err(|source| AppError::io(format!("could not flush {}", path.display()), source))?;
+
+    Ok(TextDocument {
+        path: display_path(&path),
+        name,
+        content: String::new(),
     })
 }
 
@@ -203,6 +235,42 @@ fn validate_non_empty_path(path: &Path) -> AppResult<()> {
     Ok(())
 }
 
+fn validate_file_name(name: &str) -> AppResult<()> {
+    const INVALID_CHARACTERS: [char; 9] = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
+
+    let mut components = Path::new(name).components();
+    let is_single_normal_component =
+        matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none();
+    let invalid = name.is_empty()
+        || name.trim() != name
+        || name.ends_with('.')
+        || name.chars().count() > 255
+        || name
+            .chars()
+            .any(|character| character.is_control() || INVALID_CHARACTERS.contains(&character))
+        || !is_single_normal_component
+        || is_windows_reserved_file_name(name);
+
+    if invalid {
+        return Err(AppError::InvalidFileName(name.to_owned()));
+    }
+    Ok(())
+}
+
+fn is_windows_reserved_file_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or("").to_ascii_uppercase();
+    if matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL") {
+        return true;
+    }
+    let Some(number) = stem
+        .strip_prefix("COM")
+        .or_else(|| stem.strip_prefix("LPT"))
+    else {
+        return false;
+    };
+    matches!(number, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9")
+}
+
 fn display_path(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
@@ -212,5 +280,73 @@ const fn entry_rank(kind: DirectoryEntryKind) -> u8 {
         DirectoryEntryKind::Directory => 0,
         DirectoryEntryKind::File => 1,
         DirectoryEntryKind::SymbolicLink => 2,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{error::Error, fs};
+
+    use tempfile::tempdir;
+
+    use crate::error::AppError;
+
+    use super::{create_text_file, validate_file_name};
+
+    type TestResult = Result<(), Box<dyn Error>>;
+
+    #[test]
+    fn creates_an_empty_file_with_the_requested_extension() -> TestResult {
+        let directory = tempdir()?;
+
+        let document = create_text_file(directory.path().to_path_buf(), "code.sma".to_owned())?;
+
+        assert_eq!(document.name, "code.sma");
+        assert_eq!(document.content, "");
+        assert!(directory.path().join("code.sma").is_file());
+        Ok(())
+    }
+
+    #[test]
+    fn never_overwrites_an_existing_entry() -> TestResult {
+        let directory = tempdir()?;
+        let path = directory.path().join("code.ts");
+        fs::write(&path, "preserve me")?;
+
+        let result = create_text_file(directory.path().to_path_buf(), "code.ts".to_owned());
+
+        assert!(matches!(result, Err(AppError::FileAlreadyExists(_))));
+        assert_eq!(fs::read_to_string(path)?, "preserve me");
+        Ok(())
+    }
+
+    #[test]
+    fn accepts_regular_extension_and_dotfile_names() -> TestResult {
+        for name in ["code.py", "code.ts", "plugin.sma", ".gitignore"] {
+            validate_file_name(name)?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_paths_reserved_names_and_invalid_characters() {
+        for name in [
+            "",
+            "  ",
+            ".",
+            "..",
+            "../code.ts",
+            "nested/code.ts",
+            "nested\\code.ts",
+            "code?.ts",
+            "code.ts ",
+            "CON",
+            "LPT1.txt",
+        ] {
+            assert!(
+                validate_file_name(name).is_err(),
+                "{name} should be invalid"
+            );
+        }
     }
 }

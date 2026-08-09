@@ -52,8 +52,7 @@ mod tests {
     use crate::{
         ManifestError,
         budgets::{
-            MAX_COMPRESSED_PACKAGE_BYTES, MAX_WORKER_BUNDLE_BYTES,
-            RECOMMENDED_WORKER_BUNDLE_BYTES,
+            MAX_COMPRESSED_PACKAGE_BYTES, MAX_WORKER_BUNDLE_BYTES, RECOMMENDED_WORKER_BUNDLE_BYTES,
         },
     };
 

@@ -21,7 +21,13 @@ React workbench
   ├─ workspace feature ── explicit Tauri commands ── Rust filesystem modules
   ├─ i18n provider ────── one bootstrap command ─── locale/settings modules
   ├─ Monaco pane ──────── owned models + native JSON schema resolver
+  ├─ extension client ─── monotonic Channel snapshots ── native extension service
   └─ update provider ──── official Tauri updater ── signed release endpoint
+
+Native extension service
+  ├─ signed package registry + publisher trust + active/rollback slots
+  ├─ capability broker ── canonical workspace, isolated data, pinned network, fixed processes
+  └─ hidden supervisor WebView ── one generation-scoped Web Worker per active extension
 ```
 
 The frontend owns presentation state. Rust owns filesystem access, settings,
@@ -40,14 +46,30 @@ code. `src-tauri/src/extension_systems.rs` is the only native composition point
 allowed to know both public APIs.
 
 The modern manifest is strict, capability-based and limited to a bundled ESM
-worker entry. Its native validation enforces manifest, bundle and compressed
-package size budgets before runtime construction. The compatibility manifest
-reader is intentionally tolerant of unrelated package fields, classifies the
-required host, and treats any Node entry as a trusted-process requirement.
-Manifest inspection never authorizes execution.
+worker entry. `.sideralx` packages use Ed25519 signatures that cover every
+non-signature file. Native validation enforces manifest, bundle, file-count,
+compressed and uncompressed budgets before installation and again before every
+load. Publisher trust is attached to the public-key digest, while install uses
+the reviewed package hash as an optimistic precondition.
 
-The complete decision and package constraints are recorded in
-`docs/decisions/0001-independent-extension-systems.md` and protected by
+The hidden host negotiates protocol/API versions with Rust and owns no persisted
+authority. It creates one Worker per active extension, verifies the bundle hash
+again in the WebView, serializes commands per extension and keeps independent
+extensions parallel. Explicit acknowledgements drive every state transition;
+deadlines terminate invalid work and never act as startup coordination. A
+generation invalidated by disable, reload or host failure cannot publish late
+state.
+
+The native broker is the sole authority for workspace, storage, configuration,
+network, process and window requests. The compatibility manifest reader is
+intentionally tolerant of unrelated package fields, classifies the required
+host, and treats any Node entry as a trusted-process requirement. Manifest
+inspection never authorizes execution.
+
+The product boundary and package contract are recorded in
+`docs/decisions/0001-independent-extension-systems.md`; deterministic runtime
+semantics are recorded in
+`docs/decisions/0002-deterministic-extension-runtime.md`. Both are protected by
 `npm run architecture`.
 
 ## Modules
@@ -83,16 +105,24 @@ The complete decision and package constraints are recorded in
 - `error.rs`: structured operational failures exposed to TypeScript.
 - `extension_systems.rs`: sole composition point for the two independent
   extension cores.
+- `sideral_extensions`: signed registry, trust, monotonic runtime snapshots,
+  lifecycle coordination and the native capability broker.
 - `lib.rs`: command boundary and blocking-work isolation.
 
 ### Extension crates and SDK
 
 - `src-tauri/crates/sideral-extension-core`: strict modern manifest,
   capabilities and executable size budgets.
+- `src-tauri/crates/sideral-extension-package`: bounded archive parsing,
+  canonical Ed25519 signatures and deterministic package construction.
+- `src-tauri/crates/sideral-extension-tool`: non-overwriting scaffold, key,
+  pack and inspect commands.
 - `src-tauri/crates/vscode-legacy-core`: isolated third-party manifest
   inspection and host classification.
 - `packages/sideral-extension-sdk`: declaration-only authoring contract that
   contributes zero runtime bytes to extension bundles.
+- `packages/sideral-extension-testkit`: deterministic in-memory lifecycle and
+  capability harness for extension unit tests.
 
 ## Ownership and resource lifetime
 
@@ -113,6 +143,14 @@ The complete decision and package constraints are recorded in
 | Updater `Resource` | `UpdateProvider` | Close on replacement or provider cleanup |
 | In-flight reads/saves | `useWorkspace` maps | Deduplicated and removed in `finally` |
 | Temporary files | Rust RAII | Closed automatically; persisted atomically |
+| Extension client channels | Native extension service | Removed by connection ID; failed channels are pruned |
+| Hidden extension host | Native extension service | Destroyed on host fault or application exit; recreated on demand |
+| Extension Worker | Host supervisor | Graceful reverse-order disposal, then unconditional termination |
+| Worker bundle Blob URL | `ManagedWorker` | Revoked with Worker termination |
+| Broker request | Native capability broker | Bounded semaphore slot plus generation/request cancellation record |
+| Extension process | Native capability broker | Killed and reaped on cancellation, output limit or safety deadline |
+| Output channel | Owning extension | Explicit disposal or bulk release on extension cancellation |
+| Installed package | Extension registry | Registry references only active/rollback archives; uninstall removes both referenced archives |
 
 There is no polling loop. Auto Save owns one cancellable 1-second timeout per
 dirty named document and never opens a save dialog for an untitled buffer.
@@ -120,6 +158,11 @@ Locale files are rescanned once when settings open and when the app regains
 focus after a user copies a file. Desktop preference changes remain interactive
 while complete snapshots are persisted in order. Update checks run
 once per application session plus explicit user requests.
+
+Extension startup also has no delay or polling path. Native instructions and
+Worker acknowledgements advance the state machine immediately. Finite
+deadlines exist only to terminate a failed owner. Cancellation, deactivation and
+host replacement invalidate the affected generation before any recovery starts.
 
 ## JSON schema boundary
 

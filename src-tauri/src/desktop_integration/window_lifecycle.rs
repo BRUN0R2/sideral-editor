@@ -44,12 +44,17 @@ pub fn handle_main_window_event(window: &Window, event: &WindowEvent) {
             api.prevent_close();
             if let Err(error) = window.hide() {
                 eprintln!("Main window could not move to tray: {error}");
+                crate::sideral_extensions::request_shutdown(window.app_handle());
                 window.app_handle().exit(1);
             }
         }
-        Ok(_) => window.app_handle().exit(0),
+        Ok(_) => {
+            crate::sideral_extensions::request_shutdown(window.app_handle());
+            window.app_handle().exit(0);
+        }
         Err(error) => {
             eprintln!("Main window close policy is unavailable: {error}");
+            crate::sideral_extensions::request_shutdown(window.app_handle());
             window.app_handle().exit(1);
         }
     }

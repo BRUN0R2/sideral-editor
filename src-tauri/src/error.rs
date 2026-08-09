@@ -14,6 +14,12 @@ pub enum AppError {
     },
     #[error("invalid path: {0}")]
     InvalidPath(String),
+    #[error("invalid file name: {0}")]
+    InvalidFileName(String),
+    #[error("a file or folder named {0} already exists")]
+    FileAlreadyExists(String),
+    #[error("invalid external URL: {0}")]
+    InvalidExternalUrl(String),
     #[error("invalid locale: {0}")]
     InvalidLocale(String),
     #[error("invalid settings: {0}")]
@@ -46,6 +52,9 @@ impl AppError {
         match self {
             Self::Io { .. } => "io_error",
             Self::InvalidPath(_) => "invalid_path",
+            Self::InvalidFileName(_) => "invalid_file_name",
+            Self::FileAlreadyExists(_) => "file_already_exists",
+            Self::InvalidExternalUrl(_) => "invalid_external_url",
             Self::InvalidLocale(_) => "invalid_locale",
             Self::InvalidSettings(_) => "invalid_settings",
             Self::InvalidSideralExtension(_) => "invalid_sideral_extension",

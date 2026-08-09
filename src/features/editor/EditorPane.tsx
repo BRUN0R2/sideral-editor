@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { isDesktopRuntime, openExternalUrl } from "../../lib/backend";
 import type { CursorPosition, EditorDocument } from "../workspace/types";
 import { JsonSchemaTrustDialog } from "./JsonSchemaTrustDialog";
 import { ensureSideralTheme, monaco } from "./monaco";
@@ -66,6 +67,16 @@ export function EditorPane({
     });
     editorRef.current = editor;
 
+    const linkOpener = monaco.editor.registerLinkOpener({
+      async open(resource) {
+        if (!isDesktopRuntime() || !isExternalWebScheme(resource.scheme)) {
+          return false;
+        }
+        await openExternalUrl(resource.toString(true));
+        return true;
+      },
+    });
+
     const cursorListener = editor.onDidChangeCursorPosition((event) => {
       cursorCallbackRef.current({ line: event.position.lineNumber, column: event.position.column });
     });
@@ -74,6 +85,7 @@ export function EditorPane({
 
     return () => {
       resizeObserver.disconnect();
+      linkOpener.dispose();
       cursorListener.dispose();
       contentListenerRef.current?.dispose();
       contentListenerRef.current = null;
@@ -162,4 +174,8 @@ function modelUri(document: EditorDocument): monaco.Uri {
   return document.path === null
     ? monaco.Uri.from({ scheme: "untitled", path: `/${document.id}` })
     : monaco.Uri.file(document.path);
+}
+
+function isExternalWebScheme(scheme: string): boolean {
+  return scheme === "http" || scheme === "https";
 }

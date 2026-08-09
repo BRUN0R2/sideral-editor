@@ -165,17 +165,33 @@ button:disabled {
 }
 
 .icon-button {
+  --icon-button-icon-size: 18px;
+
   display: inline-grid;
   width: 32px;
   height: 32px;
   flex: 0 0 auto;
   place-items: center;
   border-radius: var(--radius-sm);
+  padding: 0;
   color: var(--text-muted);
   background: transparent;
   transition:
     color 130ms ease,
     background-color 130ms ease;
+}
+
+.icon-button > svg,
+.icon-button > .product-icon {
+  width: var(--icon-button-icon-size);
+  height: var(--icon-button-icon-size);
+}
+
+.icon-button > .product-icon.codicon[class*="codicon-"] {
+  display: grid;
+  place-items: center;
+  font-size: var(--icon-button-icon-size);
+  line-height: 1;
 }
 
 .icon-button:not(:disabled):hover,
@@ -193,18 +209,6 @@ button:disabled {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-}
-
-kbd {
-  border: 1px solid var(--border-strong);
-  border-bottom-color: #505660;
-  border-radius: 5px;
-  padding: 3px 6px;
-  color: var(--text-subtle);
-  background: #20242a;
-  font-family: inherit;
-  font-size: 10px;
-  box-shadow: 0 1px 0 #000;
 }
 
 .startup-state {

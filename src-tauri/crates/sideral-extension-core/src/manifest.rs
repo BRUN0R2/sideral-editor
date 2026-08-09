@@ -9,6 +9,7 @@ use crate::{
 };
 
 const SUPPORTED_MANIFEST_VERSION: u16 = 1;
+const SUPPORTED_API_VERSION: u16 = 1;
 const MAX_ACTIVATION_EVENTS: usize = 64;
 const MAX_COMMANDS: usize = 128;
 
@@ -36,6 +37,8 @@ pub struct WorkerRuntime {
 pub struct CommandContribution {
     pub id: String,
     pub title: String,
+    #[serde(default)]
+    pub category: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -49,6 +52,7 @@ pub struct Contributions {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ExtensionManifest {
     pub manifest_version: u16,
+    pub api_version: u16,
     pub id: String,
     pub display_name: String,
     pub version: String,
@@ -71,6 +75,7 @@ pub struct ExtensionManifest {
 #[serde(rename_all = "camelCase")]
 pub struct ExtensionInspection {
     pub manifest_version: u16,
+    pub api_version: u16,
     pub id: String,
     pub display_name: String,
     pub version: String,
@@ -78,13 +83,18 @@ pub struct ExtensionInspection {
     pub runtime: Option<RuntimeKind>,
     pub entry: Option<String>,
     pub activation_events: Vec<String>,
-    pub commands: Vec<String>,
+    pub commands: Vec<CommandContribution>,
     pub permissions: PermissionSet,
     pub manifest_bytes: usize,
     pub size_budget: ExtensionSizeBudget,
 }
 
 pub fn validate_manifest_json(source: &str) -> Result<ExtensionInspection, ManifestError> {
+    let manifest = parse_manifest_json(source)?;
+    Ok(manifest.inspect(source.len()))
+}
+
+pub fn parse_manifest_json(source: &str) -> Result<ExtensionManifest, ManifestError> {
     if source.len() > MAX_MANIFEST_BYTES {
         return Err(ManifestError::SourceTooLarge {
             actual_bytes: source.len(),
@@ -94,14 +104,20 @@ pub fn validate_manifest_json(source: &str) -> Result<ExtensionInspection, Manif
 
     let manifest: ExtensionManifest = serde_json::from_str(source)?;
     manifest.validate()?;
-    Ok(manifest.inspect(source.len()))
+    Ok(manifest)
 }
 
 impl ExtensionManifest {
-    fn validate(&self) -> Result<(), ManifestError> {
+    pub fn validate(&self) -> Result<(), ManifestError> {
         if self.manifest_version != SUPPORTED_MANIFEST_VERSION {
             return Err(ManifestError::UnsupportedManifestVersion(
                 self.manifest_version,
+            ));
+        }
+        if self.api_version != SUPPORTED_API_VERSION {
+            return Err(ManifestError::invalid(
+                "apiVersion",
+                format!("API version {} is not supported", self.api_version),
             ));
         }
 
@@ -118,9 +134,9 @@ impl ExtensionManifest {
             validate_worker_entry(&runtime.entry)?;
         }
 
-        let command_ids = self.validate_commands()?;
-        self.validate_activation_events(&command_ids)?;
-        self.permissions.validate()?;
+        self.validate_commands()?;
+        self.validate_activation_events()?;
+        self.permissions.validate(&self.id)?;
         self.validate_runtime_consistency()?;
         Ok(())
     }
@@ -138,6 +154,11 @@ impl ExtensionManifest {
         for command in &self.contributes.commands {
             validate_identifier("contributes.commands.id", &command.id, true)?;
             validate_text("contributes.commands.title", &command.title, 120)?;
+            validate_optional_text(
+                "contributes.commands.category",
+                command.category.as_deref(),
+                80,
+            )?;
             if !command.id.starts_with(&expected_prefix) {
                 return Err(ManifestError::invalid(
                     "contributes.commands.id",
@@ -154,10 +175,7 @@ impl ExtensionManifest {
         Ok(command_ids)
     }
 
-    fn validate_activation_events(
-        &self,
-        command_ids: &HashSet<&str>,
-    ) -> Result<(), ManifestError> {
+    fn validate_activation_events(&self) -> Result<(), ManifestError> {
         if self.activation_events.len() > MAX_ACTIVATION_EVENTS {
             return Err(ManifestError::invalid(
                 "activationEvents",
@@ -174,16 +192,7 @@ impl ExtensionManifest {
                 });
             }
 
-            if event == "onStartup" {
-                continue;
-            }
-            if let Some(command_id) = event.strip_prefix("onCommand:") {
-                if !command_ids.contains(command_id) {
-                    return Err(ManifestError::invalid(
-                        "activationEvents",
-                        format!("{event} references an undeclared command"),
-                    ));
-                }
+            if event == "onWorkbenchReady" {
                 continue;
             }
             if let Some(language_id) = event.strip_prefix("onLanguage:") {
@@ -223,31 +232,28 @@ impl ExtensionManifest {
 
         if self.activation_events.is_empty() && self.contributes.commands.is_empty() {
             return Err(ManifestError::Inconsistent(
-                "a worker requires at least one activation event or command contribution".to_owned(),
+                "a worker requires at least one activation event or command contribution"
+                    .to_owned(),
             ));
         }
         Ok(())
     }
 
-    fn inspect(self, manifest_bytes: usize) -> ExtensionInspection {
+    pub fn inspect(&self, manifest_bytes: usize) -> ExtensionInspection {
         let runtime = self.runtime.as_ref().map(|value| value.kind);
-        let entry = self.runtime.map(|value| value.entry);
+        let entry = self.runtime.as_ref().map(|value| value.entry.clone());
         ExtensionInspection {
             manifest_version: self.manifest_version,
-            id: self.id,
-            display_name: self.display_name,
-            version: self.version,
-            engine_requirement: self.engines.sideral,
+            api_version: self.api_version,
+            id: self.id.clone(),
+            display_name: self.display_name.clone(),
+            version: self.version.clone(),
+            engine_requirement: self.engines.sideral.clone(),
             runtime,
             entry,
-            activation_events: self.activation_events,
-            commands: self
-                .contributes
-                .commands
-                .into_iter()
-                .map(|command| command.id)
-                .collect(),
-            permissions: self.permissions,
+            activation_events: self.activation_events.clone(),
+            commands: self.contributes.commands.clone(),
+            permissions: self.permissions.clone(),
             manifest_bytes,
             size_budget: extension_size_budget(),
         }
@@ -265,17 +271,20 @@ fn validate_worker_entry(entry: &str) -> Result<(), ManifestError> {
     Ok(())
 }
 
-fn validate_package_path(field: &'static str, value: &str) -> Result<(), ManifestError> {
+pub fn validate_package_path(field: &'static str, value: &str) -> Result<(), ManifestError> {
     if value.is_empty()
+        || !value.is_ascii()
         || value.starts_with('/')
         || value.contains('\\')
         || value.contains(':')
         || value.contains('\0')
-        || value.split('/').any(|segment| segment.is_empty() || matches!(segment, "." | ".."))
+        || value
+            .split('/')
+            .any(|segment| segment.is_empty() || matches!(segment, "." | ".."))
     {
         return Err(ManifestError::invalid(
             field,
-            "path must be normalized, relative and use forward slashes",
+            "path must be normalized ASCII, relative and use forward slashes",
         ));
     }
     Ok(())
@@ -315,20 +324,16 @@ fn validate_token(
 ) -> Result<(), ManifestError> {
     if value.is_empty()
         || value.len() > max_length
-        || !value.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'+' | b'.')
-        })
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'+' | b'.'))
     {
         return Err(ManifestError::invalid(field, "event target is invalid"));
     }
     Ok(())
 }
 
-fn validate_text(
-    field: &'static str,
-    value: &str,
-    max_length: usize,
-) -> Result<(), ManifestError> {
+fn validate_text(field: &'static str, value: &str, max_length: usize) -> Result<(), ManifestError> {
     if value.is_empty() || value.trim() != value || value.contains('\0') {
         return Err(ManifestError::invalid(
             field,
@@ -362,6 +367,7 @@ mod tests {
 
     const VALID_MANIFEST: &str = r#"{
         "manifestVersion": 1,
+        "apiVersion": 1,
         "id": "sample.hello",
         "displayName": "Hello",
         "version": "1.0.0",
@@ -369,7 +375,7 @@ mod tests {
         "runtime": { "kind": "worker", "entry": "dist/extension.js" },
         "permissions": {
             "workspace": "read",
-            "network": ["https://api.example.com"]
+            "network": [{ "origin": "https://api.example.com", "methods": ["GET"] }]
         },
         "contributes": {
             "commands": [{ "id": "sample.hello.run", "title": "Run Hello" }]
@@ -385,7 +391,7 @@ mod tests {
             Ok(inspection)
                 if inspection.runtime == Some(RuntimeKind::Worker)
                     && inspection.permissions.workspace == WorkspaceAccess::Read
-                    && inspection.commands == ["sample.hello.run"]
+                    && inspection.commands[0].id == "sample.hello.run"
         ));
     }
 
@@ -427,10 +433,7 @@ mod tests {
 
     #[test]
     fn rejects_external_plain_http_permissions() {
-        let source = VALID_MANIFEST.replace(
-            "https://api.example.com",
-            "http://api.example.com",
-        );
+        let source = VALID_MANIFEST.replace("https://api.example.com", "http://api.example.com");
 
         assert!(matches!(
             validate_manifest_json(&source),
@@ -442,10 +445,10 @@ mod tests {
     }
 
     #[test]
-    fn rejects_activation_for_an_undeclared_command() {
+    fn rejects_redundant_command_activation() {
         let source = VALID_MANIFEST.replace(
             "\"permissions\":",
-            "\"activationEvents\": [\"onCommand:sample.hello.missing\"], \"permissions\":",
+            "\"activationEvents\": [\"onCommand:sample.hello.run\"], \"permissions\":",
         );
 
         assert!(matches!(
@@ -481,6 +484,22 @@ mod tests {
             validate_manifest_json(&source),
             Err(ManifestError::Duplicate {
                 kind: "command",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn rejects_duplicate_process_grant_ids() {
+        let source = VALID_MANIFEST.replace(
+            "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }]",
+            "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }], \"processes\": [{ \"id\": \"sample.hello.tool\", \"executable\": \"tool\", \"arguments\": [\"one\"] }, { \"id\": \"sample.hello.tool\", \"executable\": \"tool\", \"arguments\": [\"two\"] }]",
+        );
+
+        assert!(matches!(
+            validate_manifest_json(&source),
+            Err(ManifestError::Duplicate {
+                kind: "process permission id",
                 ..
             })
         ));

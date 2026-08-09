@@ -1,9 +1,10 @@
 import type { ButtonHTMLAttributes } from "react";
 import { Icon, type IconName } from "./Icon";
+import { isProductIconName, ProductIcon, type ProductIconName } from "./ProductIcon";
 
 interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly label: string;
-  readonly icon: IconName;
+  readonly icon: IconName | ProductIconName;
   readonly selected?: boolean;
 }
 
@@ -23,7 +24,7 @@ export function IconButton({
       aria-pressed={selected || undefined}
       {...props}
     >
-      <Icon name={icon} />
+      {isProductIconName(icon) ? <ProductIcon name={icon} /> : <Icon name={icon} />}
     </button>
   );
 }

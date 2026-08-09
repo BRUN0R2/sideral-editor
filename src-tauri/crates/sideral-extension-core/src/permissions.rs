@@ -21,9 +21,27 @@ pub enum WorkspaceAccess {
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProcessPermission {
+    pub id: String,
     pub executable: String,
     #[serde(default)]
     pub arguments: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub enum NetworkMethod {
+    GET,
+    POST,
+    PUT,
+    PATCH,
+    DELETE,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NetworkPermission {
+    pub origin: String,
+    #[serde(default = "default_network_methods")]
+    pub methods: Vec<NetworkMethod>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -32,15 +50,15 @@ pub struct PermissionSet {
     #[serde(default)]
     pub workspace: WorkspaceAccess,
     #[serde(default)]
-    pub network: Vec<String>,
+    pub network: Vec<NetworkPermission>,
     #[serde(default)]
     pub processes: Vec<ProcessPermission>,
 }
 
 impl PermissionSet {
-    pub(crate) fn validate(&self) -> Result<(), ManifestError> {
+    pub(crate) fn validate(&self, extension_id: &str) -> Result<(), ManifestError> {
         validate_network_origins(&self.network)?;
-        validate_process_permissions(&self.processes)
+        validate_process_permissions(extension_id, &self.processes)
     }
 
     pub(crate) fn is_empty(&self) -> bool {
@@ -50,8 +68,12 @@ impl PermissionSet {
     }
 }
 
-fn validate_network_origins(origins: &[String]) -> Result<(), ManifestError> {
-    if origins.len() > MAX_NETWORK_ORIGINS {
+fn default_network_methods() -> Vec<NetworkMethod> {
+    vec![NetworkMethod::GET]
+}
+
+fn validate_network_origins(permissions: &[NetworkPermission]) -> Result<(), ManifestError> {
+    if permissions.len() > MAX_NETWORK_ORIGINS {
         return Err(ManifestError::invalid(
             "permissions.network",
             format!("at most {MAX_NETWORK_ORIGINS} origins are allowed"),
@@ -59,12 +81,18 @@ fn validate_network_origins(origins: &[String]) -> Result<(), ManifestError> {
     }
 
     let mut normalized_origins = HashSet::new();
-    for origin in origins {
-        let parsed = Url::parse(origin).map_err(|error| {
-            ManifestError::invalid("permissions.network", format!("{origin}: {error}"))
+    for permission in permissions {
+        let parsed = Url::parse(&permission.origin).map_err(|error| {
+            ManifestError::invalid(
+                "permissions.network",
+                format!("{}: {error}", permission.origin),
+            )
         })?;
         let host = parsed.host_str().ok_or_else(|| {
-            ManifestError::invalid("permissions.network", format!("{origin} has no host"))
+            ManifestError::invalid(
+                "permissions.network",
+                format!("{} has no host", permission.origin),
+            )
         })?;
         let secure = parsed.scheme() == "https";
         let loopback_http = parsed.scheme() == "http" && is_loopback_host(host);
@@ -72,7 +100,10 @@ fn validate_network_origins(origins: &[String]) -> Result<(), ManifestError> {
         if !secure && !loopback_http {
             return Err(ManifestError::invalid(
                 "permissions.network",
-                format!("{origin} must use HTTPS; HTTP is limited to loopback hosts"),
+                format!(
+                    "{} must use HTTPS; HTTP is limited to loopback hosts",
+                    permission.origin
+                ),
             ));
         }
         if !parsed.username().is_empty()
@@ -83,8 +114,27 @@ fn validate_network_origins(origins: &[String]) -> Result<(), ManifestError> {
         {
             return Err(ManifestError::invalid(
                 "permissions.network",
-                format!("{origin} must be an origin without credentials, path, query or fragment"),
+                format!(
+                    "{} must be an origin without credentials, path, query or fragment",
+                    permission.origin
+                ),
             ));
+        }
+
+        if permission.methods.is_empty() {
+            return Err(ManifestError::invalid(
+                "permissions.network.methods",
+                "at least one method is required",
+            ));
+        }
+        let mut unique_methods = HashSet::new();
+        for method in &permission.methods {
+            if !unique_methods.insert(*method) {
+                return Err(ManifestError::Duplicate {
+                    kind: "network method",
+                    value: format!("{} {method:?}", permission.origin),
+                });
+            }
         }
 
         let normalized = parsed.origin().ascii_serialization();
@@ -100,6 +150,7 @@ fn validate_network_origins(origins: &[String]) -> Result<(), ManifestError> {
 }
 
 fn validate_process_permissions(
+    extension_id: &str,
     permissions: &[ProcessPermission],
 ) -> Result<(), ManifestError> {
     if permissions.len() > MAX_PROCESS_PERMISSIONS {
@@ -109,8 +160,10 @@ fn validate_process_permissions(
         ));
     }
 
-    let mut unique_permissions = HashSet::new();
+    let mut unique_permission_ids = HashSet::new();
+    let expected_prefix = format!("{extension_id}.");
     for permission in permissions {
+        validate_process_permission_id(&permission.id, &expected_prefix)?;
         validate_clean_text(
             "permissions.processes.executable",
             &permission.executable,
@@ -125,14 +178,34 @@ fn validate_process_permissions(
         for argument in &permission.arguments {
             validate_process_argument(argument)?;
         }
-        if !unique_permissions.insert(permission.clone()) {
+        if !unique_permission_ids.insert(permission.id.as_str()) {
             return Err(ManifestError::Duplicate {
-                kind: "process permission",
-                value: permission.executable.clone(),
+                kind: "process permission id",
+                value: permission.id.clone(),
             });
         }
     }
 
+    Ok(())
+}
+
+fn validate_process_permission_id(value: &str, expected_prefix: &str) -> Result<(), ManifestError> {
+    if !value.starts_with(expected_prefix)
+        || value.len() > 128
+        || value.split('.').any(|segment| {
+            segment.is_empty()
+                || segment.starts_with('-')
+                || segment.ends_with('-')
+                || !segment
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        })
+    {
+        return Err(ManifestError::invalid(
+            "permissions.processes.id",
+            format!("value must start with {expected_prefix} and use a namespaced identifier"),
+        ));
+    }
     Ok(())
 }
 
@@ -170,7 +243,10 @@ fn validate_clean_text(
         ));
     }
     if value.contains('\0') {
-        return Err(ManifestError::invalid(field, "value cannot contain NUL bytes"));
+        return Err(ManifestError::invalid(
+            field,
+            "value cannot contain NUL bytes",
+        ));
     }
     Ok(())
 }

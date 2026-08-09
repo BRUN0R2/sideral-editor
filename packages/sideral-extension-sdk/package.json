@@ -12,6 +12,9 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts"
+    },
+    "./protocol": {
+      "types": "./dist/protocol.d.ts"
     }
   },
   "scripts": {

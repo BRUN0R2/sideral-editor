@@ -1,0 +1,533 @@
+.extensions-workspace {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  color: var(--text);
+  background: var(--bg-editor);
+}
+
+.extensions-workspace[hidden] {
+  display: none;
+}
+
+.extensions-workspace__inner {
+  width: min(1040px, calc(100% - 64px));
+  margin: 0 auto;
+  padding: 30px 0 64px;
+}
+
+.extensions-workspace__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+}
+
+.extensions-workspace__header h1,
+.extensions-output h2 {
+  margin: 0;
+  color: #e1e3e6;
+  font-size: 24px;
+  font-weight: 620;
+  letter-spacing: -0.025em;
+}
+
+.extensions-workspace__header p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 11px;
+  color: var(--text);
+  background: var(--bg-raised);
+  font-size: 11px;
+  font-weight: 600;
+  transition:
+    color 130ms ease,
+    border-color 130ms ease,
+    background-color 130ms ease;
+}
+
+.button:not(:disabled):hover {
+  border-color: #555c66;
+  background: var(--bg-hover);
+}
+
+.button--primary {
+  border-color: var(--accent-strong);
+  color: #11151c;
+  background: var(--accent-strong);
+}
+
+.button--primary:not(:disabled):hover {
+  background: #e2e4e7;
+}
+
+.button--danger {
+  border-color: #6a3b40;
+  color: #efb0b0;
+  background: #352126;
+}
+
+.button--danger:not(:disabled):hover {
+  background: #48272d;
+}
+
+.extensions-alert,
+.extensions-command-result {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: var(--bg-panel);
+  font-size: 11px;
+}
+
+.extensions-alert--error {
+  border-color: #5b3437;
+  color: #e8a4a4;
+  background: #29191c;
+}
+
+.extensions-alert > span,
+.extensions-command-result > span {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.extensions-alert button,
+.extensions-command-result button,
+.extension-notice > button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  background: transparent;
+}
+
+.extensions-alert button:hover,
+.extensions-command-result button:hover,
+.extension-notice > button:hover {
+  background: rgb(255 255 255 / 7%);
+}
+
+.extensions-empty {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.extensions-list {
+  display: grid;
+  gap: 12px;
+}
+
+.extension-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px 22px;
+  background: #24282f;
+}
+
+.extension-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.extension-card__title-line,
+.extension-card__actions,
+.extension-card__metadata,
+.extension-card__commands > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.extension-card h2 {
+  margin: 0;
+  color: #e1e3e6;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.extension-card h3 {
+  margin: 0 0 8px;
+  color: #c8ccd4;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.extension-card > p,
+.extension-capabilities p {
+  margin: 13px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.extension-card__identity,
+.extension-card__metadata {
+  margin: 5px 0 0;
+  color: var(--text-subtle);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 9px;
+}
+
+.extension-card__version,
+.extension-runtime {
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: var(--text-muted);
+  background: var(--bg-raised);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 8px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.extension-runtime--active {
+  color: var(--success);
+  background: #20342b;
+}
+
+.extension-runtime--failed {
+  color: var(--danger);
+  background: #382327;
+}
+
+.extension-runtime--starting,
+.extension-runtime--activating,
+.extension-runtime--stopping {
+  color: var(--warning);
+  background: #382f20;
+}
+
+.extension-card > .extension-card__error {
+  color: var(--danger);
+}
+
+.extension-capabilities,
+.extension-card__commands {
+  border-top: 1px solid var(--border);
+  margin-top: 15px;
+  padding-top: 14px;
+}
+
+.extension-capabilities ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.extensions-command-result {
+  position: sticky;
+  z-index: 3;
+  bottom: 12px;
+  margin-top: 14px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 25%);
+}
+
+.extensions-output {
+  display: grid;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.extensions-output h2 {
+  margin-bottom: 5px;
+  font-size: 16px;
+}
+
+.extensions-output details {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #20242a;
+}
+
+.extensions-output summary {
+  padding: 10px 12px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.extensions-output pre {
+  max-height: 260px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  margin: 0;
+  padding: 12px;
+  color: #d3d6da;
+  font:
+    10px / 1.55 "Cascadia Code",
+    Consolas,
+    monospace;
+  white-space: pre-wrap;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  z-index: 120;
+  display: grid;
+  inset: 0;
+  place-items: center;
+  overflow: auto;
+  padding: 32px;
+  background: rgb(4 6 9 / 72%);
+  backdrop-filter: blur(7px);
+}
+
+.dialog-card {
+  width: min(520px, 100%);
+  max-height: min(760px, calc(100vh - 64px));
+  overflow: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+  background: #252a31;
+  box-shadow: var(--shadow-lg);
+}
+
+.dialog-card h2 {
+  margin: 0;
+  color: #e1e3e6;
+  font-size: 19px;
+}
+
+.dialog-card > p {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.dialog-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.extension-install-dialog {
+  width: min(640px, 100%);
+}
+
+.extension-install-dialog__identity {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-top: 16px;
+  padding: 12px;
+  background: #20242a;
+}
+
+.extension-install-dialog__identity span {
+  color: var(--text-subtle);
+  font:
+    9px "Cascadia Code",
+    Consolas,
+    monospace;
+}
+
+.extension-install-dialog dl {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 8px 12px;
+  margin: 16px 0;
+  font-size: 10px;
+}
+
+.extension-install-dialog dt {
+  color: var(--text-subtle);
+}
+
+.extension-install-dialog dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.extension-hash {
+  font-family: "Cascadia Code", Consolas, monospace;
+}
+
+.dialog-card > .extension-install-dialog__trust {
+  border-left: 2px solid var(--warning);
+  padding-left: 10px;
+  color: #d6bb83;
+}
+
+.extension-notices {
+  position: fixed;
+  z-index: 90;
+  right: 18px;
+  bottom: 34px;
+  display: grid;
+  width: min(380px, calc(100vw - 36px));
+  gap: 8px;
+}
+
+.extension-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 11px;
+  background: #252a31;
+  box-shadow: 0 12px 34px rgb(0 0 0 / 36%);
+  font-size: 11px;
+}
+
+.extension-notice--warning {
+  border-left-color: var(--warning);
+}
+
+.extension-notice--error {
+  border-left-color: var(--danger);
+}
+
+.extension-notice > div {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+
+.extension-notice strong {
+  color: var(--text-subtle);
+  font:
+    8px "Cascadia Code",
+    Consolas,
+    monospace;
+}
+
+.extension-notice span {
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+@media (max-width: 1080px) {
+  .extensions-workspace__inner {
+    width: min(100% - 36px, 1040px);
+  }
+
+  .extension-card__header {
+    display: grid;
+  }
+}
+
+.command-palette-backdrop {
+  position: fixed;
+  z-index: 130;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 62px 24px 24px;
+  background: rgb(5 7 10 / 34%);
+}
+
+.command-palette-backdrop__dismiss {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+}
+
+.command-palette {
+  position: relative;
+  z-index: 1;
+  width: min(680px, 100%);
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: #252a31;
+  box-shadow: var(--shadow-lg);
+}
+
+.command-palette > input {
+  width: calc(100% - 20px);
+  height: 40px;
+  border: 1px solid #565d67;
+  border-radius: var(--radius-sm);
+  margin: 10px;
+  padding: 0 12px;
+  color: var(--text);
+  background: #1e2228;
+  font-size: 12px;
+}
+
+.command-palette__results {
+  max-height: 360px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  padding: 6px;
+}
+
+.command-palette__results > p {
+  margin: 0;
+  padding: 20px 12px;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.command-palette__results > button {
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-radius: 4px;
+  padding: 0 10px;
+  color: var(--text);
+  background: transparent;
+  font-size: 11px;
+  text-align: left;
+}
+
+.command-palette__results > button.command-palette__item--selected {
+  background: var(--bg-active);
+}
+
+.command-palette__results small {
+  flex: 0 0 auto;
+  color: var(--text-subtle);
+  font:
+    8px "Cascadia Code",
+    Consolas,
+    monospace;
+}

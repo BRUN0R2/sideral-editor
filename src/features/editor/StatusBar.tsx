@@ -1,23 +1,16 @@
-import { Icon } from "../../components/Icon";
 import { useI18n } from "../i18n/I18nProvider";
 import type { CursorPosition, EditorDocument } from "../workspace/types";
 
 export function StatusBar({
   document,
   cursor,
-  saving,
 }: {
   readonly document: EditorDocument | null;
   readonly cursor: CursorPosition;
-  readonly saving: boolean;
 }) {
   const { t } = useI18n();
   return (
     <footer className="status-bar">
-      <div className="status-bar__left">
-        <Icon name="code" size={14} />
-        <span>{saving ? t("status.saving") : t("status.ready")}</span>
-      </div>
       {document !== null ? (
         <div className="status-bar__right">
           <span>{t("status.lineColumn", { line: cursor.line, column: cursor.column })}</span>

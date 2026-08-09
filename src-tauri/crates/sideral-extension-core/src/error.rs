@@ -18,15 +18,9 @@ pub enum ManifestError {
     #[error("manifest version {0} is not supported")]
     UnsupportedManifestVersion(u16),
     #[error("invalid `{field}`: {reason}")]
-    InvalidField {
-        field: &'static str,
-        reason: String,
-    },
+    InvalidField { field: &'static str, reason: String },
     #[error("duplicate {kind}: {value}")]
-    Duplicate {
-        kind: &'static str,
-        value: String,
-    },
+    Duplicate { kind: &'static str, value: String },
     #[error("inconsistent manifest: {0}")]
     Inconsistent(String),
 }

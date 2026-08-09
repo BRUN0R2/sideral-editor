@@ -61,6 +61,11 @@ export function openLocaleDirectory(): Promise<void> {
   return invoke<void>("open_locale_directory");
 }
 
+export function openExternalUrl(url: string): Promise<void> {
+  assertDesktopRuntime();
+  return invoke<void>("open_external_url", { url });
+}
+
 export function saveDesktopPreferences(
   preferences: DesktopPreferences,
 ): Promise<DesktopPreferences> {
@@ -71,6 +76,11 @@ export function saveDesktopPreferences(
 export function readTextFile(path: string): Promise<TextDocumentPayload> {
   assertDesktopRuntime();
   return invoke<TextDocumentPayload>("read_text_file", { path });
+}
+
+export function createTextFile(directory: string, name: string): Promise<TextDocumentPayload> {
+  assertDesktopRuntime();
+  return invoke<TextDocumentPayload>("create_text_file", { directory, name });
 }
 
 export function writeTextFile(path: string, content: string): Promise<SavedDocumentPayload> {

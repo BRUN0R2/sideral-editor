@@ -42,6 +42,19 @@ const BUILT_IN_TRUSTED_ORIGINS: [&str; 6] = [
     "https://www.schemastore.org",
 ];
 
+fn build_http_client() -> AppResult<Client> {
+    Client::builder()
+        .redirect(Policy::none())
+        .https_only(true)
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(REQUEST_TIMEOUT)
+        .user_agent(concat!("Sideral-Editor/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|error| {
+            AppError::JsonSchema(format!("could not initialize the HTTP client: {error}"))
+        })
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct TrustDocument {
@@ -177,16 +190,7 @@ impl JsonSchemaState {
             .map_err(|error| AppError::InvalidPath(error.to_string()))?
             .join(TRUST_FILE_NAME);
         let trust = read_trust(&trust_path)?;
-        let client = Client::builder()
-            .redirect(Policy::none())
-            .https_only(true)
-            .connect_timeout(CONNECT_TIMEOUT)
-            .timeout(REQUEST_TIMEOUT)
-            .user_agent(concat!("Sideral-Editor/", env!("CARGO_PKG_VERSION")))
-            .build()
-            .map_err(|error| {
-                AppError::JsonSchema(format!("could not initialize the HTTP client: {error}"))
-            })?;
+        let client = build_http_client()?;
 
         Ok(Self {
             client,
@@ -1042,11 +1046,17 @@ mod tests {
     use url::Url;
 
     use super::{
-        TrustDocument, apply_redirect_base, collect_external_references, is_public_address,
-        normalize_origin, read_trust, resolve_root_reference, write_trust,
+        TrustDocument, apply_redirect_base, build_http_client, collect_external_references,
+        is_public_address, normalize_origin, read_trust, resolve_root_reference, write_trust,
     };
 
     type TestResult = Result<(), Box<dyn Error>>;
+
+    #[test]
+    fn initializes_the_https_client_with_a_crypto_provider() -> TestResult {
+        build_http_client()?;
+        Ok(())
+    }
 
     #[test]
     fn trusts_biome_as_a_built_in_origin() -> TestResult {

@@ -5,11 +5,14 @@ import { Icon } from "../components/Icon";
 import { IconButton } from "../components/IconButton";
 import { EditorTabs } from "../features/editor/EditorTabs";
 import { StatusBar } from "../features/editor/StatusBar";
-import { WelcomeView } from "../features/editor/WelcomeView";
 import { Explorer } from "../features/explorer/Explorer";
 import { useI18n } from "../features/i18n/I18nProvider";
 import { SettingsView } from "../features/settings/SettingsView";
 import { useDesktopPreferences } from "../features/settings/useDesktopPreferences";
+import { ExtensionCommandPalette } from "../features/sideral-extensions/ExtensionCommandPalette";
+import { ExtensionNotices } from "../features/sideral-extensions/ExtensionNotices";
+import { ExtensionsView } from "../features/sideral-extensions/ExtensionsView";
+import { useExtensionSystem } from "../features/sideral-extensions/useExtensionSystem";
 import { UpdateModal } from "../features/updates/UpdateModal";
 import { UpdateProvider, useUpdates } from "../features/updates/UpdateProvider";
 import { useWorkspace } from "../features/workspace/useWorkspace";
@@ -40,8 +43,13 @@ function Workbench() {
     bootstrap.runtime === "desktop",
   );
   const workspace = useWorkspace(desktopPreferences.preferences.autoSave);
-  const [activeView, setActiveView] = useState<"editor" | "settings">("editor");
+  const extensions = useExtensionSystem(
+    workspace.workspaceRoot?.path ?? null,
+    workspace.activeDocument?.languageId ?? null,
+  );
+  const [activeView, setActiveView] = useState<"editor" | "extensions" | "settings">("editor");
   const [updateOpen, setUpdateOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [jsonSchemaTrustRevision, setJsonSchemaTrustRevision] = useState(0);
   const notifyJsonSchemaTrustChange = useCallback(
     () => setJsonSchemaTrustRevision((current) => current + 1),
@@ -54,11 +62,19 @@ function Workbench() {
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
+      if (event.key === "F1") {
+        event.preventDefault();
+        setCommandPaletteOpen(true);
+        return;
+      }
       if (!event.ctrlKey && !event.metaKey) {
         return;
       }
       const key = event.key.toLowerCase();
-      if (key === "n" && !event.shiftKey) {
+      if (key === "p" && event.shiftKey) {
+        event.preventDefault();
+        setCommandPaletteOpen(true);
+      } else if (key === "n" && !event.shiftKey) {
         event.preventDefault();
         setActiveView("editor");
         workspace.createFile();
@@ -76,6 +92,9 @@ function Workbench() {
       } else if (event.key === ",") {
         event.preventDefault();
         setActiveView("settings");
+      } else if (key === "x" && event.shiftKey) {
+        event.preventDefault();
+        setActiveView("extensions");
       }
     };
     window.addEventListener("keydown", handleShortcut);
@@ -87,8 +106,6 @@ function Workbench() {
     workspace.saveActiveDocument,
   ]);
 
-  const activeSaving =
-    workspace.activeDocument !== null && workspace.savingIds.has(workspace.activeDocument.id);
   const errorMessage = (() => {
     if (workspace.error === null) {
       return null;
@@ -121,18 +138,25 @@ function Workbench() {
         <nav className="activity-bar" aria-label="Primary navigation">
           <IconButton
             label={t("activity.explorer")}
-            icon="folderOpen"
+            icon="explorer"
             selected={activeView === "editor"}
             onClick={() => setActiveView("editor")}
+          />
+          <IconButton
+            label={t("activity.extensions")}
+            icon="extensions"
+            selected={activeView === "extensions"}
+            onClick={() => setActiveView("extensions")}
           />
           <div className="activity-bar__spacer" />
           <UpdateActivityButton
             label={t("updates.badgeLabel")}
             onOpen={() => setUpdateOpen(true)}
           />
+          <IconButton label={t("activity.profileComingSoon")} icon="account" disabled />
           <IconButton
             label={t("activity.settings")}
-            icon="settings"
+            icon="settingsGear"
             selected={activeView === "settings"}
             onClick={() => setActiveView("settings")}
           />
@@ -141,9 +165,9 @@ function Workbench() {
         <Explorer
           root={workspace.workspaceRoot}
           entries={workspace.entries}
-          onNewFile={() => {
+          onCreateFile={async (name) => {
+            await workspace.createWorkspaceFile(name);
             setActiveView("editor");
-            workspace.createFile();
           }}
           onOpenFile={() => {
             setActiveView("editor");
@@ -162,13 +186,7 @@ function Workbench() {
 
         <div className="workspace-content">
           <main className="editor-area" hidden={activeView !== "editor"}>
-            {workspace.activeDocument === null ? (
-              <WelcomeView
-                onNewFile={workspace.createFile}
-                onOpenFile={() => void workspace.openFile()}
-                onOpenFolder={() => void workspace.openFolder()}
-              />
-            ) : (
+            {workspace.activeDocument !== null ? (
               <>
                 <EditorTabs
                   documents={workspace.documents}
@@ -176,6 +194,7 @@ function Workbench() {
                   savingIds={workspace.savingIds}
                   onActivate={workspace.setActiveDocumentId}
                   onClose={workspace.requestCloseDocument}
+                  onReorder={workspace.reorderDocument}
                 />
                 <Suspense fallback={<div className="editor-pane" aria-busy="true" />}>
                   <EditorPane
@@ -190,7 +209,7 @@ function Workbench() {
                   />
                 </Suspense>
               </>
-            )}
+            ) : null}
           </main>
           <SettingsView
             active={activeView === "settings"}
@@ -198,16 +217,19 @@ function Workbench() {
             onJsonSchemaTrustChange={notifyJsonSchemaTrustChange}
             onOpenUpdate={() => setUpdateOpen(true)}
           />
+          <ExtensionsView active={activeView === "extensions"} system={extensions} />
         </div>
       </div>
 
-      <StatusBar
-        document={workspace.activeDocument}
-        cursor={workspace.cursor}
-        saving={activeSaving}
-      />
+      <StatusBar document={workspace.activeDocument} cursor={workspace.cursor} />
 
       <UpdateModal open={updateOpen} onClose={() => setUpdateOpen(false)} />
+      <ExtensionNotices system={extensions} />
+      <ExtensionCommandPalette
+        open={commandPaletteOpen}
+        system={extensions}
+        onClose={() => setCommandPaletteOpen(false)}
+      />
       <DiscardChangesDialog
         document={workspace.pendingCloseDocument}
         onCancel={workspace.cancelPendingClose}

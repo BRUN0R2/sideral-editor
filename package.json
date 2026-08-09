@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "workspaces": [
-    "packages/sideral-extension-sdk"
+    "packages/sideral-extension-sdk",
+    "packages/sideral-extension-testkit"
   ],
   "packageManager": "npm@11.17.0",
   "engines": {
@@ -18,7 +19,8 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "architecture": "node scripts/check-extension-boundaries.mjs",
-    "sdk:build": "tsc --project packages/sideral-extension-sdk/tsconfig.json",
+    "sdk:build": "tsc --project packages/sideral-extension-sdk/tsconfig.json && tsc --project packages/sideral-extension-testkit/tsconfig.json",
+    "extension:tool": "cargo run --quiet --manifest-path src-tauri/Cargo.toml -p sideral-extension-tool --",
     "rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
     "rust:check": "cargo check --manifest-path src-tauri/Cargo.toml --workspace",
     "rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings",
@@ -31,6 +33,7 @@
     "@tauri-apps/plugin-dialog": "2.7.2",
     "@tauri-apps/plugin-process": "2.3.1",
     "@tauri-apps/plugin-updater": "2.10.1",
+    "@vscode/codicons": "0.0.46-24",
     "jsonc-parser": "3.3.1",
     "monaco-editor": "0.56.0",
     "react": "19.2.8",

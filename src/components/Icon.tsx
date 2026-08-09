@@ -5,7 +5,6 @@ export type IconName =
   | "chevronDown"
   | "chevronRight"
   | "close"
-  | "code"
   | "download"
   | "file"
   | "folder"
@@ -14,7 +13,6 @@ export type IconName =
   | "more"
   | "newFile"
   | "refresh"
-  | "settings"
   | "spark"
   | "update";
 
@@ -61,13 +59,6 @@ function IconPath({ name }: { readonly name: IconName }) {
         <>
           <path d="m7 7 10 10" />
           <path d="M17 7 7 17" />
-        </>
-      );
-    case "code":
-      return (
-        <>
-          <path d="m9 18-6-6 6-6" />
-          <path d="m15 6 6 6-6 6" />
         </>
       );
     case "download":
@@ -125,13 +116,6 @@ function IconPath({ name }: { readonly name: IconName }) {
         <>
           <path d="M20 7v5h-5" />
           <path d="M19 12a7 7 0 1 0-2 5" />
-        </>
-      );
-    case "settings":
-      return (
-        <>
-          <circle cx="12" cy="12" r="3" />
-          <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21h-4v-.08A1.7 1.7 0 0 0 8.96 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15.04 1.7 1.7 0 0 0 3.08 14H3v-4h.08A1.7 1.7 0 0 0 4.6 8.96a1.7 1.7 0 0 0-.34-1.87l-.06-.06L7.03 4.2l.06.06a1.7 1.7 0 0 0 1.87.34A1.7 1.7 0 0 0 10 3.08V3h4v.08a1.7 1.7 0 0 0 1.04 1.52 1.7 1.7 0 0 0 1.87-.34l.06-.06 2.83 2.83-.06.06a1.7 1.7 0 0 0-.34 1.87A1.7 1.7 0 0 0 20.92 10H21v4h-.08A1.7 1.7 0 0 0 19.4 15Z" />
         </>
       );
     case "spark":

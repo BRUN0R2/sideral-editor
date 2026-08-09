@@ -18,10 +18,7 @@ pub enum LegacyManifestError {
     #[error("manifest JSON is invalid: {0}")]
     InvalidJson(#[from] serde_json::Error),
     #[error("invalid `{field}`: {reason}")]
-    InvalidField {
-        field: &'static str,
-        reason: String,
-    },
+    InvalidField { field: &'static str, reason: String },
     #[error("the manifest has no executable or declarative contribution")]
     EmptyExtension,
 }
@@ -158,7 +155,8 @@ impl LegacyManifest {
             (true, false) => LegacyCompatibility::Node,
             (true, true) => LegacyCompatibility::Hybrid,
         };
-        let mut runtimes = Vec::with_capacity(usize::from(has_node_runtime) + usize::from(has_browser_runtime));
+        let mut runtimes =
+            Vec::with_capacity(usize::from(has_node_runtime) + usize::from(has_browser_runtime));
         if has_browser_runtime {
             runtimes.push(LegacyRuntime::BrowserWorker);
         }

@@ -9,8 +9,10 @@ mod permissions;
 pub use budgets::{ExtensionSizeBudget, extension_size_budget};
 pub use error::ManifestError;
 pub use manifest::{
-    CommandContribution, Contributions, EngineRequirements, ExtensionInspection,
-    ExtensionManifest, RuntimeKind, WorkerRuntime, validate_manifest_json,
+    CommandContribution, Contributions, EngineRequirements, ExtensionInspection, ExtensionManifest,
+    RuntimeKind, WorkerRuntime, parse_manifest_json, validate_manifest_json, validate_package_path,
 };
 pub use package::{BundleSizeAssessment, assess_worker_bundle_size, validate_package_size};
-pub use permissions::{PermissionSet, ProcessPermission, WorkspaceAccess};
+pub use permissions::{
+    NetworkMethod, NetworkPermission, PermissionSet, ProcessPermission, WorkspaceAccess,
+};

@@ -17,6 +17,9 @@ The first working foundation includes:
 - manual language selection with persisted native settings;
 - a signed-update state machine with availability indicator, download progress,
   transfer percentage, ETA, install stage and restart action;
+- signed `.sideralx` installation, explicit publisher-key trust, isolated
+  Worker runtimes, a native capability broker, command palette, diagnostics,
+  rollback, authoring SDK, testkit and packaging CLI;
 - strict TypeScript, Rust safety lints, Biome checks and focused tests.
 
 This is an original project. The ignored `references/vscode/` checkout is for
@@ -64,4 +67,6 @@ that preview.
 - [Project rules](docs/RULES.md)
 - [Creating a translation](docs/TRANSLATING.md)
 - [Signed updates](docs/UPDATES.md)
+- [Extension authoring](docs/EXTENSIONS.md)
+- [Extension-system decisions](docs/decisions/0001-independent-extension-systems.md)
 - [Next work](docs/TODO.md)

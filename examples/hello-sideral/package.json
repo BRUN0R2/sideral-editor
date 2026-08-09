@@ -1,0 +1,15 @@
+{
+  "name": "sideral.hello",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --format=esm --platform=browser --target=es2024 --outfile=dist/extension.mjs --minify",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@sideral/extension-sdk": "file:../../packages/sideral-extension-sdk",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
+}
