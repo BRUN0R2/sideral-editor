@@ -39,6 +39,9 @@ npm install
 npm run tauri dev
 ```
 
+On Windows, run `sideral.cmd` from the project root for a small menu that starts
+the Tauri development mode, compiles a release, cleans build artifacts or exits.
+
 Useful validation commands:
 
 ```powershell
