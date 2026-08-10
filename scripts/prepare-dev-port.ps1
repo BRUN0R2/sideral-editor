@@ -52,14 +52,19 @@ if ($foreignProcesses.Count -gt 0) {
 
 foreach ($process in $ownedProcesses) {
     Write-Host "Encerrando um servidor Vite anterior do Sideral Editor (PID $($process.Id))..."
-    Stop-Process -Id $process.Id -ErrorAction Stop
+    $runningProcess = Get-Process -Id $process.Id -ErrorAction SilentlyContinue
+    if ($null -eq $runningProcess) {
+        continue
+    }
+    Stop-Process -InputObject $runningProcess -ErrorAction Stop
+    if (-not $runningProcess.WaitForExit(2000)) {
+        Write-Host "O servidor Vite (PID $($process.Id)) nao encerrou dentro do limite de seguranca."
+        exit 3
+    }
 }
 
-for ($attempt = 0; $attempt -lt 20; $attempt++) {
-    if (-not (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)) {
-        exit 0
-    }
-    Start-Sleep -Milliseconds 100
+if (-not (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)) {
+    exit 0
 }
 
 Write-Host "Nao foi possivel liberar a porta $Port."

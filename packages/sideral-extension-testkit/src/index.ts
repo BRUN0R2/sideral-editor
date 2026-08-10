@@ -9,9 +9,12 @@ import type {
   NetworkRequest,
   NetworkResponse,
   OutputChannel,
+  PreviewDocument,
+  PreviewPanel,
   ProcessRequest,
   ProcessResult,
   TextDocument,
+  TextEditorCommandHandler,
 } from "@sideral/extension-sdk";
 
 export interface TestMessage {
@@ -26,11 +29,21 @@ export interface TestOutputChannel {
   readonly disposed: boolean;
 }
 
+export interface TestPreviewPanel {
+  readonly title: string;
+  readonly format: PreviewDocument["format"];
+  readonly content: string;
+  readonly sourceUri: string | undefined;
+  readonly visible: boolean;
+  readonly disposed: boolean;
+}
+
 export interface ExtensionHarnessOptions {
   readonly extensionId?: string;
   readonly activationReason?: ActivationReason;
   readonly configuration?: Readonly<Record<string, JsonValue>>;
   readonly storage?: Readonly<Record<string, JsonValue>>;
+  readonly activeTextDocument?: TextDocument;
   readonly readTextDocument?: (uri: string, signal?: AbortSignal) => Promise<TextDocument>;
   readonly writeTextDocument?: (
     uri: string,
@@ -50,6 +63,7 @@ export interface ExtensionHarness {
   readonly extensionId: string;
   readonly messages: readonly TestMessage[];
   readonly outputs: readonly TestOutputChannel[];
+  readonly previews: readonly TestPreviewPanel[];
   readonly storage: ReadonlyMap<string, JsonValue>;
   readonly configuration: ReadonlyMap<string, JsonValue>;
   activate(): Promise<void>;
@@ -75,7 +89,8 @@ class Harness implements ExtensionHarness {
   readonly #outputs: MutableOutputChannel[] = [];
   readonly #storage: Map<string, JsonValue>;
   readonly #configuration: Map<string, JsonValue>;
-  readonly #commands = new Map<string, CommandHandler>();
+  readonly #commands = new Map<string, RegisteredCommand>();
+  readonly #previews: MutablePreviewPanel[] = [];
   readonly #commandStack: string[] = [];
   readonly #subscriptions: Disposable[] = [];
   readonly #cancellation = new AbortController();
@@ -83,6 +98,7 @@ class Harness implements ExtensionHarness {
   #disposed = false;
   #commandQueue = Promise.resolve();
   #disposal: Promise<void> | null = null;
+  #currentTextDocument: TextDocument | undefined;
 
   constructor(extensionModule: ExtensionModule, options: ExtensionHarnessOptions) {
     this.#module = extensionModule;
@@ -98,6 +114,10 @@ class Harness implements ExtensionHarness {
 
   get outputs(): readonly TestOutputChannel[] {
     return this.#outputs;
+  }
+
+  get previews(): readonly TestPreviewPanel[] {
+    return this.#previews;
   }
 
   get storage(): ReadonlyMap<string, JsonValue> {
@@ -127,7 +147,7 @@ class Harness implements ExtensionHarness {
       throw new Error("The extension harness is not active.");
     }
     const operation = this.#commandQueue.then(() =>
-      this.#invokeRegisteredCommand(commandId, arguments_),
+      this.#invokeRegisteredCommand(commandId, arguments_, this.#options.activeTextDocument),
     );
     this.#commandQueue = operation.then(
       () => undefined,
@@ -191,10 +211,18 @@ class Harness implements ExtensionHarness {
           if (this.#commands.has(id)) {
             throw new Error(`Command ${id} is already registered.`);
           }
-          this.#commands.set(id, handler);
+          this.#commands.set(id, { kind: "command", handler });
           return once(() => this.#commands.delete(id));
         },
-        executeCommand: (id, ...arguments_) => this.#invokeRegisteredCommand(id, arguments_),
+        registerTextEditorCommand: (id, handler) => {
+          if (this.#commands.has(id)) {
+            throw new Error(`Command ${id} is already registered.`);
+          }
+          this.#commands.set(id, { kind: "textEditor", handler });
+          return once(() => this.#commands.delete(id));
+        },
+        executeCommand: (id, ...arguments_) =>
+          this.#invokeRegisteredCommand(id, arguments_, this.#currentTextDocument),
       },
       configuration: {
         get: async (section) => cloneOptional(this.#configuration.get(section)),
@@ -226,6 +254,11 @@ class Harness implements ExtensionHarness {
           this.#outputs.push(output);
           return output;
         },
+        createPreviewPanel: (document) => {
+          const preview = new MutablePreviewPanel(document);
+          this.#previews.push(preview);
+          return preview;
+        },
         showInformationMessage: (message) => this.#recordMessage("information", message),
         showWarningMessage: (message) => this.#recordMessage("warning", message),
         showErrorMessage: (message) => this.#recordMessage("error", message),
@@ -253,9 +286,10 @@ class Harness implements ExtensionHarness {
   async #invokeRegisteredCommand(
     commandId: string,
     arguments_: readonly JsonValue[],
+    activeTextDocument: TextDocument | undefined,
   ): Promise<JsonValue | undefined> {
-    const handler = this.#commands.get(commandId);
-    if (handler === undefined) {
+    const command = this.#commands.get(commandId);
+    if (command === undefined) {
       throw new Error(`Command ${commandId} is not registered.`);
     }
     if (this.#commandStack.includes(commandId)) {
@@ -265,13 +299,26 @@ class Harness implements ExtensionHarness {
       throw new Error("The command execution depth limit was exceeded.");
     }
     this.#commandStack.push(commandId);
+    const previousDocument = this.#currentTextDocument;
+    this.#currentTextDocument = activeTextDocument;
     try {
-      return await handler(...arguments_);
+      if (command.kind === "textEditor") {
+        if (activeTextDocument === undefined) {
+          throw new Error(`Command ${commandId} requires an active text document.`);
+        }
+        return await command.handler(activeTextDocument, ...arguments_);
+      }
+      return await command.handler(...arguments_);
     } finally {
+      this.#currentTextDocument = previousDocument;
       this.#commandStack.pop();
     }
   }
 }
+
+type RegisteredCommand =
+  | { readonly kind: "command"; readonly handler: CommandHandler }
+  | { readonly kind: "textEditor"; readonly handler: TextEditorCommandHandler };
 
 class MutableOutputChannel implements OutputChannel, TestOutputChannel {
   readonly name: string;
@@ -313,6 +360,57 @@ class MutableOutputChannel implements OutputChannel, TestOutputChannel {
   #assertActive(): void {
     if (this.disposed) {
       throw new Error(`Output channel ${this.name} is disposed.`);
+    }
+  }
+}
+
+class MutablePreviewPanel implements PreviewPanel, TestPreviewPanel {
+  title: string;
+  format: PreviewDocument["format"];
+  content: string;
+  sourceUri: string | undefined;
+  visible = false;
+  disposed = false;
+
+  constructor(document: PreviewDocument) {
+    this.title = document.title;
+    this.format = document.format;
+    this.content = document.content;
+    this.sourceUri = document.sourceUri;
+  }
+
+  async update(document: PreviewDocument): Promise<void> {
+    this.#assertActive();
+    this.title = document.title;
+    this.format = document.format;
+    this.content = document.content;
+    this.sourceUri = document.sourceUri;
+  }
+
+  async show(): Promise<void> {
+    this.#assertActive();
+    this.visible = true;
+  }
+
+  async hide(): Promise<void> {
+    this.#assertActive();
+    this.visible = false;
+  }
+
+  async toggle(): Promise<boolean> {
+    this.#assertActive();
+    this.visible = !this.visible;
+    return this.visible;
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    this.visible = false;
+  }
+
+  #assertActive(): void {
+    if (this.disposed) {
+      throw new Error(`Preview panel ${this.title} is disposed.`);
     }
   }
 }

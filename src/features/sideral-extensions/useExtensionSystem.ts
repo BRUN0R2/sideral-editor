@@ -1,9 +1,13 @@
 import type { JsonValue } from "@sideral/extension-sdk";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isDesktopRuntime } from "../../lib/backend";
+import { toApplicationError } from "../../lib/errors";
+import { toExtensionTextDocument } from "../workspace/document-uri";
+import type { EditorDocument } from "../workspace/types";
 import {
   activateExtensionEvent,
   connectExtensionClient,
+  dismissExtensionPreview,
   type ExtensionClientConnection,
   executeExtensionCommand,
   initializeExtensionSystem,
@@ -14,19 +18,24 @@ import {
   setExtensionEnabled,
   setExtensionWorkspace,
   uninstallExtension,
+  updateExtensionKeybinding,
 } from "./backend";
 import type {
   ExtensionClientInstruction,
   ExtensionSnapshot,
+  KeybindingUpdate,
   OutputChannelView,
   PackageInspectionResult,
+  PreviewDocumentView,
 } from "./contracts";
+import type { ExtensionHostConnection } from "./host/connection";
 
 const EMPTY_SNAPSHOT: ExtensionSnapshot = {
   sequence: 0,
   revision: 0,
   extensions: [],
   commands: [],
+  keybindings: [],
 };
 const MAX_NOTICES = 20;
 
@@ -42,9 +51,12 @@ export interface ExtensionSystem {
   readonly snapshot: ExtensionSnapshot;
   readonly notices: readonly ExtensionNotice[];
   readonly outputs: readonly OutputChannelView[];
+  readonly previews: readonly PreviewDocumentView[];
   readonly busyExtensionIds: ReadonlySet<string>;
   readonly error: string | null;
   executeCommand(commandId: string, arguments_?: readonly JsonValue[]): Promise<JsonValue | null>;
+  dismissPreview(resourceId: string): Promise<void>;
+  updateKeybinding(commandId: string, update: KeybindingUpdate): Promise<void>;
   inspectPackage(path: string): Promise<PackageInspectionResult>;
   installPackage(
     path: string,
@@ -61,7 +73,8 @@ export interface ExtensionSystem {
 
 export function useExtensionSystem(
   workspaceRootPath: string | null,
-  activeLanguageId: string | null,
+  activeDocument: EditorDocument | null,
+  hostConnection: Promise<ExtensionHostConnection> | null,
 ): ExtensionSystem {
   const desktop = isDesktopRuntime();
   const [status, setStatus] = useState<ExtensionSystem["status"]>(
@@ -70,12 +83,15 @@ export function useExtensionSystem(
   const [snapshot, setSnapshot] = useState<ExtensionSnapshot>(EMPTY_SNAPSHOT);
   const [notices, setNotices] = useState<readonly ExtensionNotice[]>([]);
   const [outputs, setOutputs] = useState<ReadonlyMap<string, OutputChannelView>>(new Map());
+  const [previews, setPreviews] = useState<ReadonlyMap<string, PreviewDocumentView>>(new Map());
   const [busyCounts, setBusyCounts] = useState<ReadonlyMap<string, number>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const nextNoticeId = useRef(1);
   const latestSnapshotSequence = useRef(0);
   const workspaceRootRef = useRef(workspaceRootPath);
   workspaceRootRef.current = workspaceRootPath;
+  const activeDocumentRef = useRef(activeDocument);
+  activeDocumentRef.current = activeDocument;
   const busyExtensionIds = useMemo(() => new Set(busyCounts.keys()), [busyCounts]);
 
   const updateBusyCount = useCallback((extensionId: string, change: 1 | -1): void => {
@@ -112,6 +128,10 @@ export function useExtensionSystem(
       (current) =>
         new Map([...current].filter(([, output]) => liveExtensions.has(output.extensionId))),
     );
+    setPreviews(
+      (current) =>
+        new Map([...current].filter(([, preview]) => liveExtensions.has(preview.extensionId))),
+    );
   }, []);
 
   const acceptInstruction = useCallback(
@@ -145,19 +165,37 @@ export function useExtensionSystem(
             return next;
           });
           return;
+        case "previewChanged":
+          setPreviews((current) => {
+            const next = new Map(current);
+            next.set(instruction.preview.resourceId, instruction.preview);
+            return next;
+          });
+          return;
+        case "previewDisposed":
+          setPreviews((current) => {
+            const next = new Map(current);
+            next.delete(instruction.resourceId);
+            return next;
+          });
+          return;
       }
     },
     [applySnapshot],
   );
 
   useEffect(() => {
-    if (!desktop) {
+    if (!desktop || hostConnection === null) {
       return;
     }
     let cancelled = false;
     let connection: ExtensionClientConnection | null = null;
     setStatus("initializing");
     void (async () => {
+      await hostConnection;
+      if (cancelled) {
+        return;
+      }
       await initializeExtensionSystem();
       const connected = await connectExtensionClient(acceptInstruction);
       if (cancelled) {
@@ -167,6 +205,9 @@ export function useExtensionSystem(
       connection = connected;
       applySnapshot(connected.snapshot);
       setOutputs(new Map(connected.outputs.map((output) => [output.resourceId, output] as const)));
+      setPreviews(
+        new Map(connected.previews.map((preview) => [preview.resourceId, preview] as const)),
+      );
       await setExtensionWorkspace(workspaceRootRef.current);
       setStatus("ready");
       void activateExtensionEvent({ kind: "workbenchReady" }).catch((reason: unknown) => {
@@ -186,7 +227,7 @@ export function useExtensionSystem(
         void connection.dispose().catch(() => undefined);
       }
     };
-  }, [acceptInstruction, applySnapshot, desktop]);
+  }, [acceptInstruction, applySnapshot, desktop, hostConnection]);
 
   useEffect(() => {
     if (status !== "ready") {
@@ -198,6 +239,7 @@ export function useExtensionSystem(
   }, [status, workspaceRootPath]);
 
   useEffect(() => {
+    const activeLanguageId = activeDocument?.languageId ?? null;
     if (status !== "ready" || activeLanguageId === null) {
       return;
     }
@@ -206,7 +248,7 @@ export function useExtensionSystem(
         setError(errorMessage(reason));
       },
     );
-  }, [activeLanguageId, status]);
+  }, [activeDocument?.languageId, status]);
 
   const runExtensionMutation = useCallback(
     async (extensionId: string, operation: () => Promise<ExtensionSnapshot>): Promise<void> => {
@@ -230,6 +272,7 @@ export function useExtensionSystem(
       snapshot,
       notices,
       outputs: [...outputs.values()],
+      previews: [...previews.values()],
       busyExtensionIds,
       error,
       async executeCommand(commandId: string, arguments_: readonly JsonValue[] = []) {
@@ -241,7 +284,12 @@ export function useExtensionSystem(
         }
         setError(null);
         try {
-          return await executeExtensionCommand(commandId, arguments_);
+          const command = snapshot.commands.find((candidate) => candidate.id === commandId);
+          const document =
+            command?.invocation === "activeTextDocument" && activeDocumentRef.current !== null
+              ? toExtensionTextDocument(activeDocumentRef.current)
+              : null;
+          return await executeExtensionCommand(commandId, arguments_, document);
         } catch (reason: unknown) {
           setError(errorMessage(reason));
           throw reason;
@@ -250,6 +298,23 @@ export function useExtensionSystem(
             updateBusyCount(extensionId, -1);
           }
         }
+      },
+      async dismissPreview(resourceId) {
+        setError(null);
+        try {
+          await dismissExtensionPreview(resourceId);
+        } catch (reason: unknown) {
+          setError(errorMessage(reason));
+          throw reason;
+        }
+      },
+      updateKeybinding(commandId, update) {
+        const extensionId = snapshot.keybindings.find(
+          (binding) => binding.commandId === commandId,
+        )?.extensionId;
+        return runExtensionMutation(extensionId ?? commandId, () =>
+          updateExtensionKeybinding(commandId, update),
+        );
       },
       async inspectPackage(path: string) {
         setError(null);
@@ -296,6 +361,7 @@ export function useExtensionSystem(
       error,
       notices,
       outputs,
+      previews,
       runExtensionMutation,
       snapshot,
       status,
@@ -305,16 +371,5 @@ export function useExtensionSystem(
 }
 
 function errorMessage(value: unknown): string {
-  if (value instanceof Error && value.message.length > 0) {
-    return value.message;
-  }
-  if (
-    typeof value === "object" &&
-    value !== null &&
-    "message" in value &&
-    typeof value.message === "string"
-  ) {
-    return value.message;
-  }
-  return "The extension operation failed.";
+  return toApplicationError(value).message;
 }

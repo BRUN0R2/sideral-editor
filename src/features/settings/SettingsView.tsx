@@ -5,7 +5,9 @@ import { openLocaleDirectory } from "../../lib/backend";
 import type { DesktopPreferences } from "../../lib/contracts";
 import { toApplicationError } from "../../lib/errors";
 import { useI18n } from "../i18n/I18nProvider";
+import type { ExtensionSystem } from "../sideral-extensions/useExtensionSystem";
 import { useUpdates } from "../updates/UpdateProvider";
+import { ExtensionKeybindingSettings } from "./ExtensionKeybindingSettings";
 import { JsonSchemaSettings } from "./JsonSchemaSettings";
 import type { DesktopPreferencesController } from "./useDesktopPreferences";
 
@@ -14,11 +16,13 @@ export function SettingsView({
   desktopPreferences,
   onJsonSchemaTrustChange,
   onOpenUpdate,
+  extensions,
 }: {
   readonly active: boolean;
   readonly desktopPreferences: DesktopPreferencesController;
   readonly onJsonSchemaTrustChange: () => void;
   readonly onOpenUpdate: () => void;
+  readonly extensions: ExtensionSystem;
 }) {
   const { selection, t, setPreference, refreshLocales, bootstrap } = useI18n();
   const { state: updateState, checkForUpdates } = useUpdates();
@@ -249,6 +253,8 @@ export function SettingsView({
           {desktopPreferencesEnabled ? (
             <JsonSchemaSettings active={active} onTrustChange={onJsonSchemaTrustChange} />
           ) : null}
+
+          <ExtensionKeybindingSettings system={extensions} />
 
           <section className="settings-section">
             <div className="settings-section__body">

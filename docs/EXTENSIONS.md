@@ -29,7 +29,8 @@ npm run extension:tool -- inspect D:\packages\acme-sample.sideralx
 Open Extensions with `Ctrl+Shift+X`, choose the package, review its publisher
 key, exact package hash and capabilities, then trust and install it. The tool
 never overwrites a key, package or scaffold directory. `examples/hello-sideral`
-is a complete reference project.
+is the minimal reference and `examples/markdown-preview` is the first visual,
+document-aware reference extension.
 
 ## Manifest v1
 
@@ -58,7 +59,20 @@ is a complete reference project.
   },
   "contributes": {
     "commands": [
-      { "id": "acme.sample.run", "title": "Run", "category": "Acme" }
+      {
+        "id": "acme.sample.run",
+        "title": "Run",
+        "category": "Acme",
+        "invocation": "activeTextDocument"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "acme.sample.run",
+        "key": "Ctrl+Shift+V",
+        "mac": "Shift+Meta+V",
+        "languages": ["markdown"]
+      }
     ]
   }
 }
@@ -69,6 +83,14 @@ namespaced segments. Every command and process grant must begin with the
 extension ID. Commands activate their owner automatically; do not add an
 `onCommand` event. Supported explicit events are `onWorkbenchReady` and
 `onLanguage:<id>`.
+
+Commands use `workbench` invocation by default. `activeTextDocument` commands
+must request workspace read access and register with
+`commands.registerTextEditorCommand`; the host then supplies one immutable
+snapshot of the active document with the command. Keybindings use a canonical,
+single-chord form, may be scoped to language IDs and can be changed, disabled or
+restored by the user. Conflicting shortcuts never execute until the conflict is
+resolved.
 
 Network permissions are exact origins and methods. HTTPS is required except for
 an exact loopback origin used during local development. A process permission is
@@ -111,11 +133,32 @@ Command handlers are serial within one extension. Calling another command from
 the same extension executes locally; cyclic calls are rejected. Commands from
 different extensions remain independent.
 
+Visual extensions create typed preview resources rather than sending HTML to
+the workbench. A Markdown panel receives Markdown text plus an optional source
+URI. When that URI belongs to an open editor document, the workbench renders
+the current in-memory content, including unsaved changes, without polling or
+repeated full-document IPC. The host parses Markdown into React elements; raw
+HTML is displayed as text, remote images are not fetched and only HTTP(S) links
+can leave the application.
+
+```ts
+api.commands.registerTextEditorCommand("acme.sample.preview", async (document) => {
+  const panel = api.window.createPreviewPanel({
+    title: "Preview",
+    format: "markdown",
+    content: document.content,
+    sourceUri: document.uri
+  });
+  await panel.show();
+  context.subscriptions.add(panel);
+});
+```
+
 ## Available capabilities
 
 | API | Manifest authority | Important behavior |
 | --- | --- | --- |
-| `commands` | Declared command IDs | Registration is checked against the signed manifest |
+| `commands` | Declared command IDs and invocation | Registration and active-document context are checked against the signed manifest |
 | `workspace.readTextDocument` | `workspace: read` or `readWrite` | UTF-8, 4 MiB, canonical path containment |
 | `workspace.writeTextDocument` | `workspace: readWrite` | Existing text files, expected version, atomic replacement |
 | `workspace.findFiles` | `workspace: read` or `readWrite` | Forward-slash glob, deterministic order, bounded result/traversal |
@@ -123,7 +166,7 @@ different extensions remain independent.
 | `configuration` | Always isolated to the extension | Atomic extension-specific JSON |
 | `network.request` | Exact origin and method | No proxy/cookies, redirects revalidated, DNS pinned, bounded UTF-8 body |
 | `processes.execute` | Exact process grant | Fixed arguments, no stdin/shell, clean environment, bounded output |
-| `window` | No extra grant | Bounded messages and output channels owned by the extension |
+| `window` | No extra grant | Bounded messages, output channels and typed preview panels owned by the extension |
 
 Cancellation is cooperative. A canceled network request or process is stopped
 and a canceled process is reaped. A remote server may still have observed a

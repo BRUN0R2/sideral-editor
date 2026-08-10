@@ -18,12 +18,37 @@ export const manifest = {
   version: "0.1.0",
   engines: { sideral: "^0.1.0" },
   runtime: { kind: "worker", entry: "dist/extension.mjs" },
-  contributes: { commands: [{ id: "acme.sample.run", title: "Run" }] }
+  permissions: { workspace: "read" },
+  contributes: {
+    commands: [
+      {
+        id: "acme.sample.preview",
+        title: "Toggle preview",
+        invocation: "activeTextDocument"
+      }
+    ],
+    keybindings: [
+      {
+        command: "acme.sample.preview",
+        key: "Ctrl+Shift+V",
+        languages: ["markdown"]
+      }
+    ]
+  }
 } satisfies ExtensionManifest;
 
 export const activate: ExtensionModule["activate"] = (context, api) => {
   context.subscriptions.add(
-    api.commands.registerCommand("acme.sample.run", () => ({ ok: true }))
+    api.commands.registerTextEditorCommand("acme.sample.preview", async (document) => {
+      const panel = api.window.createPreviewPanel({
+        title: "Preview",
+        format: "markdown",
+        content: document.content,
+        sourceUri: document.uri
+      });
+      context.subscriptions.add(panel);
+      await panel.show();
+    })
   );
 };
 ```

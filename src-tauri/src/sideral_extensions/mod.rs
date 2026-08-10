@@ -19,14 +19,13 @@ pub use protocol::{
 };
 pub use service::SideralExtensionState;
 
-use protocol::{ActivationReason, DeactivationReason};
+use protocol::{ActivationReason, DeactivationReason, KeybindingUpdate, TextDocumentView};
 use registry::remove_installed_packages;
 
 pub type ExtensionCommandResult<T> = Result<T, ExtensionCommandError>;
 
 #[tauri::command]
-pub async fn initialize_extension_system(
-    app: AppHandle,
+pub fn initialize_extension_system(
     window: WebviewWindow,
     state: State<'_, SideralExtensionState>,
 ) -> ExtensionCommandResult<ExtensionSnapshot> {
@@ -34,7 +33,7 @@ pub async fn initialize_extension_system(
         .require_main_window(&window)
         .map_err(ExtensionCommandError::from)?;
     state
-        .start_host(&app)
+        .require_host_connected()
         .map_err(ExtensionCommandError::from)?;
     state.snapshot().map_err(ExtensionCommandError::from)
 }
@@ -73,17 +72,29 @@ pub fn connect_extension_host(
 }
 
 #[tauri::command]
+pub fn disconnect_extension_host(
+    window: WebviewWindow,
+    state: State<'_, SideralExtensionState>,
+    session_id: u64,
+) -> ExtensionCommandResult<()> {
+    state
+        .disconnect_host_session(&window, session_id)
+        .map_err(ExtensionCommandError::from)
+}
+
+#[tauri::command]
 pub async fn execute_extension_command(
     window: WebviewWindow,
     state: State<'_, SideralExtensionState>,
     command_id: String,
     #[allow(clippy::needless_pass_by_value)] arguments: Vec<Value>,
+    active_text_document: Option<TextDocumentView>,
 ) -> ExtensionCommandResult<Option<Value>> {
     state
         .require_main_window(&window)
         .map_err(ExtensionCommandError::from)?;
     state
-        .execute_command(command_id, arguments)
+        .execute_command(command_id, arguments, active_text_document)
         .await
         .map_err(ExtensionCommandError::from)
 }
@@ -147,6 +158,40 @@ pub async fn set_extension_workspace(
     let state = state.inner().clone();
     spawn_extension_blocking(move || state.set_workspace_root(&window, root.map(PathBuf::from)))
         .await
+}
+
+#[tauri::command]
+pub fn dismiss_extension_preview(
+    window: WebviewWindow,
+    state: State<'_, SideralExtensionState>,
+    resource_id: String,
+) -> ExtensionCommandResult<()> {
+    state
+        .dismiss_preview(&window, &resource_id)
+        .map_err(ExtensionCommandError::from)
+}
+
+#[tauri::command]
+pub async fn update_extension_keybinding(
+    window: WebviewWindow,
+    state: State<'_, SideralExtensionState>,
+    command_id: String,
+    update: KeybindingUpdate,
+) -> ExtensionCommandResult<ExtensionSnapshot> {
+    let state = state.inner().clone();
+    state
+        .require_main_window(&window)
+        .map_err(ExtensionCommandError::from)?;
+    let _mutation_guard = state.lock_mutations().await;
+    let operation_state = state.clone();
+    spawn_extension_blocking(move || {
+        operation_state.update_keybinding_in_registry(&command_id, update)
+    })
+    .await?;
+    state
+        .publish_snapshot()
+        .map_err(ExtensionCommandError::from)?;
+    state.snapshot().map_err(ExtensionCommandError::from)
 }
 
 #[tauri::command]

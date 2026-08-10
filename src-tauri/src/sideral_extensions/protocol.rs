@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sideral_extension_core::{CommandContribution, PermissionSet};
+use sideral_extension_core::{
+    CommandContribution, CommandInvocation, KeybindingContribution, PermissionSet,
+};
 
 pub const EXTENSION_PROTOCOL_VERSION: u16 = 1;
 pub const WORKER_START_DEADLINE_MILLISECONDS: u64 = 5_000;
@@ -22,7 +24,11 @@ pub enum ExtensionRuntimeState {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum ActivationReason {
     Command { command_id: String },
     Language { language_id: String },
@@ -72,6 +78,7 @@ pub struct ExtensionCommandView {
     pub id: String,
     pub title: String,
     pub category: Option<String>,
+    pub invocation: CommandInvocation,
     pub extension_id: String,
 }
 
@@ -81,9 +88,23 @@ impl ExtensionCommandView {
             id: command.id.clone(),
             title: command.title.clone(),
             category: command.category.clone(),
+            invocation: command.invocation,
             extension_id: extension_id.to_owned(),
         }
     }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionKeybindingView {
+    pub extension_id: String,
+    pub command_id: String,
+    pub command_title: String,
+    pub default_key: String,
+    pub key: Option<String>,
+    pub languages: Vec<String>,
+    pub user_defined: bool,
+    pub conflict: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -99,6 +120,7 @@ pub struct InstalledExtensionView {
     pub permissions: PermissionSet,
     pub activation_events: Vec<String>,
     pub commands: Vec<ExtensionCommandView>,
+    pub keybindings: Vec<ExtensionKeybindingView>,
     pub runtime: RuntimeDiagnostic,
     pub rollback_version: Option<String>,
 }
@@ -110,6 +132,7 @@ pub struct ExtensionSnapshot {
     pub revision: u64,
     pub extensions: Vec<InstalledExtensionView>,
     pub commands: Vec<ExtensionCommandView>,
+    pub keybindings: Vec<ExtensionKeybindingView>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -118,6 +141,7 @@ pub struct ClientHandshake {
     pub connection_id: u64,
     pub snapshot: ExtensionSnapshot,
     pub outputs: Vec<OutputChannelView>,
+    pub previews: Vec<PreviewDocumentView>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -127,10 +151,15 @@ pub struct HostHandshake {
     pub supported_api_versions: Vec<u16>,
     pub session_id: u64,
     pub session_token: String,
+    pub shutdown_grace_milliseconds: u64,
 }
 
 #[derive(Clone, Debug, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum HostInstruction {
     ActivateExtension {
         protocol_version: u16,
@@ -158,6 +187,7 @@ pub enum HostInstruction {
         command_ids: Vec<String>,
         command_id: String,
         arguments: Vec<Value>,
+        active_text_document: Option<TextDocumentView>,
         activation_reason: ActivationReason,
         start_deadline_milliseconds: u64,
         activation_deadline_milliseconds: u64,
@@ -193,7 +223,12 @@ pub enum DeactivationReason {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
 pub enum HostEvent {
     StateChanged {
         protocol_version: u16,
@@ -233,7 +268,11 @@ pub enum HostEvent {
 }
 
 #[derive(Clone, Debug, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum ExtensionClientInstruction {
     Snapshot {
         snapshot: ExtensionSnapshot,
@@ -247,6 +286,12 @@ pub enum ExtensionClientInstruction {
         channel: OutputChannelView,
     },
     OutputDisposed {
+        resource_id: String,
+    },
+    PreviewChanged {
+        preview: PreviewDocumentView,
+    },
+    PreviewDisposed {
         resource_id: String,
     },
 }
@@ -267,6 +312,46 @@ pub struct OutputChannelView {
     pub name: String,
     pub content: String,
     pub visible: bool,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PreviewFormat {
+    Markdown,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewDocumentView {
+    pub resource_id: String,
+    pub extension_id: String,
+    pub title: String,
+    pub format: PreviewFormat,
+    pub content: String,
+    pub source_uri: Option<String>,
+    pub visible: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TextDocumentView {
+    pub uri: String,
+    pub language_id: String,
+    pub version: u64,
+    pub content: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum KeybindingUpdate {
+    Default,
+    Disabled,
+    Custom { key: String },
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -312,6 +397,18 @@ pub enum BrokerMethod {
     WindowOutputFlush,
     #[serde(rename = "window.output.show")]
     WindowOutputShow,
+    #[serde(rename = "window.preview.create")]
+    WindowPreviewCreate,
+    #[serde(rename = "window.preview.dispose")]
+    WindowPreviewDispose,
+    #[serde(rename = "window.preview.hide")]
+    WindowPreviewHide,
+    #[serde(rename = "window.preview.show")]
+    WindowPreviewShow,
+    #[serde(rename = "window.preview.toggle")]
+    WindowPreviewToggle,
+    #[serde(rename = "window.preview.update")]
+    WindowPreviewUpdate,
     #[serde(rename = "window.showErrorMessage")]
     WindowShowErrorMessage,
     #[serde(rename = "window.showInformationMessage")]
@@ -335,7 +432,11 @@ pub struct BrokerResponse {
 }
 
 #[derive(Clone, Debug, Serialize)]
-#[serde(tag = "status", rename_all = "camelCase")]
+#[serde(
+    tag = "status",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum PackageInspectionResult {
     Ready { package: PackageInstallView },
     PublisherTrustRequired { package: PackageInstallView },
@@ -356,5 +457,123 @@ pub struct PackageInstallView {
     pub permissions: PermissionSet,
     pub activation_events: Vec<String>,
     pub commands: Vec<CommandContribution>,
+    pub keybindings: Vec<KeybindingContribution>,
     pub replaces_version: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{
+        ActivationReason, EXTENSION_PROTOCOL_VERSION, ExtensionClientInstruction, HostEvent,
+        HostInstruction, PreviewDocumentView, PreviewFormat,
+    };
+
+    #[test]
+    fn activation_reason_round_trips_camel_case_variant_fields() {
+        let reason = ActivationReason::Language {
+            language_id: "typescript".to_owned(),
+        };
+        let wire_value = json!({
+            "kind": "language",
+            "languageId": "typescript",
+        });
+
+        assert_eq!(serde_json::to_value(&reason).ok(), Some(wire_value.clone()));
+        assert_eq!(
+            serde_json::from_value::<ActivationReason>(wire_value).ok(),
+            Some(reason),
+        );
+    }
+
+    #[test]
+    fn host_instruction_serializes_camel_case_variant_fields() {
+        let instruction = HostInstruction::CancelRequest {
+            protocol_version: EXTENSION_PROTOCOL_VERSION,
+            request_id: "request-1".to_owned(),
+            extension_id: "acme.sample".to_owned(),
+            generation: 3,
+        };
+
+        assert_eq!(
+            serde_json::to_value(instruction).ok(),
+            Some(json!({
+                "kind": "cancelRequest",
+                "protocolVersion": EXTENSION_PROTOCOL_VERSION,
+                "requestId": "request-1",
+                "extensionId": "acme.sample",
+                "generation": 3,
+            })),
+        );
+    }
+
+    #[test]
+    fn host_event_deserializes_camel_case_variant_fields() {
+        let event = serde_json::from_value::<HostEvent>(json!({
+            "kind": "activated",
+            "protocolVersion": EXTENSION_PROTOCOL_VERSION,
+            "requestId": "request-2",
+            "extensionId": "acme.sample",
+            "generation": 4,
+            "error": null,
+        }));
+
+        assert!(matches!(
+            event,
+            Ok(HostEvent::Activated {
+                protocol_version: EXTENSION_PROTOCOL_VERSION,
+                request_id,
+                extension_id,
+                generation: 4,
+                error: None,
+            }) if request_id == "request-2" && extension_id == "acme.sample"
+        ));
+    }
+
+    #[test]
+    fn client_instruction_serializes_camel_case_variant_fields() {
+        let instruction = ExtensionClientInstruction::OutputDisposed {
+            resource_id: "output-1".to_owned(),
+        };
+
+        assert_eq!(
+            serde_json::to_value(instruction).ok(),
+            Some(json!({
+                "kind": "outputDisposed",
+                "resourceId": "output-1",
+            })),
+        );
+    }
+
+    #[test]
+    fn preview_instruction_serializes_a_safe_typed_document() {
+        let instruction = ExtensionClientInstruction::PreviewChanged {
+            preview: PreviewDocumentView {
+                resource_id: "preview:sample:1".to_owned(),
+                extension_id: "sample.extension".to_owned(),
+                title: "README preview".to_owned(),
+                format: PreviewFormat::Markdown,
+                content: "# README".to_owned(),
+                source_uri: Some("file:///D:/workspace/README.md".to_owned()),
+                visible: true,
+            },
+        };
+
+        assert_eq!(
+            serde_json::to_value(instruction).ok(),
+            Some(json!({
+                "kind": "previewChanged",
+                "preview": {
+                    "resourceId": "preview:sample:1",
+                    "extensionId": "sample.extension",
+                    "title": "README preview",
+                    "format": "markdown",
+                    "content": "# README",
+                    "sourceUri": "file:///D:/workspace/README.md",
+                    "visible": true,
+                },
+            })),
+        );
+    }
 }

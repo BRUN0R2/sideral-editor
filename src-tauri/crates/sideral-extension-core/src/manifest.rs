@@ -4,7 +4,7 @@ use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ExtensionSizeBudget, ManifestError, PermissionSet, budgets::MAX_MANIFEST_BYTES,
+    ExtensionSizeBudget, ManifestError, PermissionSet, WorkspaceAccess, budgets::MAX_MANIFEST_BYTES,
     extension_size_budget,
 };
 
@@ -12,6 +12,8 @@ const SUPPORTED_MANIFEST_VERSION: u16 = 1;
 const SUPPORTED_API_VERSION: u16 = 1;
 const MAX_ACTIVATION_EVENTS: usize = 64;
 const MAX_COMMANDS: usize = 128;
+const MAX_KEYBINDINGS: usize = 128;
+const MAX_KEYBINDING_LANGUAGES: usize = 32;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -32,6 +34,14 @@ pub struct WorkerRuntime {
     pub entry: String,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CommandInvocation {
+    #[default]
+    Workbench,
+    ActiveTextDocument,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CommandContribution {
@@ -39,6 +49,19 @@ pub struct CommandContribution {
     pub title: String,
     #[serde(default)]
     pub category: Option<String>,
+    #[serde(default)]
+    pub invocation: CommandInvocation,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct KeybindingContribution {
+    pub command: String,
+    pub key: String,
+    #[serde(default)]
+    pub mac: Option<String>,
+    #[serde(default)]
+    pub languages: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -46,6 +69,8 @@ pub struct CommandContribution {
 pub struct Contributions {
     #[serde(default)]
     pub commands: Vec<CommandContribution>,
+    #[serde(default)]
+    pub keybindings: Vec<KeybindingContribution>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -84,6 +109,7 @@ pub struct ExtensionInspection {
     pub entry: Option<String>,
     pub activation_events: Vec<String>,
     pub commands: Vec<CommandContribution>,
+    pub keybindings: Vec<KeybindingContribution>,
     pub permissions: PermissionSet,
     pub manifest_bytes: usize,
     pub size_budget: ExtensionSizeBudget,
@@ -134,7 +160,8 @@ impl ExtensionManifest {
             validate_worker_entry(&runtime.entry)?;
         }
 
-        self.validate_commands()?;
+        let command_ids = self.validate_commands()?;
+        self.validate_keybindings(&command_ids)?;
         self.validate_activation_events()?;
         self.permissions.validate(&self.id)?;
         self.validate_runtime_consistency()?;
@@ -171,8 +198,62 @@ impl ExtensionManifest {
                     value: command.id.clone(),
                 });
             }
+            if command.invocation == CommandInvocation::ActiveTextDocument
+                && self.permissions.workspace == WorkspaceAccess::None
+            {
+                return Err(ManifestError::Inconsistent(format!(
+                    "command {} requires workspace read permission for active document context",
+                    command.id
+                )));
+            }
         }
         Ok(command_ids)
+    }
+
+    fn validate_keybindings(&self, command_ids: &HashSet<&str>) -> Result<(), ManifestError> {
+        if self.contributes.keybindings.len() > MAX_KEYBINDINGS {
+            return Err(ManifestError::invalid(
+                "contributes.keybindings",
+                format!("at most {MAX_KEYBINDINGS} keybindings are allowed"),
+            ));
+        }
+
+        let mut bound_commands = HashSet::new();
+        for keybinding in &self.contributes.keybindings {
+            if !command_ids.contains(keybinding.command.as_str()) {
+                return Err(ManifestError::invalid(
+                    "contributes.keybindings.command",
+                    format!("{} is not declared by this extension", keybinding.command),
+                ));
+            }
+            if !bound_commands.insert(keybinding.command.as_str()) {
+                return Err(ManifestError::Duplicate {
+                    kind: "keybinding command",
+                    value: keybinding.command.clone(),
+                });
+            }
+            require_canonical_keybinding("contributes.keybindings.key", &keybinding.key)?;
+            if let Some(mac) = &keybinding.mac {
+                require_canonical_keybinding("contributes.keybindings.mac", mac)?;
+            }
+            if keybinding.languages.len() > MAX_KEYBINDING_LANGUAGES {
+                return Err(ManifestError::invalid(
+                    "contributes.keybindings.languages",
+                    format!("at most {MAX_KEYBINDING_LANGUAGES} languages are allowed"),
+                ));
+            }
+            let mut languages = HashSet::new();
+            for language in &keybinding.languages {
+                validate_token("contributes.keybindings.languages", language, 64)?;
+                if !languages.insert(language.as_str()) {
+                    return Err(ManifestError::Duplicate {
+                        kind: "keybinding language",
+                        value: language.clone(),
+                    });
+                }
+            }
+        }
+        Ok(())
     }
 
     fn validate_activation_events(&self) -> Result<(), ManifestError> {
@@ -225,6 +306,11 @@ impl ExtensionManifest {
                     "command contributions require a worker runtime".to_owned(),
                 ));
             }
+            if !self.contributes.keybindings.is_empty() {
+                return Err(ManifestError::Inconsistent(
+                    "keybinding contributions require a worker runtime".to_owned(),
+                ));
+            }
             return Err(ManifestError::Inconsistent(
                 "the manifest does not contribute any supported feature".to_owned(),
             ));
@@ -253,11 +339,150 @@ impl ExtensionManifest {
             entry,
             activation_events: self.activation_events.clone(),
             commands: self.contributes.commands.clone(),
+            keybindings: self.contributes.keybindings.clone(),
             permissions: self.permissions.clone(),
             manifest_bytes,
             size_budget: extension_size_budget(),
         }
     }
+}
+
+pub fn normalize_keybinding(value: &str) -> Result<String, ManifestError> {
+    if value.is_empty() || value.len() > 64 || value.trim() != value {
+        return Err(ManifestError::invalid(
+            "keybinding",
+            "shortcut must be clean text of at most 64 bytes",
+        ));
+    }
+
+    let mut ctrl = false;
+    let mut alt = false;
+    let mut shift = false;
+    let mut meta = false;
+    let mut key = None;
+    for part in value.split('+') {
+        let normalized = match part.to_ascii_lowercase().as_str() {
+            "ctrl" | "control" => "Ctrl".to_owned(),
+            "alt" => "Alt".to_owned(),
+            "shift" => "Shift".to_owned(),
+            "meta" | "cmd" | "command" => "Meta".to_owned(),
+            _ => normalize_key(part)?,
+        };
+        match normalized.as_str() {
+            "Ctrl" if !ctrl => ctrl = true,
+            "Alt" if !alt => alt = true,
+            "Shift" if !shift => shift = true,
+            "Meta" if !meta => meta = true,
+            "Ctrl" | "Alt" | "Shift" | "Meta" => {
+                return Err(ManifestError::invalid(
+                    "keybinding",
+                    "shortcut modifiers cannot be repeated",
+                ));
+            }
+            _ if key.is_none() => key = Some(normalized),
+            _ => {
+                return Err(ManifestError::invalid(
+                    "keybinding",
+                    "shortcut must contain exactly one non-modifier key",
+                ));
+            }
+        }
+    }
+    if !ctrl && !alt && !shift && !meta {
+        return Err(ManifestError::invalid(
+            "keybinding",
+            "shortcut must contain at least one modifier",
+        ));
+    }
+    let key = key.ok_or_else(|| {
+        ManifestError::invalid("keybinding", "shortcut must contain one non-modifier key")
+    })?;
+    let mut parts = Vec::with_capacity(5);
+    if ctrl {
+        parts.push("Ctrl".to_owned());
+    }
+    if alt {
+        parts.push("Alt".to_owned());
+    }
+    if shift {
+        parts.push("Shift".to_owned());
+    }
+    if meta {
+        parts.push("Meta".to_owned());
+    }
+    parts.push(key);
+    let shortcut = parts.join("+");
+    if matches!(
+        shortcut.as_str(),
+        "Ctrl+N"
+            | "Ctrl+O"
+            | "Ctrl+S"
+            | "Ctrl+Shift+O"
+            | "Ctrl+Shift+P"
+            | "Ctrl+Shift+S"
+            | "Ctrl+Shift+X"
+            | "Meta+N"
+            | "Meta+O"
+            | "Meta+S"
+            | "Shift+Meta+O"
+            | "Shift+Meta+P"
+            | "Shift+Meta+S"
+            | "Shift+Meta+X"
+    ) {
+        return Err(ManifestError::invalid(
+            "keybinding",
+            "shortcut is reserved by the Sideral workbench",
+        ));
+    }
+    Ok(shortcut)
+}
+
+fn require_canonical_keybinding(field: &'static str, value: &str) -> Result<(), ManifestError> {
+    let normalized = normalize_keybinding(value)?;
+    if normalized != value {
+        return Err(ManifestError::invalid(
+            field,
+            format!("shortcut must use canonical form {normalized}"),
+        ));
+    }
+    Ok(())
+}
+
+fn normalize_key(value: &str) -> Result<String, ManifestError> {
+    if value.len() == 1 && value.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+        return Ok(value.to_ascii_uppercase());
+    }
+    let lower = value.to_ascii_lowercase();
+    let named = match lower.as_str() {
+        "arrowdown" => Some("ArrowDown"),
+        "arrowleft" => Some("ArrowLeft"),
+        "arrowright" => Some("ArrowRight"),
+        "arrowup" => Some("ArrowUp"),
+        "backspace" => Some("Backspace"),
+        "delete" => Some("Delete"),
+        "end" => Some("End"),
+        "enter" => Some("Enter"),
+        "escape" | "esc" => Some("Escape"),
+        "home" => Some("Home"),
+        "insert" => Some("Insert"),
+        "pagedown" => Some("PageDown"),
+        "pageup" => Some("PageUp"),
+        "space" => Some("Space"),
+        "tab" => Some("Tab"),
+        _ => None,
+    };
+    if let Some(named) = named {
+        return Ok(named.to_owned());
+    }
+    if let Some(number) = lower.strip_prefix('f').and_then(|value| value.parse::<u8>().ok())
+        && (1..=24).contains(&number)
+    {
+        return Ok(format!("F{number}"));
+    }
+    Err(ManifestError::invalid(
+        "keybinding",
+        "shortcut key must be a letter, digit, function key or supported navigation key",
+    ))
 }
 
 fn validate_worker_entry(entry: &str) -> Result<(), ManifestError> {
@@ -362,7 +587,7 @@ fn validate_optional_text(
 
 #[cfg(test)]
 mod tests {
-    use super::validate_manifest_json;
+    use super::{normalize_keybinding, validate_manifest_json};
     use crate::{ManifestError, RuntimeKind, WorkspaceAccess};
 
     const VALID_MANIFEST: &str = r#"{
@@ -503,5 +728,43 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn accepts_canonical_language_scoped_keybindings() {
+        let source = VALID_MANIFEST.replace(
+            "[{ \"id\": \"sample.hello.run\", \"title\": \"Run Hello\" }]",
+            "[{ \"id\": \"sample.hello.run\", \"title\": \"Run Hello\", \"invocation\": \"activeTextDocument\" }], \"keybindings\": [{ \"command\": \"sample.hello.run\", \"key\": \"Ctrl+Shift+V\", \"mac\": \"Shift+Meta+V\", \"languages\": [\"markdown\"] }]",
+        );
+
+        assert!(matches!(
+            validate_manifest_json(&source),
+            Ok(inspection) if inspection.keybindings.len() == 1
+        ));
+    }
+
+    #[test]
+    fn rejects_active_document_commands_without_workspace_read_permission() {
+        let source = VALID_MANIFEST
+            .replace("\"workspace\": \"read\"", "\"workspace\": \"none\"")
+            .replace(
+                "\"title\": \"Run Hello\"",
+                "\"title\": \"Run Hello\", \"invocation\": \"activeTextDocument\"",
+            );
+
+        assert!(matches!(
+            validate_manifest_json(&source),
+            Err(ManifestError::Inconsistent(_))
+        ));
+    }
+
+    #[test]
+    fn normalizes_supported_shortcuts_and_rejects_unmodified_keys() {
+        assert_eq!(
+            normalize_keybinding("shift+control+v").ok().as_deref(),
+            Some("Ctrl+Shift+V")
+        );
+        assert!(normalize_keybinding("V").is_err());
+        assert!(normalize_keybinding("Ctrl+Ctrl+V").is_err());
     }
 }

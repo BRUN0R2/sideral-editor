@@ -5,7 +5,8 @@
   "type": "module",
   "workspaces": [
     "packages/sideral-extension-sdk",
-    "packages/sideral-extension-testkit"
+    "packages/sideral-extension-testkit",
+    "examples/markdown-preview"
   ],
   "packageManager": "npm@11.17.0",
   "engines": {
@@ -13,7 +14,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && npm run sdk:build && vite build",
+    "build": "tsc --noEmit && npm run sdk:build && vite build && node scripts/check-bundle-budgets.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "biome check .",
@@ -21,11 +22,13 @@
     "architecture": "node scripts/check-extension-boundaries.mjs",
     "sdk:build": "tsc --project packages/sideral-extension-sdk/tsconfig.json && tsc --project packages/sideral-extension-testkit/tsconfig.json",
     "extension:tool": "cargo run --quiet --manifest-path src-tauri/Cargo.toml -p sideral-extension-tool --",
+    "extension:markdown:build": "npm run build --workspace sideral.markdown-preview",
+    "extension:markdown:check": "npm run typecheck --workspace sideral.markdown-preview && npm run build --workspace sideral.markdown-preview",
     "rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
     "rust:check": "cargo check --manifest-path src-tauri/Cargo.toml --workspace",
     "rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings",
     "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml --workspace",
-    "check": "npm run architecture && npm run lint && npm run typecheck && npm run sdk:build && npm run test && npm run rust:fmt && npm run rust:clippy && npm run rust:test",
+    "check": "npm run architecture && npm run lint && npm run typecheck && npm run sdk:build && npm run extension:markdown:check && npm run test && npm run rust:fmt && npm run rust:clippy && npm run rust:test",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -35,6 +38,7 @@
     "@tauri-apps/plugin-updater": "2.10.1",
     "@vscode/codicons": "0.0.46-24",
     "jsonc-parser": "3.3.1",
+    "marked": "18.0.9",
     "monaco-editor": "0.56.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"

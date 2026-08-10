@@ -1,3 +1,7 @@
+// Localized MSVC linkers report import-library creation through the generic
+// linker warning channel even though the message is informational.
+#![cfg_attr(all(test, windows, target_env = "msvc"), allow(linker_messages))]
+
 mod desktop_integration;
 mod documents;
 mod error;
@@ -242,6 +246,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             sideral_extensions::connect_extension_client,
             sideral_extensions::disconnect_extension_client,
             sideral_extensions::connect_extension_host,
+            sideral_extensions::disconnect_extension_host,
             sideral_extensions::execute_extension_command,
             sideral_extensions::activate_extension_event,
             sideral_extensions::extension_host_event,
@@ -249,6 +254,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             sideral_extensions::extension_broker_request,
             sideral_extensions::cancel_extension_broker_request,
             sideral_extensions::set_extension_workspace,
+            sideral_extensions::dismiss_extension_preview,
+            sideral_extensions::update_extension_keybinding,
             sideral_extensions::inspect_extension_package,
             sideral_extensions::install_extension_package,
             sideral_extensions::set_extension_enabled,

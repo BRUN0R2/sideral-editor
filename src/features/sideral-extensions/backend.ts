@@ -1,17 +1,20 @@
-import type { ActivationReason, JsonValue } from "@sideral/extension-sdk";
+import type { ActivationReason, JsonValue, TextDocument } from "@sideral/extension-sdk";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
   ClientHandshake,
   ExtensionClientInstruction,
   ExtensionSnapshot,
+  KeybindingUpdate,
   OutputChannelView,
   PackageInspectionResult,
+  PreviewDocumentView,
   SideralExtensionInspection,
 } from "./contracts";
 
 export interface ExtensionClientConnection {
   readonly snapshot: ExtensionSnapshot;
   readonly outputs: readonly OutputChannelView[];
+  readonly previews: readonly PreviewDocumentView[];
   dispose(): Promise<void>;
 }
 
@@ -34,6 +37,7 @@ export async function connectExtensionClient(
   return {
     snapshot: handshake.snapshot,
     outputs: handshake.outputs,
+    previews: handshake.previews,
     async dispose() {
       if (disposed) {
         return;
@@ -56,11 +60,24 @@ export function activateExtensionEvent(reason: ActivationReason): Promise<void> 
 export function executeExtensionCommand(
   commandId: string,
   arguments_: readonly JsonValue[] = [],
+  activeTextDocument: TextDocument | null = null,
 ): Promise<JsonValue | null> {
   return invoke<JsonValue | null>("execute_extension_command", {
     commandId,
     arguments: arguments_,
+    activeTextDocument,
   });
+}
+
+export function dismissExtensionPreview(resourceId: string): Promise<void> {
+  return invoke("dismiss_extension_preview", { resourceId });
+}
+
+export function updateExtensionKeybinding(
+  commandId: string,
+  update: KeybindingUpdate,
+): Promise<ExtensionSnapshot> {
+  return invoke<ExtensionSnapshot>("update_extension_keybinding", { commandId, update });
 }
 
 export function inspectExtensionPackage(path: string): Promise<PackageInspectionResult> {

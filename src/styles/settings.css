@@ -206,6 +206,84 @@
   font-size: 11px;
 }
 
+.extension-keybindings {
+  display: grid;
+  gap: 8px;
+}
+
+.extension-keybinding {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 240px) auto;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  background: #20242a;
+}
+
+.extension-keybinding__identity {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.extension-keybinding__identity strong {
+  overflow: hidden;
+  color: #d5d8dd;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.extension-keybinding__identity small {
+  overflow: hidden;
+  color: var(--text-subtle);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.extension-keybinding__conflict {
+  color: var(--warning);
+  font-size: 9px;
+}
+
+.keybinding-capture {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  color: #d5d8dd;
+  background: #191d22;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 10px;
+  text-align: center;
+}
+
+.keybinding-capture:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.extension-keybinding__actions {
+  display: flex;
+  gap: 6px;
+}
+
+@media (max-width: 900px) {
+  .extension-keybinding {
+    grid-template-columns: 1fr;
+  }
+
+  .extension-keybinding__actions {
+    justify-content: flex-end;
+  }
+}
+
 .schema-trust-settings {
   display: grid;
   gap: 16px;

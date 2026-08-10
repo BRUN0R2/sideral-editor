@@ -33,6 +33,12 @@ const BROKER_METHODS = new Set([
   "window.output.dispose",
   "window.output.flush",
   "window.output.show",
+  "window.preview.create",
+  "window.preview.dispose",
+  "window.preview.hide",
+  "window.preview.show",
+  "window.preview.toggle",
+  "window.preview.update",
   "window.showErrorMessage",
   "window.showInformationMessage",
   "window.showWarningMessage",
@@ -93,6 +99,18 @@ export class ExtensionHostSupervisor {
     if (handshake.protocolVersion !== PROTOCOL_VERSION) {
       throw new Error(`Unsupported native extension protocol ${handshake.protocolVersion}.`);
     }
+    if (!Number.isSafeInteger(handshake.sessionId) || handshake.sessionId <= 0) {
+      throw new Error("The native extension host returned an invalid session id.");
+    }
+    if (handshake.sessionToken.length === 0 || handshake.sessionToken.length > 128) {
+      throw new Error("The native extension host returned an invalid session token.");
+    }
+    if (
+      !Number.isSafeInteger(handshake.shutdownGraceMilliseconds) ||
+      handshake.shutdownGraceMilliseconds <= 0
+    ) {
+      throw new Error("The native extension host returned an invalid shutdown deadline.");
+    }
     this.#handshake = handshake;
   }
 
@@ -101,10 +119,12 @@ export class ExtensionHostSupervisor {
       return;
     }
     if (instruction.protocolVersion !== PROTOCOL_VERSION) {
-      void this.#emitHostFault({
-        code: "extension_protocol_mismatch",
-        message: `Unsupported native extension protocol ${instruction.protocolVersion}.`,
-      });
+      void this.reportFatal(
+        new HostFailure(
+          "extension_protocol_mismatch",
+          `Unsupported native extension protocol ${instruction.protocolVersion}.`,
+        ),
+      );
       return;
     }
     switch (instruction.kind) {
@@ -141,14 +161,7 @@ export class ExtensionHostSupervisor {
     if (this.#disposed) {
       return;
     }
-    this.#disposed = true;
-    this.#lanes.clear();
-    for (const startup of this.#startupCancellations.values()) {
-      startup.controller.abort();
-    }
-    this.#startupCancellations.clear();
-    const workers = [...this.#workers.values()];
-    this.#workers.clear();
+    const workers = this.#takeWorkers();
     await Promise.allSettled(
       workers.map((worker) =>
         worker.deactivate(
@@ -164,12 +177,31 @@ export class ExtensionHostSupervisor {
   }
 
   async reportFatal(error: unknown): Promise<void> {
+    if (this.#disposed) {
+      return;
+    }
+    const workers = this.#takeWorkers();
+    for (const worker of workers) {
+      worker.terminate();
+    }
     try {
       await this.#emitHostFault(toFailure(error, "extension_host_fault"));
     } catch {
       // The native transport is already unavailable, so there is no remaining
       // recovery channel for a host-level failure.
     }
+  }
+
+  #takeWorkers(): ManagedWorker[] {
+    this.#disposed = true;
+    this.#lanes.clear();
+    for (const startup of this.#startupCancellations.values()) {
+      startup.controller.abort();
+    }
+    this.#startupCancellations.clear();
+    const workers = [...this.#workers.values()];
+    this.#workers.clear();
+    return workers;
   }
 
   #enqueue(extensionId: string, operation: () => Promise<void>): void {
@@ -190,7 +222,12 @@ export class ExtensionHostSupervisor {
     try {
       runtime = await this.#ensureActive(instruction);
       const reply = await withDeadline(
-        runtime.execute(instruction.requestId, instruction.commandId, instruction.arguments),
+        runtime.execute(
+          instruction.requestId,
+          instruction.commandId,
+          instruction.arguments,
+          instruction.activeTextDocument ?? undefined,
+        ),
         instruction.executionDeadlineMilliseconds,
         "extension_command_deadline",
         `Command ${instruction.commandId} did not finish in time.`,
@@ -584,7 +621,12 @@ class ManagedWorker {
     this.active = true;
   }
 
-  execute(requestId: string, commandId: string, arguments_: readonly JsonValue[]) {
+  execute(
+    requestId: string,
+    commandId: string,
+    arguments_: readonly JsonValue[],
+    activeTextDocument: import("@sideral/extension-sdk").TextDocument | undefined,
+  ) {
     return this.#request("commandResult", requestId, {
       kind: "executeCommand",
       protocolVersion: PROTOCOL_VERSION,
@@ -592,6 +634,7 @@ class ManagedWorker {
       requestId,
       commandId,
       arguments: arguments_,
+      ...(activeTextDocument === undefined ? {} : { activeTextDocument }),
     }) as Promise<Extract<WorkerReply, { kind: "commandResult" }>>;
   }
 
@@ -883,17 +926,17 @@ function withDeadline<T>(
     );
   }
   return new Promise<T>((resolve, reject) => {
-    const timer = window.setTimeout(() => {
+    const timer = globalThis.setTimeout(() => {
       onDeadline?.();
       reject(new HostFailure(code, message));
     }, milliseconds);
     void operation.then(
       (value) => {
-        window.clearTimeout(timer);
+        globalThis.clearTimeout(timer);
         resolve(value);
       },
       (error: unknown) => {
-        window.clearTimeout(timer);
+        globalThis.clearTimeout(timer);
         reject(error);
       },
     );

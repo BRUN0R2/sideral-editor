@@ -66,6 +66,7 @@ export function useWorkspace(autoSave: AutoSaveMode) {
       content: "",
       savedContent: "",
       languageId: "plaintext",
+      version: 1,
     };
     setDocuments((current) => [...current, document]);
     setActiveDocumentId(document.id);
@@ -89,6 +90,7 @@ export function useWorkspace(autoSave: AutoSaveMode) {
       content: payload.content,
       savedContent: payload.content,
       languageId: languageForFile(payload.name),
+      version: 1,
     };
 
     setDocuments((current) =>
@@ -141,6 +143,7 @@ export function useWorkspace(autoSave: AutoSaveMode) {
               content: payload.content,
               savedContent: payload.content,
               languageId: languageForFile(payload.name),
+              version: 1,
             };
             setDocuments((current) => {
               const alreadyOpen = current.some((item) => item.id === document.id);
@@ -223,7 +226,11 @@ export function useWorkspace(autoSave: AutoSaveMode) {
 
   const updateDocumentContent = useCallback((id: string, content: string) => {
     setDocuments((current) =>
-      current.map((document) => (document.id === id ? { ...document, content } : document)),
+      current.map((document) =>
+        document.id === id && document.content !== content
+          ? { ...document, content, version: document.version + 1 }
+          : document,
+      ),
     );
   }, []);
 

@@ -1,4 +1,4 @@
-import type { DeactivationReason, JsonObject, JsonValue } from "./runtime";
+import type { DeactivationReason, JsonObject, JsonValue, TextDocument } from "./runtime";
 
 export type ExtensionProtocolVersion = 1;
 
@@ -37,6 +37,12 @@ export type BrokerMethod =
   | "window.output.dispose"
   | "window.output.flush"
   | "window.output.show"
+  | "window.preview.create"
+  | "window.preview.dispose"
+  | "window.preview.hide"
+  | "window.preview.show"
+  | "window.preview.toggle"
+  | "window.preview.update"
   | "window.showErrorMessage"
   | "window.showInformationMessage"
   | "window.showWarningMessage"
@@ -68,6 +74,7 @@ export type HostToWorkerMessage =
       readonly requestId: string;
       readonly commandId: string;
       readonly arguments: readonly JsonValue[];
+      readonly activeTextDocument?: TextDocument;
     })
   | (WorkerEnvelope & {
       readonly kind: "brokerResponse";

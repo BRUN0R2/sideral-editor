@@ -15,6 +15,7 @@ function document(
     content,
     savedContent,
     languageId: "typescript",
+    version: 1,
   };
 }
 

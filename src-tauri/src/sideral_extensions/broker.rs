@@ -35,7 +35,7 @@ use super::{
     error::ExtensionError,
     protocol::{
         BrokerMethod, BrokerRequest, BrokerResponse, ExtensionClientInstruction, MessageSeverity,
-        OutputChannelView, ProtocolFailure,
+        OutputChannelView, PreviewDocumentView, PreviewFormat, ProtocolFailure,
     },
     service::SideralExtensionState,
 };
@@ -65,6 +65,8 @@ const MAX_MESSAGE_BYTES: usize = 4 * 1024;
 const MAX_OUTPUT_CHANNELS_PER_EXTENSION: usize = 32;
 const MAX_OUTPUT_CHANNEL_BYTES: usize = 1024 * 1024;
 const MAX_OUTPUT_APPEND_BYTES: usize = 64 * 1024;
+const MAX_PREVIEW_PANELS_PER_EXTENSION: usize = 8;
+const MAX_PREVIEW_CONTENT_BYTES: usize = 192 * 1024;
 const MAX_KEY_BYTES: usize = 128;
 const MAX_STORED_VALUE_BYTES: usize = 256 * 1024;
 const STORAGE_DOCUMENT_LIMIT_BYTES: u64 = 2 * 1024 * 1024;
@@ -83,6 +85,8 @@ struct BrokerShared {
     document_versions: Mutex<HashMap<PathBuf, TrackedDocument>>,
     outputs: Mutex<HashMap<String, OutputResource>>,
     next_output_id: AtomicU64,
+    previews: Mutex<HashMap<String, PreviewResource>>,
+    next_preview_id: AtomicU64,
     cancellations: Mutex<HashMap<RequestKey, Arc<Cancellation>>>,
     request_slots: Arc<Semaphore>,
     network_slots: Arc<Semaphore>,
@@ -149,6 +153,16 @@ struct OutputResource {
     extension_id: String,
     name: String,
     content: String,
+    visible: bool,
+}
+
+#[derive(Clone)]
+struct PreviewResource {
+    extension_id: String,
+    title: String,
+    format: PreviewFormat,
+    content: String,
+    source_uri: Option<String>,
     visible: bool,
 }
 
@@ -249,6 +263,27 @@ struct OutputAppendPayload {
     value: String,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PreviewDocumentPayload {
+    title: String,
+    format: PreviewFormat,
+    content: String,
+    #[serde(default)]
+    source_uri: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PreviewUpdatePayload {
+    resource_id: String,
+    title: String,
+    format: PreviewFormat,
+    content: String,
+    #[serde(default)]
+    source_uri: Option<String>,
+}
+
 impl CapabilityBroker {
     pub fn new(data_root: PathBuf) -> Result<Self, ExtensionError> {
         let network_client = network_client_builder().build().map_err(|error| {
@@ -262,6 +297,8 @@ impl CapabilityBroker {
                 document_versions: Mutex::new(HashMap::new()),
                 outputs: Mutex::new(HashMap::new()),
                 next_output_id: AtomicU64::new(1),
+                previews: Mutex::new(HashMap::new()),
+                next_preview_id: AtomicU64::new(1),
                 cancellations: Mutex::new(HashMap::new()),
                 request_slots: Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS)),
                 network_slots: Arc::new(Semaphore::new(MAX_CONCURRENT_NETWORK_REQUESTS)),
@@ -355,7 +392,7 @@ impl CapabilityBroker {
                 let payload: ExecuteCommandPayload = parse_payload(request.payload)?;
                 validate_identifier("command id", &payload.command_id)?;
                 state
-                    .execute_command(payload.command_id, payload.arguments)
+                    .execute_command(payload.command_id, payload.arguments, None)
                     .await
                     .map(|result| result.unwrap_or(Value::Null))
             }
@@ -463,6 +500,33 @@ impl CapabilityBroker {
                 let payload: OutputResourcePayload = parse_payload(request.payload)?;
                 self.dispose_output(state, manifest, &payload.resource_id)
             }
+            BrokerMethod::WindowPreviewCreate => {
+                let payload: PreviewDocumentPayload = parse_payload(request.payload)?;
+                self.create_preview(manifest, payload)
+            }
+            BrokerMethod::WindowPreviewUpdate => {
+                let payload: PreviewUpdatePayload = parse_payload(request.payload)?;
+                self.update_preview(state, manifest, payload)
+            }
+            BrokerMethod::WindowPreviewShow => {
+                let payload: OutputResourcePayload = parse_payload(request.payload)?;
+                self.set_preview_visibility(state, manifest, &payload.resource_id, true)
+                    .map(|_| Value::Null)
+            }
+            BrokerMethod::WindowPreviewHide => {
+                let payload: OutputResourcePayload = parse_payload(request.payload)?;
+                self.set_preview_visibility(state, manifest, &payload.resource_id, false)
+                    .map(|_| Value::Null)
+            }
+            BrokerMethod::WindowPreviewToggle => {
+                let payload: OutputResourcePayload = parse_payload(request.payload)?;
+                self.toggle_preview(state, manifest, &payload.resource_id)
+                    .map(Value::Bool)
+            }
+            BrokerMethod::WindowPreviewDispose => {
+                let payload: OutputResourcePayload = parse_payload(request.payload)?;
+                self.dispose_preview(state, manifest, &payload.resource_id)
+            }
         }
     }
 
@@ -503,6 +567,9 @@ impl CapabilityBroker {
         if let Ok(mut outputs) = self.shared.outputs.lock() {
             outputs.retain(|_, output| output.extension_id != extension_id);
         }
+        if let Ok(mut previews) = self.shared.previews.lock() {
+            previews.retain(|_, preview| preview.extension_id != extension_id);
+        }
     }
 
     pub fn cancel_all(&self) {
@@ -515,6 +582,9 @@ impl CapabilityBroker {
         if let Ok(mut outputs) = self.shared.outputs.lock() {
             outputs.clear();
         }
+        if let Ok(mut previews) = self.shared.previews.lock() {
+            previews.clear();
+        }
     }
 
     pub fn output_views(&self) -> Result<Vec<OutputChannelView>, ExtensionError> {
@@ -525,6 +595,32 @@ impl CapabilityBroker {
             .collect::<Vec<_>>();
         views.sort_by(|left, right| left.resource_id.cmp(&right.resource_id));
         Ok(views)
+    }
+
+    pub fn preview_views(&self) -> Result<Vec<PreviewDocumentView>, ExtensionError> {
+        let previews = lock(&self.shared.previews, "extension previews")?;
+        let mut views = previews
+            .iter()
+            .map(|(resource_id, preview)| preview_view(resource_id, preview))
+            .collect::<Vec<_>>();
+        views.sort_by(|left, right| left.resource_id.cmp(&right.resource_id));
+        Ok(views)
+    }
+
+    pub fn dismiss_preview(
+        &self,
+        state: &SideralExtensionState,
+        resource_id: &str,
+    ) -> Result<(), ExtensionError> {
+        let view = {
+            let mut previews = lock(&self.shared.previews, "extension previews")?;
+            let preview = previews
+                .get_mut(resource_id)
+                .ok_or_else(|| ExtensionError::NotFound(resource_id.to_owned()))?;
+            preview.visible = false;
+            preview_view(resource_id, preview)
+        };
+        state.send_client_instruction(ExtensionClientInstruction::PreviewChanged { preview: view })
     }
 
     pub fn set_workspace_root(&self, root: Option<PathBuf>) -> Result<(), ExtensionError> {
@@ -1270,6 +1366,133 @@ impl CapabilityBroker {
         })?;
         Ok(Value::Null)
     }
+
+    fn create_preview(
+        &self,
+        manifest: &ExtensionManifest,
+        payload: PreviewDocumentPayload,
+    ) -> Result<Value, ExtensionError> {
+        validate_preview_document(
+            &payload.title,
+            &payload.content,
+            payload.source_uri.as_deref(),
+        )?;
+        let mut previews = lock(&self.shared.previews, "extension previews")?;
+        if previews
+            .values()
+            .filter(|preview| preview.extension_id == manifest.id)
+            .count()
+            >= MAX_PREVIEW_PANELS_PER_EXTENSION
+        {
+            return Err(ExtensionError::Conflict(format!(
+                "extension {} exceeded its {MAX_PREVIEW_PANELS_PER_EXTENSION}-panel preview limit",
+                manifest.id
+            )));
+        }
+        let sequence = self.shared.next_preview_id.fetch_add(1, Ordering::Relaxed);
+        let resource_id = format!("preview:{}:{sequence}", manifest.id);
+        previews.insert(
+            resource_id.clone(),
+            PreviewResource {
+                extension_id: manifest.id.clone(),
+                title: payload.title,
+                format: payload.format,
+                content: payload.content,
+                source_uri: payload.source_uri,
+                visible: false,
+            },
+        );
+        Ok(Value::String(resource_id))
+    }
+
+    fn update_preview(
+        &self,
+        state: &SideralExtensionState,
+        manifest: &ExtensionManifest,
+        payload: PreviewUpdatePayload,
+    ) -> Result<Value, ExtensionError> {
+        validate_preview_document(
+            &payload.title,
+            &payload.content,
+            payload.source_uri.as_deref(),
+        )?;
+        let view = {
+            let mut previews = lock(&self.shared.previews, "extension previews")?;
+            let preview = owned_preview_mut(&mut previews, &manifest.id, &payload.resource_id)?;
+            preview.title = payload.title;
+            preview.format = payload.format;
+            preview.content = payload.content;
+            preview.source_uri = payload.source_uri;
+            preview_view(&payload.resource_id, preview)
+        };
+        state.send_client_instruction(ExtensionClientInstruction::PreviewChanged {
+            preview: view,
+        })?;
+        Ok(Value::Null)
+    }
+
+    fn set_preview_visibility(
+        &self,
+        state: &SideralExtensionState,
+        manifest: &ExtensionManifest,
+        resource_id: &str,
+        visible: bool,
+    ) -> Result<bool, ExtensionError> {
+        let views = {
+            let mut previews = lock(&self.shared.previews, "extension previews")?;
+            owned_preview(&previews, &manifest.id, resource_id)?;
+            let mut views = Vec::new();
+            if visible {
+                for (candidate_id, preview) in previews.iter_mut() {
+                    if preview.visible && candidate_id != resource_id {
+                        preview.visible = false;
+                        views.push(preview_view(candidate_id, preview));
+                    }
+                }
+            }
+            let preview = owned_preview_mut(&mut previews, &manifest.id, resource_id)?;
+            if preview.visible != visible {
+                preview.visible = visible;
+                views.push(preview_view(resource_id, preview));
+            }
+            views
+        };
+        for view in views {
+            state.send_client_instruction(ExtensionClientInstruction::PreviewChanged {
+                preview: view,
+            })?;
+        }
+        Ok(visible)
+    }
+
+    fn toggle_preview(
+        &self,
+        state: &SideralExtensionState,
+        manifest: &ExtensionManifest,
+        resource_id: &str,
+    ) -> Result<bool, ExtensionError> {
+        let visible = {
+            let previews = lock(&self.shared.previews, "extension previews")?;
+            !owned_preview(&previews, &manifest.id, resource_id)?.visible
+        };
+        self.set_preview_visibility(state, manifest, resource_id, visible)
+    }
+
+    fn dispose_preview(
+        &self,
+        state: &SideralExtensionState,
+        manifest: &ExtensionManifest,
+        resource_id: &str,
+    ) -> Result<Value, ExtensionError> {
+        let mut previews = lock(&self.shared.previews, "extension previews")?;
+        owned_preview(&previews, &manifest.id, resource_id)?;
+        previews.remove(resource_id);
+        drop(previews);
+        state.send_client_instruction(ExtensionClientInstruction::PreviewDisposed {
+            resource_id: resource_id.to_owned(),
+        })?;
+        Ok(Value::Null)
+    }
 }
 
 enum ProcessWaitOutcome {
@@ -1701,6 +1924,89 @@ fn owned_output_mut<'a>(
     Ok(output)
 }
 
+fn validate_preview_document(
+    title: &str,
+    content: &str,
+    source_uri: Option<&str>,
+) -> Result<(), ExtensionError> {
+    validate_text("preview title", title, 160)?;
+    if content.len() > MAX_PREVIEW_CONTENT_BYTES {
+        return Err(ExtensionError::InvalidRequest(format!(
+            "preview content exceeds {MAX_PREVIEW_CONTENT_BYTES} bytes"
+        )));
+    }
+    if content.contains('\0') {
+        return Err(ExtensionError::InvalidRequest(
+            "preview content cannot contain NUL bytes".to_owned(),
+        ));
+    }
+    if let Some(source_uri) = source_uri {
+        if source_uri.len() > 4_096 {
+            return Err(ExtensionError::InvalidRequest(
+                "preview source URI exceeds 4096 bytes".to_owned(),
+            ));
+        }
+        let parsed = Url::parse(source_uri).map_err(|error| {
+            ExtensionError::InvalidRequest(format!("invalid preview source URI: {error}"))
+        })?;
+        if !matches!(parsed.scheme(), "file" | "untitled")
+            || !parsed.username().is_empty()
+            || parsed.password().is_some()
+            || parsed.query().is_some()
+            || parsed.fragment().is_some()
+        {
+            return Err(ExtensionError::InvalidRequest(
+                "preview source must be a clean file or untitled URI".to_owned(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn preview_view(resource_id: &str, preview: &PreviewResource) -> PreviewDocumentView {
+    PreviewDocumentView {
+        resource_id: resource_id.to_owned(),
+        extension_id: preview.extension_id.clone(),
+        title: preview.title.clone(),
+        format: preview.format,
+        content: preview.content.clone(),
+        source_uri: preview.source_uri.clone(),
+        visible: preview.visible,
+    }
+}
+
+fn owned_preview<'a>(
+    previews: &'a HashMap<String, PreviewResource>,
+    extension_id: &str,
+    resource_id: &str,
+) -> Result<&'a PreviewResource, ExtensionError> {
+    let preview = previews.get(resource_id).ok_or_else(|| {
+        ExtensionError::InvalidRequest(format!("preview panel {resource_id} does not exist"))
+    })?;
+    if preview.extension_id != extension_id {
+        return Err(ExtensionError::PermissionDenied(
+            "preview panel belongs to another extension".to_owned(),
+        ));
+    }
+    Ok(preview)
+}
+
+fn owned_preview_mut<'a>(
+    previews: &'a mut HashMap<String, PreviewResource>,
+    extension_id: &str,
+    resource_id: &str,
+) -> Result<&'a mut PreviewResource, ExtensionError> {
+    let preview = previews.get_mut(resource_id).ok_or_else(|| {
+        ExtensionError::InvalidRequest(format!("preview panel {resource_id} does not exist"))
+    })?;
+    if preview.extension_id != extension_id {
+        return Err(ExtensionError::PermissionDenied(
+            "preview panel belongs to another extension".to_owned(),
+        ));
+    }
+    Ok(preview)
+}
+
 fn read_key_value_document(path: &Path, limit: u64) -> Result<KeyValueDocument, ExtensionError> {
     if !path.exists() {
         return Ok(KeyValueDocument {
@@ -1948,7 +2254,8 @@ mod tests {
 
     use super::{
         Cancellation, CapabilityBroker, ExtensionError, FindFilesPayload, RequestKey, StoreKind,
-        WriteDocumentPayload, file_uri, is_public_ipv4, validate_store_key,
+        WriteDocumentPayload, file_uri, is_public_ipv4, validate_preview_document,
+        validate_store_key,
     };
 
     type TestResult = Result<(), Box<dyn Error>>;
@@ -1966,6 +2273,27 @@ mod tests {
         for key in ["", ".hidden", "ends.", "contains space", "unsafe/path"] {
             assert!(validate_store_key(key).is_err(), "{key} should be rejected");
         }
+    }
+
+    #[test]
+    fn accepts_only_bounded_local_preview_sources() {
+        assert!(
+            validate_preview_document(
+                "README preview",
+                "# Safe Markdown",
+                Some("file:///D:/workspace/README.md"),
+            )
+            .is_ok()
+        );
+        assert!(
+            validate_preview_document(
+                "Remote preview",
+                "content",
+                Some("https://example.com/README.md"),
+            )
+            .is_err()
+        );
+        assert!(validate_preview_document("Invalid", "contains\0nul", None).is_err());
     }
 
     #[test]

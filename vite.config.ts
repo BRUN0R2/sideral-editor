@@ -1,6 +1,5 @@
 /// <reference types="node" />
 
-import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
@@ -10,13 +9,15 @@ export default defineConfig({
   plugins: [react()],
   clearScreen: false,
   optimizeDeps: {
-    entries: ["index.html", "extension-host.html"],
+    entries: ["index.html"],
   },
   build: {
-    rollupOptions: {
-      input: {
-        main: fileURLToPath(new URL("./index.html", import.meta.url)),
-        extensionHost: fileURLToPath(new URL("./extension-host.html", import.meta.url)),
+    // Monaco's language workers are intentionally lazy and have very different
+    // size profiles. The post-build budget check keeps strict per-asset limits.
+    chunkSizeWarningLimit: 7_600,
+    rolldownOptions: {
+      output: {
+        codeSplitting: true,
       },
     },
   },

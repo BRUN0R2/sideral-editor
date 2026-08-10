@@ -2,18 +2,21 @@ import type {
   ActivationReason,
   BrokerMethod,
   CommandContribution,
+  CommandInvocation,
   JsonObject,
   JsonValue,
   NetworkPermission,
   PermissionSet,
   ProcessPermission,
   ProtocolFailure,
+  TextDocument,
   WorkspaceAccess,
 } from "@sideral/extension-sdk";
 
 export type SideralRuntimeKind = "worker";
 export type {
   CommandContribution,
+  CommandInvocation,
   NetworkPermission,
   PermissionSet,
   ProcessPermission,
@@ -38,6 +41,7 @@ export interface SideralExtensionInspection {
   readonly entry: string | null;
   readonly activationEvents: readonly string[];
   readonly commands: readonly CommandContribution[];
+  readonly keybindings: readonly KeybindingContribution[];
   readonly permissions: PermissionSet;
   readonly manifestBytes: number;
   readonly sizeBudget: ExtensionSizeBudget;
@@ -66,6 +70,25 @@ export interface RuntimeDiagnostic {
 
 export interface ExtensionCommandView extends CommandContribution {
   readonly extensionId: string;
+  readonly invocation: CommandInvocation;
+}
+
+export interface KeybindingContribution {
+  readonly command: string;
+  readonly key: string;
+  readonly mac?: string | null;
+  readonly languages?: readonly string[];
+}
+
+export interface ExtensionKeybindingView {
+  readonly extensionId: string;
+  readonly commandId: string;
+  readonly commandTitle: string;
+  readonly defaultKey: string;
+  readonly key: string | null;
+  readonly languages: readonly string[];
+  readonly userDefined: boolean;
+  readonly conflict: boolean;
 }
 
 export interface InstalledExtensionView {
@@ -79,6 +102,7 @@ export interface InstalledExtensionView {
   readonly permissions: PermissionSet;
   readonly activationEvents: readonly string[];
   readonly commands: readonly ExtensionCommandView[];
+  readonly keybindings: readonly ExtensionKeybindingView[];
   readonly runtime: RuntimeDiagnostic;
   readonly rollbackVersion: string | null;
 }
@@ -88,12 +112,14 @@ export interface ExtensionSnapshot {
   readonly revision: number;
   readonly extensions: readonly InstalledExtensionView[];
   readonly commands: readonly ExtensionCommandView[];
+  readonly keybindings: readonly ExtensionKeybindingView[];
 }
 
 export interface ClientHandshake {
   readonly connectionId: number;
   readonly snapshot: ExtensionSnapshot;
   readonly outputs: readonly OutputChannelView[];
+  readonly previews: readonly PreviewDocumentView[];
 }
 
 export interface HostHandshake {
@@ -101,6 +127,7 @@ export interface HostHandshake {
   readonly supportedApiVersions: readonly number[];
   readonly sessionId: number;
   readonly sessionToken: string;
+  readonly shutdownGraceMilliseconds: number;
 }
 
 export type DeactivationReason = "applicationShutdown" | "disabled" | "reload";
@@ -136,6 +163,7 @@ export type HostInstruction =
       readonly commandIds: readonly string[];
       readonly commandId: string;
       readonly arguments: readonly JsonValue[];
+      readonly activeTextDocument: TextDocument | null;
       readonly activationReason: ActivationReason;
       readonly startDeadlineMilliseconds: number;
       readonly activationDeadlineMilliseconds: number;
@@ -226,6 +254,16 @@ export interface OutputChannelView {
   readonly visible: boolean;
 }
 
+export interface PreviewDocumentView {
+  readonly resourceId: string;
+  readonly extensionId: string;
+  readonly title: string;
+  readonly format: "markdown";
+  readonly content: string;
+  readonly sourceUri: string | null;
+  readonly visible: boolean;
+}
+
 export type ExtensionClientInstruction =
   | { readonly kind: "snapshot"; readonly snapshot: ExtensionSnapshot }
   | {
@@ -235,7 +273,14 @@ export type ExtensionClientInstruction =
       readonly message: string;
     }
   | { readonly kind: "outputChanged"; readonly channel: OutputChannelView }
-  | { readonly kind: "outputDisposed"; readonly resourceId: string };
+  | { readonly kind: "outputDisposed"; readonly resourceId: string }
+  | { readonly kind: "previewChanged"; readonly preview: PreviewDocumentView }
+  | { readonly kind: "previewDisposed"; readonly resourceId: string };
+
+export type KeybindingUpdate =
+  | { readonly kind: "default" }
+  | { readonly kind: "disabled" }
+  | { readonly kind: "custom"; readonly key: string };
 
 export interface PackageInstallView {
   readonly id: string;
@@ -250,6 +295,7 @@ export interface PackageInstallView {
   readonly permissions: PermissionSet;
   readonly activationEvents: readonly string[];
   readonly commands: readonly CommandContribution[];
+  readonly keybindings: readonly KeybindingContribution[];
   readonly replacesVersion: string | null;
 }
 

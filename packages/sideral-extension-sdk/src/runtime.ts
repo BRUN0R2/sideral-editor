@@ -14,8 +14,14 @@ export type CommandHandler = (
   ...arguments_: readonly JsonValue[]
 ) => JsonValue | undefined | Promise<JsonValue | undefined>;
 
+export type TextEditorCommandHandler = (
+  document: TextDocument,
+  ...arguments_: readonly JsonValue[]
+) => JsonValue | undefined | Promise<JsonValue | undefined>;
+
 export interface CommandsApi {
   registerCommand(id: string, handler: CommandHandler): Disposable;
+  registerTextEditorCommand(id: string, handler: TextEditorCommandHandler): Disposable;
   executeCommand(id: string, ...arguments_: readonly JsonValue[]): Promise<JsonValue | undefined>;
 }
 
@@ -56,8 +62,25 @@ export interface OutputChannel extends Disposable {
   flush(): Promise<void>;
 }
 
+export type PreviewFormat = "markdown";
+
+export interface PreviewDocument {
+  readonly title: string;
+  readonly format: PreviewFormat;
+  readonly content: string;
+  readonly sourceUri?: string;
+}
+
+export interface PreviewPanel extends Disposable {
+  update(document: PreviewDocument): Promise<void>;
+  show(): Promise<void>;
+  hide(): Promise<void>;
+  toggle(): Promise<boolean>;
+}
+
 export interface WindowApi {
   createOutputChannel(name: string): OutputChannel;
+  createPreviewPanel(document: PreviewDocument): PreviewPanel;
   showInformationMessage(message: string): Promise<void>;
   showWarningMessage(message: string): Promise<void>;
   showErrorMessage(message: string): Promise<void>;

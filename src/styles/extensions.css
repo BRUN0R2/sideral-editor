@@ -531,3 +531,24 @@
     Consolas,
     monospace;
 }
+
+.command-palette__meta {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 9px;
+}
+
+.command-palette__meta kbd {
+  border: 1px solid #4a515c;
+  border-bottom-color: #59616d;
+  border-radius: 4px;
+  padding: 3px 6px;
+  color: #b8bdc5;
+  background: #1d2127;
+  font:
+    9px "Cascadia Code",
+    Consolas,
+    monospace;
+  white-space: nowrap;
+}

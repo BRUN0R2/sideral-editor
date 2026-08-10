@@ -12,9 +12,12 @@ import { useDesktopPreferences } from "../features/settings/useDesktopPreference
 import { ExtensionCommandPalette } from "../features/sideral-extensions/ExtensionCommandPalette";
 import { ExtensionNotices } from "../features/sideral-extensions/ExtensionNotices";
 import { ExtensionsView } from "../features/sideral-extensions/ExtensionsView";
+import type { ExtensionHostConnection } from "../features/sideral-extensions/host/connection";
+import { matchingExtensionCommand } from "../features/sideral-extensions/keybindings";
 import { useExtensionSystem } from "../features/sideral-extensions/useExtensionSystem";
 import { UpdateModal } from "../features/updates/UpdateModal";
 import { UpdateProvider, useUpdates } from "../features/updates/UpdateProvider";
+import { editorDocumentUri } from "../features/workspace/document-uri";
 import { useWorkspace } from "../features/workspace/useWorkspace";
 import { installWebViewShortcutGuard } from "./webview-shortcuts";
 
@@ -23,20 +26,28 @@ const loadEditorPane = async () => {
   return { default: editorModule.EditorPane };
 };
 const EditorPane = lazy(loadEditorPane);
+const MarkdownPreview = lazy(async () => {
+  const module = await import("../features/sideral-extensions/MarkdownPreview");
+  return { default: module.MarkdownPreview };
+});
 
-export function App() {
+interface AppProps {
+  readonly extensionHostConnection: Promise<ExtensionHostConnection> | null;
+}
+
+export function App({ extensionHostConnection }: AppProps) {
   const { bootstrap } = useI18n();
 
   useEffect(() => installWebViewShortcutGuard(), []);
 
   return (
     <UpdateProvider enabled={bootstrap.updaterEnabled} currentVersion={bootstrap.version}>
-      <Workbench />
+      <Workbench extensionHostConnection={extensionHostConnection} />
     </UpdateProvider>
   );
 }
 
-function Workbench() {
+function Workbench({ extensionHostConnection }: AppProps) {
   const { bootstrap, t } = useI18n();
   const desktopPreferences = useDesktopPreferences(
     bootstrap.desktopPreferences,
@@ -45,7 +56,8 @@ function Workbench() {
   const workspace = useWorkspace(desktopPreferences.preferences.autoSave);
   const extensions = useExtensionSystem(
     workspace.workspaceRoot?.path ?? null,
-    workspace.activeDocument?.languageId ?? null,
+    workspace.activeDocument,
+    extensionHostConnection,
   );
   const [activeView, setActiveView] = useState<"editor" | "extensions" | "settings">("editor");
   const [updateOpen, setUpdateOpen] = useState(false);
@@ -105,6 +117,39 @@ function Workbench() {
     workspace.openFolder,
     workspace.saveActiveDocument,
   ]);
+
+  useEffect(() => {
+    const handleExtensionShortcut = (event: KeyboardEvent): void => {
+      if (event.repeat || event.isComposing || extensions.status !== "ready") {
+        return;
+      }
+      const commandId = matchingExtensionCommand(
+        extensions.snapshot.keybindings,
+        event,
+        workspace.activeDocument?.languageId ?? null,
+      );
+      if (commandId === null) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const command = extensions.snapshot.commands.find((candidate) => candidate.id === commandId);
+      if (command?.invocation === "activeTextDocument") {
+        setActiveView("editor");
+      }
+      void extensions.executeCommand(commandId).catch(() => undefined);
+    };
+    window.addEventListener("keydown", handleExtensionShortcut);
+    return () => window.removeEventListener("keydown", handleExtensionShortcut);
+  }, [extensions, workspace.activeDocument?.languageId]);
+
+  const visiblePreview = extensions.previews.find((preview) => preview.visible) ?? null;
+  const previewSource =
+    visiblePreview?.sourceUri === null || visiblePreview === null
+      ? null
+      : (workspace.documents.find(
+          (document) => editorDocumentUri(document) === visiblePreview.sourceUri,
+        ) ?? null);
 
   const errorMessage = (() => {
     if (workspace.error === null) {
@@ -197,16 +242,36 @@ function Workbench() {
                   onReorder={workspace.reorderDocument}
                 />
                 <Suspense fallback={<div className="editor-pane" aria-busy="true" />}>
-                  <EditorPane
-                    documents={workspace.documents}
-                    activeDocumentId={workspace.activeDocument.id}
-                    active={activeView === "editor"}
-                    workspaceRootPath={workspace.workspaceRoot?.path ?? null}
-                    jsonSchemaTrustRevision={jsonSchemaTrustRevision}
-                    onContentChange={workspace.updateDocumentContent}
-                    onCursorChange={workspace.setCursor}
-                    onJsonSchemaTrustChange={notifyJsonSchemaTrustChange}
-                  />
+                  <div
+                    className="editor-surface"
+                    data-preview={visiblePreview !== null || undefined}
+                  >
+                    <div className="editor-surface__editor">
+                      <EditorPane
+                        documents={workspace.documents}
+                        activeDocumentId={workspace.activeDocument.id}
+                        active={activeView === "editor"}
+                        workspaceRootPath={workspace.workspaceRoot?.path ?? null}
+                        jsonSchemaTrustRevision={jsonSchemaTrustRevision}
+                        onContentChange={workspace.updateDocumentContent}
+                        onCursorChange={workspace.setCursor}
+                        onJsonSchemaTrustChange={notifyJsonSchemaTrustChange}
+                      />
+                    </div>
+                    {visiblePreview === null ? null : (
+                      <Suspense fallback={<aside className="markdown-preview" aria-busy="true" />}>
+                        <MarkdownPreview
+                          preview={visiblePreview}
+                          content={previewSource?.content ?? visiblePreview.content}
+                          onClose={() => {
+                            void extensions
+                              .dismissPreview(visiblePreview.resourceId)
+                              .catch(() => undefined);
+                          }}
+                        />
+                      </Suspense>
+                    )}
+                  </div>
                 </Suspense>
               </>
             ) : null}
@@ -214,6 +279,7 @@ function Workbench() {
           <SettingsView
             active={activeView === "settings"}
             desktopPreferences={desktopPreferences}
+            extensions={extensions}
             onJsonSchemaTrustChange={notifyJsonSchemaTrustChange}
             onOpenUpdate={() => setUpdateOpen(true)}
           />

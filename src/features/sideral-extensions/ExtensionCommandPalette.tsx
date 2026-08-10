@@ -89,24 +89,33 @@ export function ExtensionCommandPalette({
           {commands.length === 0 ? (
             <p>{t("commands.paletteEmpty")}</p>
           ) : (
-            commands.map((command, index) => (
-              <button
-                type="button"
-                role="option"
-                aria-selected={index === selectedIndex}
-                disabled={system.busyExtensionIds.has(command.extensionId)}
-                className={index === selectedIndex ? "command-palette__item--selected" : ""}
-                key={command.id}
-                onMouseEnter={() => setSelectedIndex(index)}
-                onClick={() => execute(command)}
-              >
-                <span>
-                  {command.category === undefined ? "" : `${command.category}: `}
-                  {command.title}
-                </span>
-                <small>{command.id}</small>
-              </button>
-            ))
+            commands.map((command, index) => {
+              const shortcut = system.snapshot.keybindings.find(
+                (binding) =>
+                  binding.commandId === command.id && binding.key !== null && !binding.conflict,
+              )?.key;
+              return (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={index === selectedIndex}
+                  disabled={system.busyExtensionIds.has(command.extensionId)}
+                  className={index === selectedIndex ? "command-palette__item--selected" : ""}
+                  key={command.id}
+                  onMouseEnter={() => setSelectedIndex(index)}
+                  onClick={() => execute(command)}
+                >
+                  <span>
+                    {command.category === undefined ? "" : `${command.category}: `}
+                    {command.title}
+                  </span>
+                  <span className="command-palette__meta">
+                    {shortcut === undefined || shortcut === null ? null : <kbd>{shortcut}</kbd>}
+                    <small>{command.id}</small>
+                  </span>
+                </button>
+              );
+            })
           )}
         </div>
       </section>

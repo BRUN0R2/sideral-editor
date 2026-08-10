@@ -21,6 +21,7 @@ export interface EditorDocument {
   readonly content: string;
   readonly savedContent: string;
   readonly languageId: string;
+  readonly version: number;
 }
 
 export interface CursorPosition {

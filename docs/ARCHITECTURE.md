@@ -22,12 +22,12 @@ React workbench
   ├─ i18n provider ────── one bootstrap command ─── locale/settings modules
   ├─ Monaco pane ──────── owned models + native JSON schema resolver
   ├─ extension client ─── monotonic Channel snapshots ── native extension service
+  ├─ extension supervisor ── one generation-scoped Web Worker per active extension
   └─ update provider ──── official Tauri updater ── signed release endpoint
 
 Native extension service
   ├─ signed package registry + publisher trust + active/rollback slots
-  ├─ capability broker ── canonical workspace, isolated data, pinned network, fixed processes
-  └─ hidden supervisor WebView ── one generation-scoped Web Worker per active extension
+  └─ capability broker ── canonical workspace, isolated data, pinned network, fixed processes
 ```
 
 The frontend owns presentation state. Rust owns filesystem access, settings,
@@ -52,13 +52,14 @@ compressed and uncompressed budgets before installation and again before every
 load. Publisher trust is attached to the public-key digest, while install uses
 the reviewed package hash as an optimistic precondition.
 
-The hidden host negotiates protocol/API versions with Rust and owns no persisted
-authority. It creates one Worker per active extension, verifies the bundle hash
-again in the WebView, serializes commands per extension and keeps independent
-extensions parallel. Explicit acknowledgements drive every state transition;
-deadlines terminate invalid work and never act as startup coordination. A
-generation invalidated by disable, reload or host failure cannot publish late
-state.
+The main document owns one trusted supervisor for its complete lifetime. The
+supervisor establishes its native session before the extension system is
+initialized, creates one Worker per active extension and never exposes its
+session token to Worker code. It verifies the bundle hash again before Worker
+startup, serializes commands per extension and keeps independent extensions
+parallel. Explicit acknowledgements drive every state transition; deadlines
+terminate invalid work and never act as startup coordination. A generation
+invalidated by disable, reload or host failure cannot publish late state.
 
 The native broker is the sole authority for workspace, storage, configuration,
 network, process and window requests. The compatibility manifest reader is
@@ -137,14 +138,14 @@ semantics are recorded in
 | Application shortcuts | `Workbench` | Remove listener on effect cleanup |
 | WebView shortcut guard | `App` | Remove listener on effect cleanup |
 | Desktop preference queue | `useDesktopPreferences` | Serial queue drains after every optimistic save |
-| Auto-save delays | `useWorkspace` | Clear and recreate on content, preference or close-state changes |
+| Auto-save debounce | `useWorkspace` | Clear and recreate on content, preference or close-state changes |
 | Tray icon and menu | Tauri application | Released when the application exits |
 | Locale focus listener | `SettingsView` | Exists only while the settings view is selected |
 | Updater `Resource` | `UpdateProvider` | Close on replacement or provider cleanup |
 | In-flight reads/saves | `useWorkspace` maps | Deduplicated and removed in `finally` |
 | Temporary files | Rust RAII | Closed automatically; persisted atomically |
 | Extension client channels | Native extension service | Removed by connection ID; failed channels are pruned |
-| Hidden extension host | Native extension service | Destroyed on host fault or application exit; recreated on demand |
+| Extension supervisor session | Main document | Session-scoped disconnect on document teardown; native invalidation on main-window destruction |
 | Extension Worker | Host supervisor | Graceful reverse-order disposal, then unconditional termination |
 | Worker bundle Blob URL | `ManagedWorker` | Revoked with Worker termination |
 | Broker request | Native capability broker | Bounded semaphore slot plus generation/request cancellation record |
@@ -159,10 +160,12 @@ focus after a user copies a file. Desktop preference changes remain interactive
 while complete snapshots are persisted in order. Update checks run
 once per application session plus explicit user requests.
 
-Extension startup also has no delay or polling path. Native instructions and
-Worker acknowledgements advance the state machine immediately. Finite
-deadlines exist only to terminate a failed owner. Cancellation, deactivation and
-host replacement invalidate the affected generation before any recovery starts.
+Extension startup also has no delay or polling path. The main document connects
+the supervisor first, and native initialization then validates the established
+session synchronously. Native instructions and Worker acknowledgements advance
+the state machine immediately. Finite deadlines exist only to terminate a
+failed owner. Cancellation, deactivation and host replacement invalidate the
+affected generation before any recovery starts.
 
 ## JSON schema boundary
 

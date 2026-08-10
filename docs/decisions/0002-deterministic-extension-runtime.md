@@ -23,9 +23,9 @@ dormant -> starting -> activating -> active -> stopping -> stopped
 
 - Rust owns the registry, trust store, runtime state machine, generations,
   command routing, capability enforcement and persisted data.
-- One hidden WebView owns the supervisor. It negotiates protocol and API
-  versions with Rust and never exposes its random native-session token to an
-  extension.
+- The main document owns one trusted supervisor for its complete lifetime. It
+  establishes and negotiates the native session before initialization and never
+  exposes its random native-session token to an extension Worker.
 - Every active extension owns one ESM Web Worker and one serial command lane.
   Different extensions can start and execute independently.
 - `ready`, `activated`, `commandResult` and `deactivated` are explicit protocol
@@ -69,10 +69,11 @@ grants deserve the same scrutiny as installing a native tool.
 
 The UI receives monotonic snapshots and shows state, activation reason, last
 activation duration, activation count, command count, failure count, last
-command duration and the latest structured error. Host failure destroys the
-hidden host, cancels its broker work and advances every generation. The next
-authorized operation creates a clean host; a failed extension itself requires
-an explicit restart.
+command duration and the latest structured error. Host failure terminates all
+owned Workers, cancels broker work, invalidates the native session and advances
+every generation. A failed extension requires an explicit restart; a failed
+supervisor requires a fresh main-document lifecycle instead of an implicit
+retry.
 
 ## Consequences
 

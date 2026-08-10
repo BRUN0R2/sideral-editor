@@ -28,14 +28,25 @@ export interface WorkerRuntime {
   readonly entry: string;
 }
 
+export type CommandInvocation = "workbench" | "activeTextDocument";
+
 export interface CommandContribution {
   readonly id: string;
   readonly title: string;
   readonly category?: string;
+  readonly invocation?: CommandInvocation;
+}
+
+export interface KeybindingContribution {
+  readonly command: string;
+  readonly key: string;
+  readonly mac?: string;
+  readonly languages?: readonly string[];
 }
 
 export interface Contributions {
   readonly commands?: readonly CommandContribution[];
+  readonly keybindings?: readonly KeybindingContribution[];
 }
 
 export interface ExtensionManifest {

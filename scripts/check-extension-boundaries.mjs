@@ -1,4 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 
@@ -25,6 +25,11 @@ const textExtensions = new Set([
   ".tsx",
 ]);
 const ignoredDirectories = new Set(["dist", "node_modules", "target"]);
+const retiredHostArtifacts = [
+  "extension-host.html",
+  "src/extension-host.ts",
+  "src-tauri/capabilities/extension-host.json",
+];
 
 const rules = [
   {
@@ -67,6 +72,17 @@ async function collectTextFiles(relativeRoot) {
 }
 
 const violations = [];
+for (const artifact of retiredHostArtifacts) {
+  try {
+    await access(path.join(repositoryRoot, artifact));
+    violations.push(`${artifact}: retired hidden-host artifact`);
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
 for (const rule of rules) {
   for (const root of rule.roots) {
     for (const file of await collectTextFiles(root)) {
@@ -87,6 +103,40 @@ const workerSource = await readFile(
 if (/@tauri-apps|\binvoke\s*\(/u.test(workerSource)) {
   violations.push(
     "src/features/sideral-extensions/host/worker-entry.ts: worker cannot access native IPC",
+  );
+}
+
+const serviceSource = await readFile(
+  path.join(repositoryRoot, "src-tauri/src/sideral_extensions/service.rs"),
+  "utf8",
+);
+if (
+  /WebviewWindowBuilder|WebviewUrl::App|HOST_CONNECT_DEADLINE|ensure_host_connected|host_signal/u.test(
+    serviceSource,
+  )
+) {
+  violations.push(
+    "src-tauri/src/sideral_extensions/service.rs: extension startup must use an explicit main-document session",
+  );
+}
+
+const hostConnectionSource = await readFile(
+  path.join(repositoryRoot, "src/features/sideral-extensions/host/connection.ts"),
+  "utf8",
+);
+if (/setTimeout|setInterval|\bsleep\b/u.test(hostConnectionSource)) {
+  violations.push(
+    "src/features/sideral-extensions/host/connection.ts: startup coordination cannot use timers or polling",
+  );
+}
+
+const devPortSource = await readFile(
+  path.join(repositoryRoot, "scripts/prepare-dev-port.ps1"),
+  "utf8",
+);
+if (/Start-Sleep/iu.test(devPortSource)) {
+  violations.push(
+    "scripts/prepare-dev-port.ps1: process cleanup must wait on process state instead of polling",
   );
 }
 

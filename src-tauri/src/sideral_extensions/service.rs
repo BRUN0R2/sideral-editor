@@ -9,12 +9,13 @@ use std::{
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use semver::Version;
 use serde_json::Value;
+use sideral_extension_core::CommandInvocation;
 use tauri::{
-    AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    AppHandle, Manager, WebviewWindow,
     ipc::{Channel, Response},
 };
 use tokio::{
-    sync::{Mutex as AsyncMutex, OwnedMutexGuard, Semaphore, oneshot, watch},
+    sync::{Mutex as AsyncMutex, OwnedMutexGuard, Semaphore, oneshot},
     task::JoinSet,
 };
 
@@ -26,27 +27,27 @@ use super::{
         ClientHandshake, DeactivationReason, EXTENSION_PROTOCOL_VERSION,
         ExtensionClientInstruction, ExtensionRuntimeState, ExtensionSnapshot, HostEvent,
         HostHandshake, HostInstruction, PackageInspectionResult, ProtocolFailure,
-        RuntimeDiagnostic, WORKER_ACTIVATION_DEADLINE_MILLISECONDS,
+        RuntimeDiagnostic, TextDocumentView, WORKER_ACTIVATION_DEADLINE_MILLISECONDS,
         WORKER_SHUTDOWN_GRACE_MILLISECONDS, WORKER_START_DEADLINE_MILLISECONDS,
     },
     registry::ExtensionRegistry,
 };
 
-const EXTENSION_HOST_LABEL: &str = "extension-host";
 const MAIN_WINDOW_LABEL: &str = "main";
-const HOST_CONNECT_DEADLINE_MILLISECONDS: u64 = 5_000;
 const HOST_RESPONSE_MARGIN_MILLISECONDS: u64 = 2_000;
 const MAX_BROKER_REQUEST_ID_BYTES: usize = 128;
 const MAX_CONCURRENT_ACTIVATIONS: usize = 8;
 const MAX_EXTENSION_CLIENTS: usize = 4;
 const MAX_COMMAND_ARGUMENT_BYTES: usize = 256 * 1024;
 const MAX_COMMAND_RESULT_BYTES: usize = 1024 * 1024;
+const MAX_ACTIVE_DOCUMENT_BYTES: usize = 4 * 1024 * 1024;
 const MAX_PROTOCOL_FAILURE_MESSAGE_BYTES: usize = 4 * 1024;
 
 type PendingOutcome = Result<Option<Value>, ExtensionError>;
 type PendingRequests = HashMap<String, oneshot::Sender<PendingOutcome>>;
 
 struct HostConnection {
+    session_id: u64,
     session_token: String,
     channel: Channel<HostInstruction>,
 }
@@ -70,12 +71,10 @@ impl RuntimeCoordinator {
 }
 
 struct ExtensionService {
-    app: AppHandle,
     registry: Mutex<ExtensionRegistry>,
     broker: CapabilityBroker,
     runtimes: Mutex<RuntimeCoordinator>,
     host: Mutex<Option<HostConnection>>,
-    host_start: Mutex<()>,
     clients: Mutex<BTreeMap<u64, Channel<ExtensionClientInstruction>>>,
     pending: Mutex<PendingRequests>,
     mutation_gate: Arc<AsyncMutex<()>>,
@@ -83,7 +82,6 @@ struct ExtensionService {
     next_session_id: AtomicU64,
     next_client_id: AtomicU64,
     next_snapshot_sequence: AtomicU64,
-    host_signal: watch::Sender<u64>,
 }
 
 #[derive(Clone)]
@@ -104,17 +102,14 @@ impl SideralExtensionState {
             .join("extensions");
         let registry = ExtensionRegistry::load(root.clone(), app_version)?;
         let broker = CapabilityBroker::new(root)?;
-        let (host_signal, _) = watch::channel(0_u64);
         Ok(Self {
             service: Arc::new(ExtensionService {
-                app: app.clone(),
                 registry: Mutex::new(registry),
                 broker,
                 runtimes: Mutex::new(RuntimeCoordinator {
                     extensions: BTreeMap::new(),
                 }),
                 host: Mutex::new(None),
-                host_start: Mutex::new(()),
                 clients: Mutex::new(BTreeMap::new()),
                 pending: Mutex::new(HashMap::new()),
                 mutation_gate: Arc::new(AsyncMutex::new(())),
@@ -122,35 +117,8 @@ impl SideralExtensionState {
                 next_session_id: AtomicU64::new(1),
                 next_client_id: AtomicU64::new(1),
                 next_snapshot_sequence: AtomicU64::new(1),
-                host_signal,
             }),
         })
-    }
-
-    pub fn start_host(&self, app: &AppHandle) -> Result<(), ExtensionError> {
-        let _start = lock(&self.service.host_start, "extension host startup")?;
-        if app.get_webview_window(EXTENSION_HOST_LABEL).is_some() {
-            return Ok(());
-        }
-        WebviewWindowBuilder::new(
-            app,
-            EXTENSION_HOST_LABEL,
-            WebviewUrl::App("extension-host.html".into()),
-        )
-        .title("Sideral Extension Host")
-        .visible(false)
-        .focused(false)
-        .focusable(false)
-        .decorations(false)
-        .resizable(false)
-        .skip_taskbar(true)
-        .devtools(false)
-        .inner_size(1.0, 1.0)
-        .build()
-        .map_err(|error| {
-            ExtensionError::Runtime(format!("could not start extension host: {error}"))
-        })?;
-        Ok(())
     }
 
     pub fn connect_host(
@@ -158,7 +126,7 @@ impl SideralExtensionState {
         window: &WebviewWindow,
         channel: Channel<HostInstruction>,
     ) -> Result<HostHandshake, ExtensionError> {
-        require_window(window, EXTENSION_HOST_LABEL)?;
+        require_window(window, MAIN_WINDOW_LABEL)?;
         let mut token_bytes = [0_u8; 32];
         getrandom::fill(&mut token_bytes).map_err(|error| {
             ExtensionError::Runtime(format!("could not create host session token: {error}"))
@@ -169,13 +137,14 @@ impl SideralExtensionState {
         {
             let mut host = lock(&self.service.host, "extension host")?;
             *host = Some(HostConnection {
+                session_id,
                 session_token: session_token.clone(),
                 channel,
             });
         }
+        self.service.broker.cancel_all();
         lock(&self.service.runtimes, "extension runtime state")?.reset_for_new_host();
         self.fail_all_pending(ExtensionError::HostUnavailable)?;
-        let _ = self.service.host_signal.send(session_id);
         self.publish_snapshot()?;
 
         Ok(HostHandshake {
@@ -183,6 +152,7 @@ impl SideralExtensionState {
             supported_api_versions: vec![1],
             session_id,
             session_token,
+            shutdown_grace_milliseconds: WORKER_SHUTDOWN_GRACE_MILLISECONDS,
         })
     }
 
@@ -205,6 +175,7 @@ impl SideralExtensionState {
             connection_id,
             snapshot: self.snapshot()?,
             outputs: self.service.broker.output_views()?,
+            previews: self.service.broker.preview_views()?,
         })
     }
 
@@ -215,6 +186,30 @@ impl SideralExtensionState {
     ) -> Result<(), ExtensionError> {
         require_window(window, MAIN_WINDOW_LABEL)?;
         lock(&self.service.clients, "extension clients")?.remove(&connection_id);
+        Ok(())
+    }
+
+    pub fn disconnect_host_session(
+        &self,
+        window: &WebviewWindow,
+        session_id: u64,
+    ) -> Result<(), ExtensionError> {
+        require_window(window, MAIN_WINDOW_LABEL)?;
+        let disconnected = {
+            let mut host = lock(&self.service.host, "extension host")?;
+            if host
+                .as_ref()
+                .is_some_and(|connection| connection.session_id == session_id)
+            {
+                *host = None;
+                true
+            } else {
+                false
+            }
+        };
+        if disconnected {
+            self.reset_disconnected_host()?;
+        }
         Ok(())
     }
 
@@ -250,6 +245,7 @@ impl SideralExtensionState {
         &self,
         command_id: String,
         arguments: Vec<Value>,
+        active_text_document: Option<TextDocumentView>,
     ) -> Result<Option<Value>, ExtensionError> {
         validate_command_id(&command_id)?;
         let argument_bytes = serde_json::to_vec(&arguments)
@@ -260,12 +256,21 @@ impl SideralExtensionState {
                 "command arguments exceed {MAX_COMMAND_ARGUMENT_BYTES} bytes"
             )));
         }
-        self.ensure_host_connected().await?;
+        self.require_host_connected()?;
 
-        let (extension_id, api_version, bundle_sha256, command_ids) = {
+        let (extension_id, api_version, bundle_sha256, command_ids, invocation) = {
             let registry = lock(&self.service.registry, "extension registry")?;
             let installed = registry.extension_for_command(&command_id)?;
             registry.active(&installed.active.manifest.id)?;
+            let invocation = installed
+                .active
+                .manifest
+                .contributes
+                .commands
+                .iter()
+                .find(|command| command.id == command_id)
+                .map(|command| command.invocation)
+                .ok_or_else(|| ExtensionError::NotFound(command_id.clone()))?;
             (
                 installed.active.manifest.id.clone(),
                 installed.active.manifest.api_version,
@@ -278,8 +283,22 @@ impl SideralExtensionState {
                     .iter()
                     .map(|command| command.id.clone())
                     .collect::<Vec<_>>(),
+                invocation,
             )
         };
+        let active_text_document = match invocation {
+            CommandInvocation::Workbench => None,
+            CommandInvocation::ActiveTextDocument => {
+                Some(active_text_document.ok_or_else(|| {
+                    ExtensionError::InvalidRequest(format!(
+                        "command {command_id} requires an active text document"
+                    ))
+                })?)
+            }
+        };
+        if let Some(document) = &active_text_document {
+            validate_active_text_document(document)?;
+        }
         let activation_reason = ActivationReason::Command {
             command_id: command_id.clone(),
         };
@@ -328,6 +347,7 @@ impl SideralExtensionState {
             command_ids,
             command_id,
             arguments,
+            active_text_document,
             activation_reason,
             start_deadline_milliseconds: WORKER_START_DEADLINE_MILLISECONDS,
             activation_deadline_milliseconds: WORKER_ACTIVATION_DEADLINE_MILLISECONDS,
@@ -460,7 +480,7 @@ impl SideralExtensionState {
         extension_id: String,
         activation_reason: ActivationReason,
     ) -> Result<(), ExtensionError> {
-        self.ensure_host_connected().await?;
+        self.require_host_connected()?;
         let (api_version, bundle_sha256, command_ids) = {
             let registry = lock(&self.service.registry, "extension registry")?;
             let installed = registry.active(&extension_id)?;
@@ -560,7 +580,7 @@ impl SideralExtensionState {
         session_token: &str,
         event: HostEvent,
     ) -> Result<(), ExtensionError> {
-        require_window(window, EXTENSION_HOST_LABEL)?;
+        require_window(window, MAIN_WINDOW_LABEL)?;
         self.validate_host_session(session_token)?;
         match event {
             HostEvent::StateChanged {
@@ -702,13 +722,7 @@ impl SideralExtensionState {
                 self.fail_all_pending(ExtensionError::Runtime(error.message))?;
                 lock(&self.service.runtimes, "extension runtime state")?.reset_for_new_host();
                 *lock(&self.service.host, "extension host")? = None;
-                let _ = self.service.host_signal.send(0);
                 self.service.broker.cancel_all();
-                window.destroy().map_err(|destroy_error| {
-                    ExtensionError::Runtime(format!(
-                        "could not destroy failed extension host: {destroy_error}"
-                    ))
-                })?;
             }
         }
         self.publish_snapshot()
@@ -720,7 +734,7 @@ impl SideralExtensionState {
         session_token: &str,
         request: BrokerRequest,
     ) -> Result<BrokerResponse, ExtensionError> {
-        require_window(window, EXTENSION_HOST_LABEL)?;
+        require_window(window, MAIN_WINDOW_LABEL)?;
         self.validate_host_session(session_token)?;
         validate_protocol(request.protocol_version)?;
         validate_broker_request_id(&request.request_id)?;
@@ -747,7 +761,7 @@ impl SideralExtensionState {
         generation: u64,
         request_id: &str,
     ) -> Result<(), ExtensionError> {
-        require_window(window, EXTENSION_HOST_LABEL)?;
+        require_window(window, MAIN_WINDOW_LABEL)?;
         self.validate_host_session(session_token)?;
         validate_protocol(protocol_version)?;
         validate_broker_request_id(request_id)?;
@@ -764,7 +778,7 @@ impl SideralExtensionState {
         extension_id: &str,
         generation: u64,
     ) -> Result<Response, ExtensionError> {
-        require_window(window, EXTENSION_HOST_LABEL)?;
+        require_window(window, MAIN_WINDOW_LABEL)?;
         self.validate_host_session(session_token)?;
         if !self.generation_matches(extension_id, generation)? {
             return Err(ExtensionError::Conflict(format!(
@@ -777,19 +791,13 @@ impl SideralExtensionState {
     }
 
     pub fn disconnect_host(&self, window: &tauri::Window) {
-        if window.label() != EXTENSION_HOST_LABEL {
+        if window.label() != MAIN_WINDOW_LABEL {
             return;
         }
         if let Ok(mut host) = self.service.host.lock() {
             *host = None;
         }
-        let _ = self.service.host_signal.send(0);
-        self.service.broker.cancel_all();
-        let _ = self.fail_all_pending(ExtensionError::HostUnavailable);
-        if let Ok(mut runtimes) = self.service.runtimes.lock() {
-            runtimes.reset_for_new_host();
-        }
-        let _ = self.publish_snapshot();
+        let _ = self.reset_disconnected_host();
     }
 
     pub fn send_shutdown(&self) {
@@ -799,6 +807,15 @@ impl SideralExtensionState {
             reason: DeactivationReason::ApplicationShutdown,
             grace_milliseconds: WORKER_SHUTDOWN_GRACE_MILLISECONDS,
         });
+    }
+
+    pub fn dismiss_preview(
+        &self,
+        window: &WebviewWindow,
+        resource_id: &str,
+    ) -> Result<(), ExtensionError> {
+        require_window(window, MAIN_WINDOW_LABEL)?;
+        self.service.broker.dismiss_preview(self, resource_id)
     }
 
     pub fn registry(&self) -> Result<MutexGuard<'_, ExtensionRegistry>, ExtensionError> {
@@ -829,6 +846,14 @@ impl SideralExtensionState {
             self.registry()?
                 .install_package(path, expected_package_sha256, approve_publisher)?;
         Ok(extension_id)
+    }
+
+    pub fn update_keybinding_in_registry(
+        &self,
+        command_id: &str,
+        update: super::protocol::KeybindingUpdate,
+    ) -> Result<(), ExtensionError> {
+        self.registry()?.update_keybinding(command_id, update)
     }
 
     pub fn preflight_install(
@@ -1031,23 +1056,11 @@ impl SideralExtensionState {
         }
     }
 
-    async fn ensure_host_connected(&self) -> Result<(), ExtensionError> {
-        let mut host_receiver = self.service.host_signal.subscribe();
-        if *host_receiver.borrow() != 0 {
-            return Ok(());
-        }
-        self.start_host(&self.service.app)?;
-        tokio::time::timeout(
-            std::time::Duration::from_millis(HOST_CONNECT_DEADLINE_MILLISECONDS),
-            host_receiver.changed(),
-        )
-        .await
-        .map_err(|_| ExtensionError::HostUnavailable)?
-        .map_err(|_| ExtensionError::HostUnavailable)?;
-        if *host_receiver.borrow() == 0 {
-            Err(ExtensionError::HostUnavailable)
-        } else {
+    pub fn require_host_connected(&self) -> Result<(), ExtensionError> {
+        if lock(&self.service.host, "extension host")?.is_some() {
             Ok(())
+        } else {
+            Err(ExtensionError::HostUnavailable)
         }
     }
 
@@ -1120,6 +1133,13 @@ impl SideralExtensionState {
         Ok(())
     }
 
+    fn reset_disconnected_host(&self) -> Result<(), ExtensionError> {
+        self.service.broker.cancel_all();
+        self.fail_all_pending(ExtensionError::HostUnavailable)?;
+        lock(&self.service.runtimes, "extension runtime state")?.reset_for_new_host();
+        self.publish_snapshot()
+    }
+
     fn next_request_id(&self) -> String {
         format!(
             "request-{}",
@@ -1176,6 +1196,49 @@ fn validate_command_id(command_id: &str) -> Result<(), ExtensionError> {
         return Err(ExtensionError::InvalidRequest(
             "extension command id is invalid".to_owned(),
         ));
+    }
+    Ok(())
+}
+
+fn validate_active_text_document(document: &TextDocumentView) -> Result<(), ExtensionError> {
+    if document.uri.is_empty() || document.uri.len() > 4_096 {
+        return Err(ExtensionError::InvalidRequest(
+            "active document URI is invalid".to_owned(),
+        ));
+    }
+    let uri = url::Url::parse(&document.uri).map_err(|error| {
+        ExtensionError::InvalidRequest(format!("active document URI is invalid: {error}"))
+    })?;
+    if !matches!(uri.scheme(), "file" | "untitled")
+        || !uri.username().is_empty()
+        || uri.password().is_some()
+        || uri.query().is_some()
+        || uri.fragment().is_some()
+    {
+        return Err(ExtensionError::InvalidRequest(
+            "active document must use a clean file or untitled URI".to_owned(),
+        ));
+    }
+    if document.language_id.is_empty()
+        || document.language_id.len() > 64
+        || !document
+            .language_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'+' | b'.'))
+    {
+        return Err(ExtensionError::InvalidRequest(
+            "active document language id is invalid".to_owned(),
+        ));
+    }
+    if document.version == 0 {
+        return Err(ExtensionError::InvalidRequest(
+            "active document version must be positive".to_owned(),
+        ));
+    }
+    if document.content.len() > MAX_ACTIVE_DOCUMENT_BYTES || document.content.contains('\0') {
+        return Err(ExtensionError::InvalidRequest(format!(
+            "active document must be UTF-8 text within {MAX_ACTIVE_DOCUMENT_BYTES} bytes"
+        )));
     }
     Ok(())
 }

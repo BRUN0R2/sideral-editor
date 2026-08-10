@@ -13,10 +13,13 @@ import type {
   NetworkRequest,
   NetworkResponse,
   OutputChannel,
+  PreviewDocument,
+  PreviewPanel,
   ProcessRequest,
   ProcessResult,
   ProtocolFailure,
   TextDocument,
+  TextEditorCommandHandler,
   WorkerToHostMessage,
 } from "@sideral/extension-sdk";
 
@@ -65,7 +68,11 @@ interface BoundaryRecord extends Record<string, unknown> {
 }
 
 const scope = globalThis as unknown as WorkerScope;
-const handlers = new Map<string, CommandHandler>();
+type RegisteredCommand =
+  | { readonly kind: "command"; readonly handler: CommandHandler }
+  | { readonly kind: "textEditor"; readonly handler: TextEditorCommandHandler };
+
+const handlers = new Map<string, RegisteredCommand>();
 const pendingBrokerRequests = new Map<string, PendingBrokerRequest>();
 const commandCancellations = new Map<string, AbortController>();
 const subscriptions: Disposable[] = [];
@@ -85,6 +92,7 @@ let initialized = false;
 let activated = false;
 let deactivating = false;
 let currentOperationSignal: AbortSignal | null = null;
+let currentTextDocument: TextDocument | undefined;
 let commandQueue = Promise.resolve();
 let deactivationOperation: Promise<ProtocolFailure | undefined> | null = null;
 
@@ -118,6 +126,7 @@ async function handleMessage(value: unknown): Promise<void> {
           message.requestId,
           message.commandId,
           message.arguments,
+          message.activeTextDocument,
           cancellation.signal,
         ),
       );
@@ -182,6 +191,7 @@ async function executeCommand(
   requestId: string,
   commandId: string,
   arguments_: readonly JsonValue[],
+  activeTextDocument: TextDocument | undefined,
   signal: AbortSignal,
 ): Promise<void> {
   try {
@@ -192,7 +202,7 @@ async function executeCommand(
       throw abortError();
     }
     currentOperationSignal = signal;
-    const result = await invokeRegisteredCommand(commandId, arguments_);
+    const result = await invokeRegisteredCommand(commandId, arguments_, activeTextDocument);
     if (signal.aborted) {
       throw abortError();
     }
@@ -298,26 +308,14 @@ function createApi(): ExtensionApi {
   return {
     commands: {
       registerCommand(id, handler) {
-        if (!allowedCommands.has(id)) {
-          throw new Error(`Command ${id} is not declared in the extension manifest.`);
-        }
-        if (handlers.has(id)) {
-          throw new Error(`Command ${id} is already registered.`);
-        }
-        handlers.set(id, handler);
-        let disposed = false;
-        return {
-          dispose() {
-            if (!disposed) {
-              disposed = true;
-              handlers.delete(id);
-            }
-          },
-        };
+        return registerCommandHandler(id, { kind: "command", handler });
+      },
+      registerTextEditorCommand(id, handler) {
+        return registerCommandHandler(id, { kind: "textEditor", handler });
       },
       executeCommand(id, ...arguments_) {
         if (allowedCommands.has(id)) {
-          return invokeRegisteredCommand(id, arguments_);
+          return invokeRegisteredCommand(id, arguments_, currentTextDocument);
         }
         return brokerRequest("commands.execute", { commandId: id, arguments: arguments_ });
       },
@@ -354,6 +352,7 @@ function createApi(): ExtensionApi {
     },
     window: {
       createOutputChannel: createOutputChannel,
+      createPreviewPanel,
       async showInformationMessage(message) {
         await brokerRequest("window.showInformationMessage", { message });
       },
@@ -396,13 +395,14 @@ function createApi(): ExtensionApi {
 async function invokeRegisteredCommand(
   commandId: string,
   arguments_: readonly JsonValue[],
+  activeTextDocument: TextDocument | undefined,
 ): Promise<JsonValue | undefined> {
   assertJsonValue(arguments_, "command arguments", MAX_BROKER_PAYLOAD_BYTES);
   if (!activated || deactivating) {
     throw new Error("The extension is not active.");
   }
-  const handler = handlers.get(commandId);
-  if (handler === undefined) {
+  const command = handlers.get(commandId);
+  if (command === undefined) {
     throw new Error(`The extension did not register command ${commandId}.`);
   }
   if (localCommandStack.includes(commandId)) {
@@ -412,11 +412,39 @@ async function invokeRegisteredCommand(
     throw new Error("The local command execution depth limit was exceeded.");
   }
   localCommandStack.push(commandId);
+  const previousDocument = currentTextDocument;
+  currentTextDocument = activeTextDocument;
   try {
-    return await handler(...arguments_);
+    if (command.kind === "textEditor") {
+      if (activeTextDocument === undefined) {
+        throw new Error(`Command ${commandId} requires an active text document.`);
+      }
+      return await command.handler(activeTextDocument, ...arguments_);
+    }
+    return await command.handler(...arguments_);
   } finally {
+    currentTextDocument = previousDocument;
     localCommandStack.pop();
   }
+}
+
+function registerCommandHandler(id: string, command: RegisteredCommand): Disposable {
+  if (!allowedCommands.has(id)) {
+    throw new Error(`Command ${id} is not declared in the extension manifest.`);
+  }
+  if (handlers.has(id)) {
+    throw new Error(`Command ${id} is already registered.`);
+  }
+  handlers.set(id, command);
+  let disposed = false;
+  return {
+    dispose() {
+      if (!disposed) {
+        disposed = true;
+        handlers.delete(id);
+      }
+    },
+  };
 }
 
 async function requestNetwork(request: NetworkRequest): Promise<NetworkResponse> {
@@ -547,6 +575,84 @@ function createOutputChannel(name: string): OutputChannel {
       disposed = true;
       await brokerRequest("window.output.dispose", { resourceId: await resource });
     },
+  };
+}
+
+function createPreviewPanel(document: PreviewDocument): PreviewPanel {
+  const resource = brokerRequest("window.preview.create", previewPayload(document)).then(
+    (value) => {
+      if (typeof value !== "string") {
+        throw new Error("The preview broker returned an invalid resource id.");
+      }
+      return value;
+    },
+  );
+  void resource.catch(() => undefined);
+  let disposed = false;
+  let tail = Promise.resolve();
+  let disposal: Promise<void> | null = null;
+
+  const enqueue = <Result>(operation: (resourceId: string) => Promise<Result>): Promise<Result> => {
+    if (disposed) {
+      return Promise.reject(new Error("The preview panel is disposed."));
+    }
+    const result = tail.then(async () => operation(await resource));
+    tail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  };
+
+  return {
+    update(nextDocument) {
+      return enqueue(async (resourceId) => {
+        await brokerRequest("window.preview.update", {
+          resourceId,
+          ...previewPayload(nextDocument),
+        });
+      });
+    },
+    show() {
+      return enqueue(async (resourceId) => {
+        await brokerRequest("window.preview.show", { resourceId });
+      });
+    },
+    hide() {
+      return enqueue(async (resourceId) => {
+        await brokerRequest("window.preview.hide", { resourceId });
+      });
+    },
+    toggle() {
+      return enqueue(async (resourceId) => {
+        const visible = await brokerRequest("window.preview.toggle", { resourceId });
+        if (typeof visible !== "boolean") {
+          throw new Error("The preview broker returned an invalid visibility state.");
+        }
+        return visible;
+      });
+    },
+    dispose() {
+      if (disposal === null) {
+        disposed = true;
+        disposal = extensionCancellation.signal.aborted
+          ? Promise.resolve()
+          : tail.then(async () => {
+              await brokerRequest("window.preview.dispose", { resourceId: await resource });
+            });
+        tail = disposal.catch(() => undefined);
+      }
+      return disposal;
+    },
+  };
+}
+
+function previewPayload(document: PreviewDocument): JsonObject {
+  return {
+    title: document.title,
+    format: document.format,
+    content: document.content,
+    ...(document.sourceUri === undefined ? {} : { sourceUri: document.sourceUri }),
   };
 }
 

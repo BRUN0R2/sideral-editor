@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     fs,
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -9,7 +9,8 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use sideral_extension_core::{
-    ExtensionManifest, extension_size_budget, validate_package_path, validate_package_size,
+    ExtensionManifest, extension_size_budget, normalize_keybinding, validate_package_path,
+    validate_package_size,
 };
 use sideral_extension_package::{
     PublisherIdentity, ValidatedExtensionPackage, validate_package_bytes,
@@ -19,8 +20,8 @@ use tempfile::NamedTempFile;
 use super::{
     error::ExtensionError,
     protocol::{
-        ExtensionCommandView, ExtensionRuntimeState, ExtensionSnapshot, InstalledExtensionView,
-        PackageInstallView, RuntimeDiagnostic,
+        ExtensionCommandView, ExtensionKeybindingView, ExtensionRuntimeState, ExtensionSnapshot,
+        InstalledExtensionView, KeybindingUpdate, PackageInstallView, RuntimeDiagnostic,
     },
 };
 
@@ -38,6 +39,8 @@ struct RegistryDocument {
     schema_version: u8,
     revision: u64,
     extensions: BTreeMap<String, InstalledExtension>,
+    #[serde(default)]
+    keybinding_overrides: BTreeMap<String, Option<String>>,
 }
 
 impl Default for RegistryDocument {
@@ -46,6 +49,7 @@ impl Default for RegistryDocument {
             schema_version: REGISTRY_SCHEMA_VERSION,
             revision: 0,
             extensions: BTreeMap::new(),
+            keybinding_overrides: BTreeMap::new(),
         }
     }
 }
@@ -146,6 +150,7 @@ impl ExtensionRegistry {
             permissions: package.manifest.permissions.clone(),
             activation_events: package.manifest.activation_events.clone(),
             commands: package.manifest.contributes.commands.clone(),
+            keybindings: package.manifest.contributes.keybindings.clone(),
             replaces_version: self
                 .document
                 .extensions
@@ -258,6 +263,7 @@ impl ExtensionRegistry {
                     .map(|installed| installed.active.clone()),
             },
         );
+        prune_keybinding_overrides(&mut next_document);
         next_document.revision = next_document.revision.saturating_add(1);
         write_json_document(
             &self.registry_path,
@@ -320,6 +326,7 @@ impl ExtensionRegistry {
         })?;
         let previous_active = std::mem::replace(&mut installed.active, rollback);
         installed.rollback = Some(previous_active);
+        prune_keybinding_overrides(&mut next_document);
         next_document.revision = next_document.revision.saturating_add(1);
         write_json_document(
             &self.registry_path,
@@ -352,6 +359,7 @@ impl ExtensionRegistry {
             .extensions
             .remove(extension_id)
             .ok_or_else(|| ExtensionError::NotFound(extension_id.to_owned()))?;
+        prune_keybinding_overrides(&mut next_document);
         next_document.revision = next_document.revision.saturating_add(1);
         write_json_document(
             &self.registry_path,
@@ -378,6 +386,55 @@ impl ExtensionRegistry {
         }
         self.ensure_compatible(&installed.active.manifest)?;
         Ok(installed)
+    }
+
+    pub fn update_keybinding(
+        &mut self,
+        command_id: &str,
+        update: KeybindingUpdate,
+    ) -> Result<(), ExtensionError> {
+        let binding_exists = self.document.extensions.values().any(|installed| {
+            installed
+                .active
+                .manifest
+                .contributes
+                .keybindings
+                .iter()
+                .any(|binding| binding.command == command_id)
+        });
+        if !binding_exists {
+            return Err(ExtensionError::NotFound(command_id.to_owned()));
+        }
+
+        let mut next_document = self.document.clone();
+        match update {
+            KeybindingUpdate::Default => {
+                next_document.keybinding_overrides.remove(command_id);
+            }
+            KeybindingUpdate::Disabled => {
+                next_document
+                    .keybinding_overrides
+                    .insert(command_id.to_owned(), None);
+            }
+            KeybindingUpdate::Custom { key } => {
+                let normalized = normalize_keybinding(&key)
+                    .map_err(|error| ExtensionError::InvalidRequest(error.to_string()))?;
+                next_document
+                    .keybinding_overrides
+                    .insert(command_id.to_owned(), Some(normalized));
+            }
+        }
+        if next_document.keybinding_overrides == self.document.keybinding_overrides {
+            return Ok(());
+        }
+        next_document.revision = next_document.revision.saturating_add(1);
+        write_json_document(
+            &self.registry_path,
+            &next_document,
+            REGISTRY_FILE_LIMIT_BYTES,
+        )?;
+        self.document = next_document;
+        Ok(())
     }
 
     pub fn extension_for_command(
@@ -426,6 +483,83 @@ impl ExtensionRegistry {
     pub fn snapshot(&self, runtimes: &BTreeMap<String, RuntimeDiagnostic>) -> ExtensionSnapshot {
         let mut extensions = Vec::with_capacity(self.document.extensions.len());
         let mut commands = Vec::new();
+        let mut keybindings_by_extension = BTreeMap::new();
+        for (extension_id, installed) in &self.document.extensions {
+            let command_titles = installed
+                .active
+                .manifest
+                .contributes
+                .commands
+                .iter()
+                .map(|command| (command.id.as_str(), command.title.as_str()))
+                .collect::<BTreeMap<_, _>>();
+            let views = installed
+                .active
+                .manifest
+                .contributes
+                .keybindings
+                .iter()
+                .map(|binding| {
+                    let default_key = platform_default_key(binding);
+                    let user_defined = self
+                        .document
+                        .keybinding_overrides
+                        .contains_key(&binding.command);
+                    let key = self
+                        .document
+                        .keybinding_overrides
+                        .get(&binding.command)
+                        .cloned()
+                        .unwrap_or_else(|| Some(default_key.clone()));
+                    ExtensionKeybindingView {
+                        extension_id: extension_id.clone(),
+                        command_id: binding.command.clone(),
+                        command_title: command_titles
+                            .get(binding.command.as_str())
+                            .copied()
+                            .unwrap_or(binding.command.as_str())
+                            .to_owned(),
+                        default_key,
+                        key,
+                        languages: binding.languages.clone(),
+                        user_defined,
+                        conflict: false,
+                    }
+                })
+                .collect::<Vec<_>>();
+            keybindings_by_extension.insert(extension_id.clone(), views);
+        }
+
+        let enabled_bindings = keybindings_by_extension
+            .iter()
+            .filter(|(extension_id, _)| {
+                self.document
+                    .extensions
+                    .get(*extension_id)
+                    .is_some_and(|installed| installed.enabled)
+            })
+            .flat_map(|(_, bindings)| bindings.iter())
+            .collect::<Vec<_>>();
+        let mut conflicts = HashSet::new();
+        for (index, left) in enabled_bindings.iter().enumerate() {
+            let Some(left_key) = left.key.as_deref() else {
+                continue;
+            };
+            for right in enabled_bindings.iter().skip(index + 1) {
+                if right.key.as_deref() == Some(left_key)
+                    && languages_overlap(&left.languages, &right.languages)
+                {
+                    conflicts.insert(left.command_id.clone());
+                    conflicts.insert(right.command_id.clone());
+                }
+            }
+        }
+        for bindings in keybindings_by_extension.values_mut() {
+            for binding in bindings {
+                binding.conflict = conflicts.contains(&binding.command_id);
+            }
+        }
+        let mut keybindings = Vec::new();
         for (extension_id, installed) in &self.document.extensions {
             let extension_commands = installed
                 .active
@@ -437,6 +571,13 @@ impl ExtensionRegistry {
                 .collect::<Vec<_>>();
             if installed.enabled {
                 commands.extend(extension_commands.iter().cloned());
+                keybindings.extend(
+                    keybindings_by_extension
+                        .get(extension_id)
+                        .into_iter()
+                        .flatten()
+                        .cloned(),
+                );
             }
             extensions.push(InstalledExtensionView {
                 id: extension_id.clone(),
@@ -449,6 +590,10 @@ impl ExtensionRegistry {
                 permissions: installed.active.manifest.permissions.clone(),
                 activation_events: installed.active.manifest.activation_events.clone(),
                 commands: extension_commands,
+                keybindings: keybindings_by_extension
+                    .get(extension_id)
+                    .cloned()
+                    .unwrap_or_default(),
                 runtime: runtimes
                     .get(extension_id)
                     .cloned()
@@ -467,6 +612,7 @@ impl ExtensionRegistry {
             revision: self.document.revision,
             extensions,
             commands,
+            keybindings,
         }
     }
 
@@ -558,7 +704,60 @@ fn validate_registry_document(document: &RegistryDocument) -> Result<(), Extensi
             }
         }
     }
+    for (command_id, key) in &document.keybinding_overrides {
+        let exists = document.extensions.values().any(|installed| {
+            installed
+                .active
+                .manifest
+                .contributes
+                .keybindings
+                .iter()
+                .any(|binding| binding.command == *command_id)
+        });
+        if !exists {
+            return Err(ExtensionError::InvalidRegistry(format!(
+                "keybinding override references unknown command {command_id}"
+            )));
+        }
+        if let Some(key) = key {
+            let normalized = normalize_keybinding(key)
+                .map_err(|error| ExtensionError::InvalidRegistry(error.to_string()))?;
+            if normalized != *key {
+                return Err(ExtensionError::InvalidRegistry(format!(
+                    "keybinding override for {command_id} is not canonical"
+                )));
+            }
+        }
+    }
     Ok(())
+}
+
+fn platform_default_key(binding: &sideral_extension_core::KeybindingContribution) -> String {
+    if cfg!(target_os = "macos") {
+        binding.mac.clone().unwrap_or_else(|| binding.key.clone())
+    } else {
+        binding.key.clone()
+    }
+}
+
+fn languages_overlap(left: &[String], right: &[String]) -> bool {
+    left.is_empty()
+        || right.is_empty()
+        || left
+            .iter()
+            .any(|language| right.iter().any(|candidate| candidate == language))
+}
+
+fn prune_keybinding_overrides(document: &mut RegistryDocument) {
+    let commands = document
+        .extensions
+        .values()
+        .flat_map(|installed| &installed.active.manifest.contributes.keybindings)
+        .map(|binding| binding.command.clone())
+        .collect::<HashSet<_>>();
+    document
+        .keybinding_overrides
+        .retain(|command_id, _| commands.contains(command_id));
 }
 
 fn validate_slot(id: &str, slot: &PackageSlot) -> Result<(), ExtensionError> {
