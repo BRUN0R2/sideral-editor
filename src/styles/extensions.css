@@ -1,44 +1,42 @@
-.extensions-workspace {
+.extensions-sidebar {
+  display: flex;
   width: 100%;
   height: 100%;
-  overflow: auto;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
   color: var(--text);
-  background: var(--bg-editor);
+  background: var(--bg-panel);
 }
 
-.extensions-workspace[hidden] {
+.extensions-sidebar[hidden] {
   display: none;
 }
 
-.extensions-workspace__inner {
-  width: min(1040px, calc(100% - 64px));
-  margin: 0 auto;
-  padding: 30px 0 64px;
+.extensions-sidebar__search {
+  padding: 0 8px 8px;
 }
 
-.extensions-workspace__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 18px;
-  padding-bottom: 18px;
+.extensions-sidebar__search input {
+  width: 100%;
+  height: 30px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 9px;
+  color: var(--text);
+  background: #1c2026;
+  font-size: 11px;
 }
 
-.extensions-workspace__header h1,
-.extensions-output h2 {
-  margin: 0;
-  color: #e1e3e6;
-  font-size: 24px;
-  font-weight: 620;
-  letter-spacing: -0.025em;
+.extensions-sidebar__search input:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
-.extensions-workspace__header p {
-  margin: 6px 0 0;
-  color: var(--text-muted);
-  font-size: 12px;
+.extensions-sidebar__search input::placeholder {
+  color: var(--text-subtle);
 }
 
 .button {
@@ -92,10 +90,13 @@
   gap: 9px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  margin-bottom: 14px;
   padding: 10px 12px;
   background: var(--bg-panel);
   font-size: 11px;
+}
+
+.extensions-alert {
+  margin: 0 8px 8px;
 }
 
 .extensions-alert--error {
@@ -130,83 +131,300 @@
   background: rgb(255 255 255 / 7%);
 }
 
-.extensions-empty {
-  display: grid;
-  min-height: 180px;
-  place-items: center;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-md);
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.extensions-list {
-  display: grid;
-  gap: 12px;
-}
-
-.extension-card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 20px 22px;
-  background: #24282f;
-}
-
-.extension-card__header {
+.extensions-sidebar__group {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
 }
 
-.extension-card__title-line,
-.extension-card__actions,
-.extension-card__metadata,
-.extension-card__commands > div {
+.extensions-sidebar__group-heading {
+  display: flex;
+  height: 30px;
+  flex: 0 0 30px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px 0 14px;
+  color: #aeb4bc;
+  background: #262a31;
+}
+
+.extensions-sidebar__group-heading h3 {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.extensions-sidebar__group-heading > span {
+  min-width: 20px;
+  border-radius: 999px;
+  padding: 2px 6px;
+  color: var(--text-subtle);
+  background: var(--bg-raised);
+  font:
+    9px "Cascadia Code",
+    Consolas,
+    monospace;
+  text-align: center;
+}
+
+.extensions-sidebar__list {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 4px 0 12px;
+}
+
+.extensions-sidebar__empty {
+  margin: 0;
+  padding: 24px 18px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.extension-sidebar-item {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 9px;
+  border-inline-start: 2px solid transparent;
+  padding: 9px 10px 9px 8px;
+  color: var(--text);
+  background: transparent;
+  text-align: start;
+  transition: background-color 110ms ease;
+}
+
+.extension-sidebar-item:hover {
+  background: var(--bg-hover);
+}
+
+.extension-sidebar-item--selected {
+  border-inline-start-color: var(--accent);
+  background: var(--bg-active);
+}
+
+.extension-sidebar-item__icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: #c4c9d1;
+  background: #292e36;
+}
+
+.extension-sidebar-item__icon .product-icon {
+  font-size: 19px;
+}
+
+.extension-sidebar-item__content,
+.extension-sidebar-item__title,
+.extension-sidebar-item__description,
+.extension-sidebar-item__meta {
+  min-width: 0;
+}
+
+.extension-sidebar-item__content {
+  display: grid;
+  gap: 3px;
+}
+
+.extension-sidebar-item__title,
+.extension-sidebar-item__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.extension-sidebar-item__title strong {
+  overflow: hidden;
+  color: #d8dbe0;
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.extension-sidebar-item__title > span {
+  flex: 0 0 auto;
+  color: var(--text-subtle);
+  font:
+    8px "Cascadia Code",
+    Consolas,
+    monospace;
+}
+
+.extension-sidebar-item__description {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.extension-sidebar-item__meta {
+  color: var(--text-subtle);
+  font:
+    8px "Cascadia Code",
+    Consolas,
+    monospace;
+}
+
+.extension-sidebar-item__meta > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.extension-sidebar-item__diagnostic {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.extension-runtime-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-subtle);
+}
+
+.extension-runtime-dot--active {
+  background: var(--success);
+}
+
+.extension-runtime-dot--failed {
+  background: var(--danger);
+}
+
+.extension-runtime-dot--starting,
+.extension-runtime-dot--activating,
+.extension-runtime-dot--stopping {
+  background: var(--warning);
+}
+
+.extension-details {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  color: var(--text);
+  background: var(--bg-editor);
+}
+
+.extension-details[hidden] {
+  display: none;
+}
+
+.extension-details__inner {
+  width: min(960px, calc(100% - 64px));
+  margin: 0 auto;
+  padding: 34px 0 64px;
+}
+
+.extension-details__empty {
+  display: grid;
+  height: 100%;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.extension-details__empty .product-icon {
+  color: var(--text-subtle);
+  font-size: 48px;
+}
+
+.extension-details__empty p {
+  max-width: 320px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.extension-details__header {
+  display: grid;
+  grid-template-columns: 66px minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 22px;
+}
+
+.extension-details__icon {
+  display: grid;
+  width: 66px;
+  height: 66px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  color: #d1d5db;
+  background: #292e36;
+}
+
+.extension-details__icon .product-icon {
+  font-size: 34px;
+}
+
+.extension-details__identity {
+  min-width: 0;
+}
+
+.extension-details__title-line,
+.extension-details__actions,
+.extension-details__commands {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
 
-.extension-card h2 {
+.extension-details__title-line h1 {
   margin: 0;
   color: #e1e3e6;
-  font-size: 15px;
+  font-size: 25px;
   font-weight: 650;
+  letter-spacing: -0.025em;
 }
 
-.extension-card h3 {
-  margin: 0 0 8px;
-  color: #c8ccd4;
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.extension-card > p,
-.extension-capabilities p {
-  margin: 13px 0 0;
+.extension-details__identity > p {
+  margin: 8px 0 0;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.55;
 }
 
-.extension-card__identity,
-.extension-card__metadata {
-  margin: 5px 0 0;
+.extension-details__identity > .extension-details__publisher {
   color: var(--text-subtle);
-  font-family: "Cascadia Code", Consolas, monospace;
-  font-size: 9px;
+  font:
+    9px "Cascadia Code",
+    Consolas,
+    monospace;
 }
 
-.extension-card__version,
+.extension-version,
 .extension-runtime {
   border-radius: 999px;
-  padding: 3px 7px;
+  padding: 4px 8px;
   color: var(--text-muted);
   background: var(--bg-raised);
-  font-family: "Cascadia Code", Consolas, monospace;
-  font-size: 8px;
+  font:
+    8px "Cascadia Code",
+    Consolas,
+    monospace;
   line-height: 1;
   text-transform: uppercase;
 }
@@ -228,44 +446,105 @@
   background: #382f20;
 }
 
-.extension-card > .extension-card__error {
-  color: var(--danger);
+.extension-details__actions {
+  margin-top: 18px;
 }
 
+.extension-details__section,
 .extension-capabilities,
-.extension-card__commands {
+.extensions-output {
   border-top: 1px solid var(--border);
-  margin-top: 15px;
-  padding-top: 14px;
+  margin-top: 24px;
+  padding-top: 20px;
+}
+
+.extension-details__section h2,
+.extension-capabilities h2,
+.extensions-output h2 {
+  margin: 0 0 12px;
+  color: #d4d7dc;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.extension-capabilities p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.55;
 }
 
 .extension-capabilities ul {
   display: grid;
-  gap: 5px;
+  gap: 6px;
   margin: 0;
   padding-left: 18px;
   color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.extension-diagnostics dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.extension-diagnostics__metric {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 12px;
+  background: #22272e;
+}
+
+.extension-diagnostics dt {
+  overflow: hidden;
+  color: var(--text-subtle);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.extension-diagnostics dd {
+  overflow: hidden;
+  margin: 6px 0 0;
+  color: #d7dae0;
+  font:
+    11px "Cascadia Code",
+    Consolas,
+    monospace;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.extension-diagnostics > p {
+  margin: 11px 0 0;
+  color: var(--text-muted);
   font-size: 10px;
-  line-height: 1.45;
+}
+
+.extension-diagnostics > .extension-details__error {
+  color: var(--danger);
 }
 
 .extensions-command-result {
   position: sticky;
   z-index: 3;
   bottom: 12px;
-  margin-top: 14px;
+  margin-top: 16px;
   box-shadow: 0 10px 30px rgb(0 0 0 / 25%);
 }
 
 .extensions-output {
   display: grid;
   gap: 8px;
-  margin-top: 22px;
 }
 
 .extensions-output h2 {
-  margin-bottom: 5px;
-  font-size: 16px;
+  margin-bottom: 4px;
 }
 
 .extensions-output details {
@@ -339,6 +618,10 @@
 
 .extension-install-dialog {
   width: min(640px, 100%);
+}
+
+.extension-install-dialog .extension-capabilities h2 {
+  font-size: 11px;
 }
 
 .extension-install-dialog__identity {
@@ -440,12 +723,29 @@
 }
 
 @media (max-width: 1080px) {
-  .extensions-workspace__inner {
-    width: min(100% - 36px, 1040px);
+  .extension-details__inner {
+    width: min(100% - 36px, 960px);
   }
 
-  .extension-card__header {
-    display: grid;
+  .extension-diagnostics dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .extension-details__header {
+    grid-template-columns: 50px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .extension-details__icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+  }
+
+  .extension-details__title-line h1 {
+    font-size: 20px;
   }
 }
 

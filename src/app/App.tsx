@@ -1,25 +1,39 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useReducer,
+  useState,
+} from "react";
 import { DiscardChangesDialog } from "../components/DiscardChangesDialog";
 import { ErrorToast } from "../components/ErrorToast";
 import { Icon } from "../components/Icon";
 import { IconButton } from "../components/IconButton";
-import { EditorTabs } from "../features/editor/EditorTabs";
 import { StatusBar } from "../features/editor/StatusBar";
 import { Explorer } from "../features/explorer/Explorer";
 import { useI18n } from "../features/i18n/I18nProvider";
 import { SettingsView } from "../features/settings/SettingsView";
 import { useDesktopPreferences } from "../features/settings/useDesktopPreferences";
 import { ExtensionCommandPalette } from "../features/sideral-extensions/ExtensionCommandPalette";
+import { ExtensionDetailsView } from "../features/sideral-extensions/ExtensionDetailsView";
 import { ExtensionNotices } from "../features/sideral-extensions/ExtensionNotices";
-import { ExtensionsView } from "../features/sideral-extensions/ExtensionsView";
+import { ExtensionsSidebar } from "../features/sideral-extensions/ExtensionsSidebar";
 import type { ExtensionHostConnection } from "../features/sideral-extensions/host/connection";
 import { matchingExtensionCommand } from "../features/sideral-extensions/keybindings";
 import { useExtensionSystem } from "../features/sideral-extensions/useExtensionSystem";
 import { UpdateModal } from "../features/updates/UpdateModal";
 import { UpdateProvider, useUpdates } from "../features/updates/UpdateProvider";
+import { type WorkbenchResourceTab, WorkbenchTabs } from "../features/workbench/WorkbenchTabs";
 import { editorDocumentUri } from "../features/workspace/document-uri";
 import { useWorkspace } from "../features/workspace/useWorkspace";
 import { installWebViewShortcutGuard } from "./webview-shortcuts";
+import {
+  INITIAL_WORKBENCH_NAVIGATION,
+  type PrimarySidebarView,
+  reduceWorkbenchNavigation,
+  workbenchResourceId,
+} from "./workbench-navigation";
 
 const loadEditorPane = async () => {
   const editorModule = await import("../features/editor/EditorPane");
@@ -59,7 +73,11 @@ function Workbench({ extensionHostConnection }: AppProps) {
     workspace.activeDocument,
     extensionHostConnection,
   );
-  const [activeView, setActiveView] = useState<"editor" | "extensions" | "settings">("editor");
+  const [primarySidebar, setPrimarySidebar] = useState<PrimarySidebarView>("explorer");
+  const [navigation, navigate] = useReducer(
+    reduceWorkbenchNavigation,
+    INITIAL_WORKBENCH_NAVIGATION,
+  );
   const [updateOpen, setUpdateOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [jsonSchemaTrustRevision, setJsonSchemaTrustRevision] = useState(0);
@@ -88,25 +106,26 @@ function Workbench({ extensionHostConnection }: AppProps) {
         setCommandPaletteOpen(true);
       } else if (key === "n" && !event.shiftKey) {
         event.preventDefault();
-        setActiveView("editor");
+        navigate({ kind: "showEditor" });
         workspace.createFile();
       } else if (key === "o" && event.shiftKey) {
         event.preventDefault();
-        setActiveView("editor");
+        setPrimarySidebar("explorer");
+        navigate({ kind: "showEditor" });
         void workspace.openFolder();
       } else if (key === "o") {
         event.preventDefault();
-        setActiveView("editor");
+        navigate({ kind: "showEditor" });
         void workspace.openFile();
       } else if (key === "s") {
         event.preventDefault();
         void workspace.saveActiveDocument(event.shiftKey);
       } else if (event.key === ",") {
         event.preventDefault();
-        setActiveView("settings");
+        navigate({ kind: "openSettings" });
       } else if (key === "x" && event.shiftKey) {
         event.preventDefault();
-        setActiveView("extensions");
+        setPrimarySidebar("extensions");
       }
     };
     window.addEventListener("keydown", handleShortcut);
@@ -135,7 +154,7 @@ function Workbench({ extensionHostConnection }: AppProps) {
       event.stopPropagation();
       const command = extensions.snapshot.commands.find((candidate) => candidate.id === commandId);
       if (command?.invocation === "activeTextDocument") {
-        setActiveView("editor");
+        navigate({ kind: "showEditor" });
       }
       void extensions.executeCommand(commandId).catch(() => undefined);
     };
@@ -152,7 +171,7 @@ function Workbench({ extensionHostConnection }: AppProps) {
         ) ?? null);
   const openPreviewDocument = useCallback(
     (path: string) => {
-      setActiveView("editor");
+      navigate({ kind: "showEditor" });
       void workspace.openFile(path);
     },
     [workspace.openFile],
@@ -173,6 +192,27 @@ function Workbench({ extensionHostConnection }: AppProps) {
     }
     return workspace.error.message || t("error.unknown");
   })();
+  const resourceTabs: readonly WorkbenchResourceTab[] = navigation.resources.map((resource) => {
+    if (resource.kind === "settings") {
+      return {
+        id: workbenchResourceId(resource),
+        label: t("settings.title"),
+        icon: "settingsGear",
+      };
+    }
+    const extension = extensions.snapshot.extensions.find(
+      (candidate) => candidate.id === resource.extensionId,
+    );
+    return {
+      id: workbenchResourceId(resource),
+      label: t("extensions.tabTitle", {
+        name: extension?.displayName ?? resource.extensionId,
+      }),
+      icon: "extensions",
+    };
+  });
+  const activeResourceTabId =
+    navigation.surface.kind === "editor" ? null : workbenchResourceId(navigation.surface);
 
   return (
     <div className="app-shell">
@@ -191,14 +231,16 @@ function Workbench({ extensionHostConnection }: AppProps) {
           <IconButton
             label={t("activity.explorer")}
             icon="explorer"
-            selected={activeView === "editor"}
-            onClick={() => setActiveView("editor")}
+            selected={primarySidebar === "explorer"}
+            aria-controls="primary-sidebar-explorer"
+            onClick={() => setPrimarySidebar("explorer")}
           />
           <IconButton
             label={t("activity.extensions")}
             icon="extensions"
-            selected={activeView === "extensions"}
-            onClick={() => setActiveView("extensions")}
+            selected={primarySidebar === "extensions"}
+            aria-controls="primary-sidebar-extensions"
+            onClick={() => setPrimarySidebar("extensions")}
           />
           <div className="activity-bar__spacer" />
           <UpdateActivityButton
@@ -209,46 +251,70 @@ function Workbench({ extensionHostConnection }: AppProps) {
           <IconButton
             label={t("activity.settings")}
             icon="settingsGear"
-            selected={activeView === "settings"}
-            onClick={() => setActiveView("settings")}
+            onClick={() => navigate({ kind: "openSettings" })}
           />
         </nav>
 
-        <Explorer
-          root={workspace.workspaceRoot}
-          entries={workspace.entries}
-          restoring={workspace.restoringWorkspace}
-          onCreateFile={async (name) => {
-            await workspace.createWorkspaceFile(name);
-            setActiveView("editor");
-          }}
-          onOpenFile={() => {
-            setActiveView("editor");
-            void workspace.openFile();
-          }}
-          onOpenFolder={() => {
-            setActiveView("editor");
-            void workspace.openFolder();
-          }}
-          onOpenWorkspaceFile={(path) => {
-            setActiveView("editor");
-            void workspace.openFile(path);
-          }}
-          onToggleDirectory={(path) => void workspace.toggleDirectory(path)}
-        />
+        <div className="primary-sidebar">
+          <div
+            id="primary-sidebar-explorer"
+            className="primary-sidebar__view"
+            hidden={primarySidebar !== "explorer"}
+          >
+            <Explorer
+              root={workspace.workspaceRoot}
+              entries={workspace.entries}
+              restoring={workspace.restoringWorkspace}
+              onCreateFile={async (name) => {
+                await workspace.createWorkspaceFile(name);
+                navigate({ kind: "showEditor" });
+              }}
+              onOpenFile={() => {
+                navigate({ kind: "showEditor" });
+                void workspace.openFile();
+              }}
+              onOpenFolder={() => {
+                navigate({ kind: "showEditor" });
+                void workspace.openFolder();
+              }}
+              onOpenWorkspaceFile={(path) => {
+                navigate({ kind: "showEditor" });
+                void workspace.openFile(path);
+              }}
+              onToggleDirectory={(path) => void workspace.toggleDirectory(path)}
+            />
+          </div>
+          <ExtensionsSidebar
+            active={primarySidebar === "extensions"}
+            selectedExtensionId={
+              navigation.surface.kind === "extensionDetails" ? navigation.surface.extensionId : null
+            }
+            system={extensions}
+            onSelectExtension={(extensionId) => navigate({ kind: "openExtension", extensionId })}
+          />
+        </div>
 
         <div className="workspace-content">
-          <main className="editor-area" hidden={activeView !== "editor"}>
-            {workspace.activeDocument !== null ? (
-              <>
-                <EditorTabs
-                  documents={workspace.documents}
-                  activeDocumentId={workspace.activeDocument.id}
-                  savingIds={workspace.savingIds}
-                  onActivate={workspace.setActiveDocumentId}
-                  onClose={workspace.requestCloseDocument}
-                  onReorder={workspace.reorderDocument}
-                />
+          <WorkbenchTabs
+            documents={workspace.documents}
+            resourceTabs={resourceTabs}
+            activeDocumentId={
+              navigation.surface.kind === "editor" ? (workspace.activeDocument?.id ?? null) : null
+            }
+            activeResourceTabId={activeResourceTabId}
+            savingIds={workspace.savingIds}
+            onActivateDocument={(documentId) => {
+              workspace.setActiveDocumentId(documentId);
+              navigate({ kind: "showEditor" });
+            }}
+            onActivateResource={(resourceId) => navigate({ kind: "activateResource", resourceId })}
+            onCloseDocument={workspace.requestCloseDocument}
+            onCloseResource={(resourceId) => navigate({ kind: "closeResource", resourceId })}
+            onReorderDocument={workspace.reorderDocument}
+          />
+          <div className="workspace-surfaces">
+            <main className="editor-area" hidden={navigation.surface.kind !== "editor"}>
+              {workspace.activeDocument !== null ? (
                 <Suspense fallback={<div className="editor-pane" aria-busy="true" />}>
                   <div
                     className="editor-surface"
@@ -258,7 +324,7 @@ function Workbench({ extensionHostConnection }: AppProps) {
                       <EditorPane
                         documents={workspace.documents}
                         activeDocumentId={workspace.activeDocument.id}
-                        active={activeView === "editor"}
+                        active={navigation.surface.kind === "editor"}
                         workspaceRootPath={workspace.workspaceRoot?.path ?? null}
                         jsonSchemaTrustRevision={jsonSchemaTrustRevision}
                         onContentChange={workspace.updateDocumentContent}
@@ -282,17 +348,33 @@ function Workbench({ extensionHostConnection }: AppProps) {
                     )}
                   </div>
                 </Suspense>
-              </>
-            ) : null}
-          </main>
-          <SettingsView
-            active={activeView === "settings"}
-            desktopPreferences={desktopPreferences}
-            extensions={extensions}
-            onJsonSchemaTrustChange={notifyJsonSchemaTrustChange}
-            onOpenUpdate={() => setUpdateOpen(true)}
-          />
-          <ExtensionsView active={activeView === "extensions"} system={extensions} />
+              ) : null}
+            </main>
+            <SettingsView
+              active={navigation.surface.kind === "settings"}
+              desktopPreferences={desktopPreferences}
+              extensions={extensions}
+              onJsonSchemaTrustChange={notifyJsonSchemaTrustChange}
+              onOpenUpdate={() => setUpdateOpen(true)}
+            />
+            <ExtensionDetailsView
+              active={navigation.surface.kind === "extensionDetails"}
+              extensionId={
+                navigation.surface.kind === "extensionDetails"
+                  ? navigation.surface.extensionId
+                  : null
+              }
+              system={extensions}
+              onUninstalled={() => {
+                if (navigation.surface.kind === "extensionDetails") {
+                  navigate({
+                    kind: "closeResource",
+                    resourceId: workbenchResourceId(navigation.surface),
+                  });
+                }
+              }}
+            />
+          </div>
         </div>
       </div>
 

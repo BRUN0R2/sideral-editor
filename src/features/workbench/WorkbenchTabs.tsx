@@ -1,30 +1,45 @@
 import { type DragEvent, useState } from "react";
 import { FileTypeIcon } from "../../components/FileTypeIcon";
 import { Icon } from "../../components/Icon";
+import { ProductIcon, type ProductIconName } from "../../components/ProductIcon";
 import { useI18n } from "../i18n/I18nProvider";
 import { type EditorDocument, isDocumentDirty } from "../workspace/types";
 
-interface EditorTabsProps {
+export interface WorkbenchResourceTab {
+  readonly id: string;
+  readonly label: string;
+  readonly icon: ProductIconName;
+}
+
+interface WorkbenchTabsProps {
   readonly documents: readonly EditorDocument[];
-  readonly activeDocumentId: string;
+  readonly resourceTabs: readonly WorkbenchResourceTab[];
+  readonly activeDocumentId: string | null;
+  readonly activeResourceTabId: string | null;
   readonly savingIds: ReadonlySet<string>;
-  readonly onActivate: (id: string) => void;
-  readonly onClose: (id: string) => void;
-  readonly onReorder: (id: string, insertionIndex: number) => void;
+  readonly onActivateDocument: (id: string) => void;
+  readonly onActivateResource: (id: string) => void;
+  readonly onCloseDocument: (id: string) => void;
+  readonly onCloseResource: (id: string) => void;
+  readonly onReorderDocument: (id: string, insertionIndex: number) => void;
 }
 
 const TAB_DRAG_TYPE = "application/x-sideral-editor-tab";
 const DRAG_SCROLL_EDGE = 48;
 const DRAG_SCROLL_STEP = 14;
 
-export function EditorTabs({
+export function WorkbenchTabs({
   documents,
+  resourceTabs,
   activeDocumentId,
+  activeResourceTabId,
   savingIds,
-  onActivate,
-  onClose,
-  onReorder,
-}: EditorTabsProps) {
+  onActivateDocument,
+  onActivateResource,
+  onCloseDocument,
+  onCloseResource,
+  onReorderDocument,
+}: WorkbenchTabsProps) {
   const { t } = useI18n();
   const [draggedDocumentId, setDraggedDocumentId] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
@@ -42,7 +57,7 @@ export function EditorTabs({
     event.dataTransfer.dropEffect = "move";
 
     const container = event.currentTarget;
-    const tabs = [...container.querySelectorAll<HTMLElement>("[data-editor-tab]")];
+    const tabs = [...container.querySelectorAll<HTMLElement>("[data-document-tab]")];
     const insertionIndex = tabs.findIndex((tab) => {
       const bounds = tab.getBoundingClientRect();
       return event.clientX < bounds.left + bounds.width / 2;
@@ -59,7 +74,7 @@ export function EditorTabs({
     const transferredId = event.dataTransfer.getData(TAB_DRAG_TYPE);
     const documentId = transferredId.length > 0 ? transferredId : draggedDocumentId;
     if (documents.some((document) => document.id === documentId)) {
-      onReorder(documentId, dropIndex);
+      onReorderDocument(documentId, dropIndex);
     }
     clearDragState();
   };
@@ -81,7 +96,7 @@ export function EditorTabs({
           .filter(Boolean)
           .join(" ");
         return (
-          <div key={document.id} className={classNames} data-editor-tab="">
+          <div key={document.id} className={classNames} data-document-tab="">
             <button
               type="button"
               className="editor-tab-main"
@@ -89,7 +104,7 @@ export function EditorTabs({
               aria-selected={active}
               aria-label={`${document.name}${dirty ? ` — ${t("editor.dirty")}` : ""}`}
               draggable
-              onClick={() => onActivate(document.id)}
+              onClick={() => onActivateDocument(document.id)}
               onDragStart={(event) => {
                 event.dataTransfer.effectAllowed = "move";
                 event.dataTransfer.setData(TAB_DRAG_TYPE, document.id);
@@ -107,18 +122,53 @@ export function EditorTabs({
                 <span className="tab-dirty" aria-hidden="true" />
               ) : null}
             </button>
+            <TabCloseButton label={document.name} onClose={() => onCloseDocument(document.id)} />
+          </div>
+        );
+      })}
+      {resourceTabs.map((tab) => {
+        const active = tab.id === activeResourceTabId;
+        return (
+          <div
+            key={tab.id}
+            className={`editor-tab editor-tab--resource ${active ? "editor-tab--active" : ""}`}
+          >
             <button
               type="button"
-              className="tab-close"
-              aria-label={`${t("action.close")} ${document.name}`}
-              onClick={() => onClose(document.id)}
+              className="editor-tab-main"
+              role="tab"
+              aria-selected={active}
+              onClick={() => onActivateResource(tab.id)}
+              title={tab.label}
             >
-              <Icon name="close" size={18} />
+              <ProductIcon name={tab.icon} />
+              <span>{tab.label}</span>
             </button>
+            <TabCloseButton label={tab.label} onClose={() => onCloseResource(tab.id)} />
           </div>
         );
       })}
     </div>
+  );
+}
+
+function TabCloseButton({
+  label,
+  onClose,
+}: {
+  readonly label: string;
+  readonly onClose: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <button
+      type="button"
+      className="tab-close"
+      aria-label={`${t("action.close")} ${label}`}
+      onClick={onClose}
+    >
+      <Icon name="close" size={18} />
+    </button>
   );
 }
 
