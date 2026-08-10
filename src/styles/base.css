@@ -111,14 +111,10 @@ button:disabled {
 ::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background-color: transparent;
+  background-color: var(--scrollbar-thumb);
   background-clip: padding-box;
   min-height: 44px;
   transition: background-color var(--scrollbar-fade-duration) ease;
-}
-
-:is(:hover, :focus-within)::-webkit-scrollbar-thumb {
-  background-color: var(--scrollbar-thumb);
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -138,7 +134,7 @@ button:disabled {
   display: block;
   width: var(--scrollbar-size);
   height: 16px;
-  background-color: transparent;
+  background-color: var(--scrollbar-arrow);
   -webkit-mask-position: center;
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-size: 8px 5px;
@@ -156,10 +152,6 @@ button:disabled {
 ::-webkit-scrollbar-button:single-button:vertical:increment {
   -webkit-mask-image: var(--scrollbar-arrow-down);
   mask-image: var(--scrollbar-arrow-down);
-}
-
-:is(:hover, :focus-within)::-webkit-scrollbar-button:single-button:vertical {
-  background-color: var(--scrollbar-arrow);
 }
 
 ::-webkit-scrollbar-button:single-button:vertical:hover {

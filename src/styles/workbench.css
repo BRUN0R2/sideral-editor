@@ -578,6 +578,15 @@
   min-height: 0;
 }
 
+.editor-pane .monaco-scrollable-element > .scrollbar > .scra {
+  color: var(--scrollbar-arrow);
+  transition: color 120ms ease;
+}
+
+.editor-pane .monaco-scrollable-element > .scrollbar > .scra:hover {
+  color: var(--scrollbar-arrow-hover);
+}
+
 .status-bar {
   display: flex;
   align-items: center;

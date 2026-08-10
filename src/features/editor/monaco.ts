@@ -70,10 +70,23 @@ export function ensureSideralTheme(): void {
       "editorWidget.border": "#414750",
       "input.background": "#20242a",
       "input.border": "#414750",
+      "scrollbar.background": "#00000000",
+      "scrollbar.shadow": "#00000000",
+      "scrollbarSlider.background": requiredCssColor("--scrollbar-thumb"),
+      "scrollbarSlider.hoverBackground": requiredCssColor("--scrollbar-thumb-hover"),
+      "scrollbarSlider.activeBackground": requiredCssColor("--scrollbar-thumb-active"),
       focusBorder: "#9298a1",
     },
   });
   themeDefined = true;
+}
+
+function requiredCssColor(name: `--${string}`): string {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  if (value === "") {
+    throw new Error(`Required CSS color token is missing: ${name}`);
+  }
+  return value;
 }
 
 export { monaco };

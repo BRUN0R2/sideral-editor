@@ -55,6 +55,13 @@ export function EditorPane({
       renderWhitespace: "selection",
       smoothScrolling: true,
       scrollBeyondLastLine: false,
+      scrollbar: {
+        arrowSize: 16,
+        useShadows: false,
+        verticalHasArrows: true,
+        verticalScrollbarSize: 14,
+        verticalSliderSize: 10,
+      },
       cursorBlinking: "smooth",
       cursorSmoothCaretAnimation: "on",
       bracketPairColorization: { enabled: true },
