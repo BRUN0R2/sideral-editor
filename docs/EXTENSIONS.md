@@ -142,9 +142,9 @@ HTML is displayed as text and remote images are not fetched. HTTP(S) links use
 the native external-link boundary. Relative document links are resolved only
 from a local `file:` source URI and open through the editor's native file
 boundary; unsupported schemes remain inert. Fenced blocks identified as
-`powershell` (or the compatible `pwsh` and `ps1` aliases) receive a PowerShell
-terminal presentation, but their contents remain inert, selectable text and are
-never executed.
+`powershell` (or the compatible `pwsh` and `ps1` aliases) receive a compact
+PowerShell code-block presentation, but their contents remain inert, selectable
+text and are never executed.
 
 ```ts
 api.commands.registerTextEditorCommand("acme.sample.preview", async (document) => {

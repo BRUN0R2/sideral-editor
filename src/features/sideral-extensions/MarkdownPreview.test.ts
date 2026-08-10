@@ -1,7 +1,7 @@
 import { createElement, Fragment } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { renderMarkdown } from "./MarkdownPreview";
+import { renderMarkdown } from "./markdown-renderer";
 
 describe("renderMarkdown", () => {
   it("renders modern GFM structures", () => {
@@ -36,14 +36,17 @@ describe("renderMarkdown", () => {
     expect(html).toContain(">Architecture</a>");
   });
 
-  it("renders powershell fences as a terminal without changing their commands", () => {
+  it("renders powershell fences as a simple labeled code block", () => {
     const html = staticMarkup("```powershell\nnpm install\nnpm run tauri dev\n```");
 
-    expect(html).toContain('class="markdown-preview__terminal"');
+    expect(html).toContain('class="markdown-preview__code-block"');
+    expect(html).toContain(
+      '<figcaption class="markdown-preview__code-language">powershell</figcaption>',
+    );
     expect(html).toContain('data-language="powershell"');
-    expect(html).toContain("PowerShell");
     expect(html).toContain("npm install");
     expect(html).toContain("npm run tauri dev");
+    expect(html).not.toContain("PS&gt;");
     expect(html).not.toContain("```powershell");
   });
 });
