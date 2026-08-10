@@ -217,6 +217,7 @@ function Workbench({ extensionHostConnection }: AppProps) {
         <Explorer
           root={workspace.workspaceRoot}
           entries={workspace.entries}
+          restoring={workspace.restoringWorkspace}
           onCreateFile={async (name) => {
             await workspace.createWorkspaceFile(name);
             setActiveView("editor");

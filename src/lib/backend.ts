@@ -12,10 +12,12 @@ import type {
   LocaleSelection,
   SavedDocumentPayload,
   TextDocumentPayload,
+  WorkspaceSnapshot,
 } from "./contracts";
 import { ApplicationError } from "./errors";
 
 let bootstrapRequest: Promise<ApplicationBootstrap> | null = null;
+let workspaceRestoreRequest: Promise<WorkspaceSnapshot | null> | null = null;
 
 export function isDesktopRuntime(): boolean {
   return window.__TAURI_INTERNALS__ !== undefined;
@@ -91,6 +93,26 @@ export function writeTextFile(path: string, content: string): Promise<SavedDocum
 export function listDirectory(path: string): Promise<readonly DirectoryEntry[]> {
   assertDesktopRuntime();
   return invoke<readonly DirectoryEntry[]>("list_directory", { path });
+}
+
+export function restoreWorkspace(): Promise<WorkspaceSnapshot | null> {
+  assertDesktopRuntime();
+  if (workspaceRestoreRequest === null) {
+    const request = invoke<WorkspaceSnapshot | null>("restore_workspace");
+    workspaceRestoreRequest = request;
+    const releaseRequest = () => {
+      if (workspaceRestoreRequest === request) {
+        workspaceRestoreRequest = null;
+      }
+    };
+    void request.then(releaseRequest, releaseRequest);
+  }
+  return workspaceRestoreRequest;
+}
+
+export function openWorkspace(root: string): Promise<WorkspaceSnapshot> {
+  assertDesktopRuntime();
+  return invoke<WorkspaceSnapshot>("open_workspace", { root });
 }
 
 export function resolveJsonSchema(

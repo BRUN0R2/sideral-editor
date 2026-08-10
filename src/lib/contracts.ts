@@ -65,6 +65,11 @@ export interface SavedDocumentPayload {
   readonly bytesWritten: number;
 }
 
+export interface WorkspaceSnapshot {
+  readonly root: string;
+  readonly entries: readonly DirectoryEntry[];
+}
+
 export type JsonValue =
   | null
   | boolean

@@ -12,6 +12,7 @@ mod json_schemas;
 mod settings;
 mod sideral_extensions;
 mod updater;
+mod workspace_session;
 
 use std::path::PathBuf;
 
@@ -26,6 +27,7 @@ use serde::Serialize;
 use sideral_extensions::SideralExtensionState;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_opener::OpenerExt;
+use workspace_session::WorkspaceSession;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,6 +37,13 @@ struct ApplicationBootstrap {
     updater_enabled: bool,
     desktop_preferences: DesktopPreferences,
     localization: LocaleSelection,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceSnapshot {
+    root: String,
+    entries: Vec<DirectoryEntry>,
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -108,6 +117,45 @@ async fn write_text_file(path: String, content: String) -> CommandResult<SavedDo
 #[tauri::command(rename_all = "camelCase")]
 async fn list_directory(path: String) -> CommandResult<Vec<DirectoryEntry>> {
     run_blocking(move || documents::list_directory(PathBuf::from(path))).await
+}
+
+#[tauri::command]
+async fn restore_workspace(app: AppHandle) -> CommandResult<Option<WorkspaceSnapshot>> {
+    let session_path = workspace_session_path(&app)?;
+    run_blocking(move || {
+        let Some(session) = workspace_session::read(&session_path)? else {
+            return Ok(None);
+        };
+        let entries = documents::list_directory(PathBuf::from(session.root()))?;
+        Ok(Some(WorkspaceSnapshot {
+            root: session.into_root(),
+            entries,
+        }))
+    })
+    .await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn open_workspace(app: AppHandle, root: String) -> CommandResult<WorkspaceSnapshot> {
+    let session_path = workspace_session_path(&app)?;
+    run_blocking(move || {
+        let session = WorkspaceSession::from_root(root)?;
+        let entries = documents::list_directory(PathBuf::from(session.root()))?;
+        workspace_session::write(&session_path, &session)?;
+        Ok(WorkspaceSnapshot {
+            root: session.into_root(),
+            entries,
+        })
+    })
+    .await
+}
+
+fn workspace_session_path(app: &AppHandle) -> error::AppResult<PathBuf> {
+    let config_directory = app
+        .path()
+        .app_config_dir()
+        .map_err(|error| AppError::InvalidPath(error.to_string()))?;
+    Ok(workspace_session::file_path(&config_directory))
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -236,6 +284,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             create_text_file,
             write_text_file,
             list_directory,
+            restore_workspace,
+            open_workspace,
             validate_sideral_extension_manifest,
             inspect_vscode_legacy_manifest,
             resolve_json_schema,

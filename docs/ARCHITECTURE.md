@@ -30,11 +30,11 @@ Native extension service
   └─ capability broker ── canonical workspace, isolated data, pinned network, fixed processes
 ```
 
-The frontend owns presentation state. Rust owns filesystem access, settings,
-locale discovery and native integrations. Desktop preferences cross one
-explicit save command; Rust owns autostart registration, the tray icon and the
-main-window close policy, while the workspace owns the auto-save timer. Each
-Tauri command is small and describes one effect.
+The frontend owns presentation state. Rust owns filesystem access, the active
+workspace session, settings, locale discovery and native integrations. Desktop
+preferences cross one explicit save command; Rust owns autostart registration,
+the tray icon and the main-window close policy, while the workspace owns the
+auto-save timer. Each Tauri command is small and describes one effect.
 
 ## Extension systems
 
@@ -90,7 +90,8 @@ semantics are recorded in
 - `src/features/updates`: updater resource ownership and progress state machine.
 - `src/features/vscode-legacy`: compatibility inspection boundary; it never
   imports modern extension modules.
-- `src/features/workspace`: documents, saves, tabs and directory requests.
+- `src/features/workspace`: workspace restoration, documents, saves, tabs and
+  lazy directory requests.
 - `src/lib`: typed native boundary and error normalization.
 
 ### Native backend
@@ -102,6 +103,8 @@ semantics are recorded in
   system tray and main-window lifecycle policy.
 - `i18n.rs`: strict locale schema, discovery, matching and validation.
 - `settings.rs`: versioned settings with atomic persistence.
+- `workspace_session.rs`: bounded, versioned and atomic persistence of the
+  active workspace root.
 - `updater.rs`: official updater registration and configuration detection.
 - `error.rs`: structured operational failures exposed to TypeScript.
 - `extension_systems.rs`: sole composition point for the two independent
@@ -143,6 +146,7 @@ semantics are recorded in
 | Locale focus listener | `SettingsView` | Exists only while the settings view is selected |
 | Updater `Resource` | `UpdateProvider` | Close on replacement or provider cleanup |
 | In-flight reads/saves | `useWorkspace` maps | Deduplicated and removed in `finally` |
+| Workspace restoration | `useWorkspace` request generation | Shared only while in flight; stale or unmounted results are ignored |
 | Temporary files | Rust RAII | Closed automatically; persisted atomically |
 | Extension client channels | Native extension service | Removed by connection ID; failed channels are pruned |
 | Extension supervisor session | Main document | Session-scoped disconnect on document teardown; native invalidation on main-window destruction |
@@ -155,6 +159,10 @@ semantics are recorded in
 
 There is no polling loop. Auto Save owns one cancellable 1-second timeout per
 dirty named document and never opens a save dialog for an untitled buffer.
+Opening a folder validates and lists it before atomically replacing the
+versioned session file; only that completed native snapshot becomes visible.
+Startup restores the active root and its first directory level without
+retaining editor models or expanded tree nodes.
 Locale files are rescanned once when settings open and when the app regains
 focus after a user copies a file. Desktop preference changes remain interactive
 while complete snapshots are persisted in order. Update checks run

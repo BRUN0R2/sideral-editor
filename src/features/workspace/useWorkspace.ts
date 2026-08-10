@@ -4,10 +4,12 @@ import {
   createTextFile,
   isDesktopRuntime,
   listDirectory,
+  openWorkspace,
   readTextFile,
+  restoreWorkspace,
   writeTextFile,
 } from "../../lib/backend";
-import type { AutoSaveMode, DirectoryEntry } from "../../lib/contracts";
+import type { AutoSaveMode, DirectoryEntry, WorkspaceSnapshot } from "../../lib/contracts";
 import { ApplicationError, toApplicationError } from "../../lib/errors";
 import { AUTO_SAVE_DELAY_MS, autoSaveDocuments } from "./auto-save";
 import { reorderDocumentAt } from "./document-order";
@@ -36,11 +38,14 @@ export function useWorkspace(autoSave: AutoSaveMode) {
   const [savingIds, setSavingIds] = useState<ReadonlySet<string>>(new Set());
   const [cursor, setCursor] = useState<CursorPosition>(INITIAL_CURSOR);
   const [error, setError] = useState<ApplicationError | null>(null);
+  const [restoringWorkspace, setRestoringWorkspace] = useState(isDesktopRuntime);
   const untitledSequence = useRef(0);
   const directoryRequests = useRef(new Map<string, Promise<readonly DirectoryEntry[]>>());
   const fileRequests = useRef(new Map<string, Promise<void>>());
   const saveRequests = useRef(new Map<string, Promise<boolean>>());
   const autoSaveTimers = useRef(new Map<string, AutoSaveTimer>());
+  const workspaceRequestSequence = useRef(0);
+  const openFolderRequest = useRef<Promise<void> | null>(null);
   const workspaceRootRef = useRef(workspaceRoot);
   const documentsRef = useRef(documents);
   workspaceRootRef.current = workspaceRoot;
@@ -54,6 +59,39 @@ export function useWorkspace(autoSave: AutoSaveMode) {
   const reportError = useCallback((value: unknown) => {
     setError(toApplicationError(value));
   }, []);
+
+  useEffect(() => {
+    if (!isDesktopRuntime()) {
+      return;
+    }
+
+    const requestId = ++workspaceRequestSequence.current;
+    let cancelled = false;
+    void restoreWorkspace()
+      .then((snapshot) => {
+        if (snapshot === null) {
+          return;
+        }
+        if (cancelled || workspaceRequestSequence.current !== requestId) {
+          return;
+        }
+        applyWorkspaceSnapshot(snapshot, setWorkspaceRoot, setEntries);
+      })
+      .catch((caught: unknown) => {
+        if (!cancelled && workspaceRequestSequence.current === requestId) {
+          reportError(caught);
+        }
+      })
+      .finally(() => {
+        if (!cancelled && workspaceRequestSequence.current === requestId) {
+          setRestoringWorkspace(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reportError]);
 
   const createFile = useCallback(() => {
     untitledSequence.current += 1;
@@ -164,25 +202,44 @@ export function useWorkspace(autoSave: AutoSaveMode) {
     [reportError],
   );
 
-  const openFolder = useCallback(async () => {
-    try {
-      if (!isDesktopRuntime()) {
-        throw new ApplicationError("native_only", "Opening folders requires the desktop app.");
-      }
-      const selectedPath = await open({
-        multiple: false,
-        directory: true,
-        title: "Open folder",
-      });
-      if (typeof selectedPath !== "string") {
-        return;
-      }
-      const children = await loadDirectory(selectedPath, directoryRequests.current);
-      setWorkspaceRoot({ path: selectedPath, name: fileName(selectedPath) });
-      setEntries(toWorkspaceNodes(children));
-    } catch (caught) {
-      reportError(caught);
+  const openFolder = useCallback((): Promise<void> => {
+    const currentRequest = openFolderRequest.current;
+    if (currentRequest !== null) {
+      return currentRequest;
     }
+
+    const request = (async () => {
+      try {
+        if (!isDesktopRuntime()) {
+          throw new ApplicationError("native_only", "Opening folders requires the desktop app.");
+        }
+        const selectedPath = await open({
+          multiple: false,
+          directory: true,
+          title: "Open folder",
+        });
+        if (typeof selectedPath !== "string") {
+          return;
+        }
+        const requestId = ++workspaceRequestSequence.current;
+        setRestoringWorkspace(false);
+        const snapshot = await openWorkspace(selectedPath);
+        if (workspaceRequestSequence.current !== requestId) {
+          return;
+        }
+        applyWorkspaceSnapshot(snapshot, setWorkspaceRoot, setEntries);
+      } catch (caught) {
+        reportError(caught);
+      }
+    })();
+    openFolderRequest.current = request;
+    const releaseRequest = () => {
+      if (openFolderRequest.current === request) {
+        openFolderRequest.current = null;
+      }
+    };
+    void request.then(releaseRequest, releaseRequest);
+    return request;
   }, [reportError]);
 
   const toggleDirectory = useCallback(
@@ -388,6 +445,7 @@ export function useWorkspace(autoSave: AutoSaveMode) {
     savingIds,
     cursor,
     error,
+    restoringWorkspace,
     createFile,
     createWorkspaceFile,
     openFile,
@@ -405,6 +463,15 @@ export function useWorkspace(autoSave: AutoSaveMode) {
     setCursor,
     clearError: () => setError(null),
   };
+}
+
+function applyWorkspaceSnapshot(
+  snapshot: WorkspaceSnapshot,
+  setWorkspaceRoot: React.Dispatch<React.SetStateAction<WorkspaceRoot | null>>,
+  setEntries: React.Dispatch<React.SetStateAction<readonly WorkspaceNode[]>>,
+): void {
+  setWorkspaceRoot({ path: snapshot.root, name: fileName(snapshot.root) });
+  setEntries(toWorkspaceNodes(snapshot.entries));
 }
 
 async function loadDirectory(

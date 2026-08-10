@@ -10,6 +10,7 @@ import { validateNewFileName } from "./new-file-name";
 interface ExplorerProps {
   readonly root: WorkspaceRoot | null;
   readonly entries: readonly WorkspaceNode[];
+  readonly restoring: boolean;
   readonly onCreateFile: (name: string) => Promise<void>;
   readonly onOpenFile: () => void;
   readonly onOpenFolder: () => void;
@@ -24,6 +25,7 @@ const TREE_LEADING_COLUMN_WITH_GAP_PIXELS = 21;
 export function Explorer({
   root,
   entries,
+  restoring,
   onCreateFile,
   onOpenFile,
   onOpenFolder,
@@ -128,7 +130,11 @@ export function Explorer({
         ) : null}
       </header>
 
-      {root === null ? (
+      {root === null && restoring ? (
+        <div className="explorer-empty" role="status">
+          <p>{t("explorer.loading")}</p>
+        </div>
+      ) : root === null ? (
         <div className="explorer-empty">
           <h3>{t("explorer.noFolderTitle")}</h3>
           <p>{t("explorer.noFolderDescription")}</p>

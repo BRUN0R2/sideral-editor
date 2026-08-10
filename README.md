@@ -8,7 +8,8 @@ The first working foundation includes:
 
 - a native Tauri 2 shell for Windows;
 - Monaco editing with explicit model and listener disposal;
-- native open-folder, open-file and atomic save flows;
+- native open-folder, versioned workspace restoration, open-file and atomic
+  save flows;
 - secure JSON schema validation with real file URIs, native resolution,
   bounded caching and revocable remote trust;
 - a lazy workspace explorer that does not crawl an entire project up front;
