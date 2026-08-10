@@ -24,6 +24,25 @@ export function toExtensionTextDocument(document: EditorDocument): TextDocument 
   };
 }
 
+export function fileUriToPath(uri: string): string | null {
+  try {
+    const parsed = new URL(uri);
+    if (parsed.protocol !== "file:" || parsed.username !== "" || parsed.password !== "") {
+      return null;
+    }
+    const pathname = decodeURIComponent(parsed.pathname);
+    if (parsed.hostname !== "") {
+      return `\\\\${parsed.hostname}${pathname.replaceAll("/", "\\")}`;
+    }
+    if (/^\/[a-z]:\//iu.test(pathname)) {
+      return pathname.slice(1).replaceAll("/", "\\");
+    }
+    return pathname;
+  } catch {
+    return null;
+  }
+}
+
 function encodePathSegments(segments: readonly string[]): string {
   return segments
     .map((segment, index) =>

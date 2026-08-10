@@ -24,8 +24,30 @@ describe("renderMarkdown", () => {
     expect(html).toContain("&lt;script&gt;");
     expect(html).toContain("Safe text");
   });
+
+  it("resolves local document links against the preview source", () => {
+    const html = staticMarkup("[Architecture](docs/ARCHITECTURE.md)", {
+      sourceUri: "file:///D:/workspace/README.md",
+      onOpenDocument: () => undefined,
+    });
+
+    expect(html).toContain('class="markdown-preview__document-link"');
+    expect(html).toContain('href="file:///D:/workspace/docs/ARCHITECTURE.md"');
+    expect(html).toContain(">Architecture</a>");
+  });
+
+  it("renders powershell fences as a terminal without changing their commands", () => {
+    const html = staticMarkup("```powershell\nnpm install\nnpm run tauri dev\n```");
+
+    expect(html).toContain('class="markdown-preview__terminal"');
+    expect(html).toContain('data-language="powershell"');
+    expect(html).toContain("PowerShell");
+    expect(html).toContain("npm install");
+    expect(html).toContain("npm run tauri dev");
+    expect(html).not.toContain("```powershell");
+  });
 });
 
-function staticMarkup(source: string): string {
-  return renderToStaticMarkup(createElement(Fragment, null, renderMarkdown(source)));
+function staticMarkup(source: string, options?: Parameters<typeof renderMarkdown>[1]): string {
+  return renderToStaticMarkup(createElement(Fragment, null, renderMarkdown(source, options)));
 }

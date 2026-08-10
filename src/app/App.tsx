@@ -150,6 +150,13 @@ function Workbench({ extensionHostConnection }: AppProps) {
       : (workspace.documents.find(
           (document) => editorDocumentUri(document) === visiblePreview.sourceUri,
         ) ?? null);
+  const openPreviewDocument = useCallback(
+    (path: string) => {
+      setActiveView("editor");
+      void workspace.openFile(path);
+    },
+    [workspace.openFile],
+  );
 
   const errorMessage = (() => {
     if (workspace.error === null) {
@@ -263,6 +270,7 @@ function Workbench({ extensionHostConnection }: AppProps) {
                         <MarkdownPreview
                           preview={visiblePreview}
                           content={previewSource?.content ?? visiblePreview.content}
+                          onOpenDocument={openPreviewDocument}
                           onClose={() => {
                             void extensions
                               .dismissPreview(visiblePreview.resourceId)

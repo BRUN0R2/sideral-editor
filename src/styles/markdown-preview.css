@@ -126,12 +126,27 @@
 }
 
 .markdown-preview__document a {
-  color: #91b7e8;
-  text-decoration: none;
+  color: #6cb6ff;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgb(108 182 255 / 58%);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
 }
 
 .markdown-preview__document a:hover {
-  text-decoration: underline;
+  color: #9dceff;
+  text-decoration-color: currentColor;
+}
+
+.markdown-preview__document a:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid #6cb6ff;
+  outline-offset: 3px;
+}
+
+.markdown-preview__document-link {
+  font-weight: 520;
 }
 
 .markdown-preview__unsafe-link,
@@ -208,6 +223,82 @@
   padding: 0;
   color: #cdd1d7;
   background: transparent;
+}
+
+.markdown-preview__terminal {
+  overflow: hidden;
+  border: 1px solid #3b414a;
+  border-radius: 8px;
+  margin: 0 0 1.15em;
+  background: #0c0c0c;
+  box-shadow: 0 8px 22px rgb(0 0 0 / 18%);
+}
+
+.markdown-preview__terminal-title {
+  display: flex;
+  height: 34px;
+  align-items: center;
+  gap: 9px;
+  border-bottom: 1px solid #3b414a;
+  padding: 0 12px;
+  color: #e8e8e8;
+  background: #25282d;
+  font-family: "Segoe UI", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.markdown-preview__terminal-icon {
+  display: inline-grid;
+  width: 19px;
+  height: 19px;
+  place-items: center;
+  border-radius: 3px;
+  color: #fff;
+  background: #176fba;
+  font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.markdown-preview__document .markdown-preview__terminal pre {
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+  padding: 14px 17px 15px;
+  background: #0c0c0c;
+}
+
+.markdown-preview__document .markdown-preview__terminal code {
+  display: block;
+  padding: 0;
+  color: #f1f1f1;
+  background: transparent;
+  font-size: 0.88em;
+  line-height: 1.65;
+}
+
+.markdown-preview__terminal-line {
+  position: relative;
+  display: block;
+  min-height: 1.65em;
+  padding-inline-start: 3.15em;
+  white-space: pre;
+}
+
+.markdown-preview__terminal-line::before {
+  position: absolute;
+  inset-inline-start: 0;
+  color: #4ec9b0;
+  content: "PS>";
+  font-weight: 650;
+  pointer-events: none;
+  user-select: none;
+}
+
+.markdown-preview__terminal-line--empty::before {
+  content: "";
 }
 
 .markdown-preview__document table {

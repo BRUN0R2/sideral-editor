@@ -3,22 +3,42 @@ import { createElement, Fragment, type ReactNode, useMemo } from "react";
 import { IconButton } from "../../components/IconButton";
 import { isDesktopRuntime, openExternalUrl } from "../../lib/backend";
 import { useI18n } from "../i18n/I18nProvider";
+import { fileUriToPath } from "../workspace/document-uri";
 import type { PreviewDocumentView } from "./contracts";
 
 const CHECKED_SYMBOL = String.fromCodePoint(0x2611);
 const UNCHECKED_SYMBOL = String.fromCodePoint(0x2610);
 
+interface MarkdownRenderOptions {
+  readonly sourceUri?: string | null;
+  readonly onOpenDocument?: (path: string) => void;
+}
+
+interface MarkdownRenderContext {
+  readonly sourceUri: string | null;
+  readonly onOpenDocument: ((path: string) => void) | null;
+}
+
 export function MarkdownPreview({
   preview,
   content,
   onClose,
+  onOpenDocument,
 }: {
   readonly preview: PreviewDocumentView;
   readonly content: string;
   readonly onClose: () => void;
+  readonly onOpenDocument: (path: string) => void;
 }) {
   const { t } = useI18n();
-  const document = useMemo(() => renderMarkdown(content), [content]);
+  const document = useMemo(
+    () =>
+      renderMarkdown(content, {
+        sourceUri: preview.sourceUri,
+        onOpenDocument,
+      }),
+    [content, onOpenDocument, preview.sourceUri],
+  );
 
   return (
     <aside className="markdown-preview" aria-label={preview.title}>
@@ -34,18 +54,28 @@ export function MarkdownPreview({
   );
 }
 
-export function renderMarkdown(content: string): readonly ReactNode[] {
-  return renderTokens(marked.lexer(content, { gfm: true }), "root");
+export function renderMarkdown(
+  content: string,
+  options: MarkdownRenderOptions = {},
+): readonly ReactNode[] {
+  return renderTokens(marked.lexer(content, { gfm: true }), "root", {
+    sourceUri: options.sourceUri ?? null,
+    onOpenDocument: options.onOpenDocument ?? null,
+  });
 }
 
-function renderTokens(tokens: readonly Token[], path: string): readonly ReactNode[] {
-  return tokens.map((token, index) => renderToken(token, `${path}-${index}`));
+function renderTokens(
+  tokens: readonly Token[],
+  path: string,
+  context: MarkdownRenderContext,
+): readonly ReactNode[] {
+  return tokens.map((token, index) => renderToken(token, `${path}-${index}`, context));
 }
 
-function renderToken(token: Token, key: string): ReactNode {
+function renderToken(token: Token, key: string, context: MarkdownRenderContext): ReactNode {
   switch (token.type) {
     case "blockquote":
-      return <blockquote key={key}>{renderTokens(tokensOf(token), key)}</blockquote>;
+      return <blockquote key={key}>{renderTokens(tokensOf(token), key, context)}</blockquote>;
     case "br":
       return <br key={key} />;
     case "checkbox":
@@ -54,28 +84,34 @@ function renderToken(token: Token, key: string): ReactNode {
           {(token as Tokens.Checkbox).checked ? CHECKED_SYMBOL : UNCHECKED_SYMBOL}
         </span>
       );
-    case "code":
+    case "code": {
+      const code = token as Tokens.Code;
+      const language = codeLanguage(code.lang);
+      if (isPowerShellLanguage(language)) {
+        return <PowerShellCodeBlock code={code.text} key={key} />;
+      }
       return (
         <pre key={key}>
-          <code data-language={(token as Tokens.Code).lang}>{(token as Tokens.Code).text}</code>
+          <code data-language={language ?? undefined}>{code.text}</code>
         </pre>
       );
+    }
     case "codespan":
       return <code key={key}>{(token as Tokens.Codespan).text}</code>;
     case "def":
     case "space":
       return null;
     case "del":
-      return <del key={key}>{renderTokens(tokensOf(token), key)}</del>;
+      return <del key={key}>{renderTokens(tokensOf(token), key, context)}</del>;
     case "em":
-      return <em key={key}>{renderTokens(tokensOf(token), key)}</em>;
+      return <em key={key}>{renderTokens(tokensOf(token), key, context)}</em>;
     case "escape":
       return <Fragment key={key}>{(token as Tokens.Escape).text}</Fragment>;
     case "heading":
       return createElement(
         headingName((token as Tokens.Heading).depth),
         { key },
-        renderTokens(tokensOf(token), key),
+        renderTokens(tokensOf(token), key, context),
       );
     case "hr":
       return <hr key={key} />;
@@ -97,32 +133,37 @@ function renderToken(token: Token, key: string): ReactNode {
       );
     case "link":
       return (
-        <SafeLink href={(token as Tokens.Link).href} key={key} title={(token as Tokens.Link).title}>
-          {renderTokens(tokensOf(token), key)}
+        <SafeLink
+          context={context}
+          href={(token as Tokens.Link).href}
+          key={key}
+          title={(token as Tokens.Link).title}
+        >
+          {renderTokens(tokensOf(token), key, context)}
         </SafeLink>
       );
     case "list":
-      return renderList(token as Tokens.List, key);
+      return renderList(token as Tokens.List, key, context);
     case "list_item":
-      return renderListItem(token as Tokens.ListItem, key);
+      return renderListItem(token as Tokens.ListItem, key, context);
     case "paragraph":
-      return <p key={key}>{renderTokens(tokensOf(token), key)}</p>;
+      return <p key={key}>{renderTokens(tokensOf(token), key, context)}</p>;
     case "strong":
-      return <strong key={key}>{renderTokens(tokensOf(token), key)}</strong>;
+      return <strong key={key}>{renderTokens(tokensOf(token), key, context)}</strong>;
     case "table":
-      return renderTable(token as Tokens.Table, key);
+      return renderTable(token as Tokens.Table, key, context);
     case "text":
       return (
         <Fragment key={key}>
           {tokensOf(token).length === 0
             ? (token as Tokens.Text).text
-            : renderTokens(tokensOf(token), key)}
+            : renderTokens(tokensOf(token), key, context)}
         </Fragment>
       );
     default:
       return (
         <Fragment key={key}>
-          {tokensOf(token).length === 0 ? token.raw : renderTokens(tokensOf(token), key)}
+          {tokensOf(token).length === 0 ? token.raw : renderTokens(tokensOf(token), key, context)}
         </Fragment>
       );
   }
@@ -132,8 +173,10 @@ function tokensOf(token: Token): readonly Token[] {
   return "tokens" in token && Array.isArray(token.tokens) ? token.tokens : [];
 }
 
-function renderList(token: Tokens.List, key: string): ReactNode {
-  const children = token.items.map((item, index) => renderListItem(item, `${key}-${index}`));
+function renderList(token: Tokens.List, key: string, context: MarkdownRenderContext): ReactNode {
+  const children = token.items.map((item, index) =>
+    renderListItem(item, `${key}-${index}`, context),
+  );
   return token.ordered ? (
     <ol key={key} start={typeof token.start === "number" ? token.start : undefined}>
       {children}
@@ -143,7 +186,11 @@ function renderList(token: Tokens.List, key: string): ReactNode {
   );
 }
 
-function renderListItem(token: Tokens.ListItem, key: string): ReactNode {
+function renderListItem(
+  token: Tokens.ListItem,
+  key: string,
+  context: MarkdownRenderContext,
+): ReactNode {
   return (
     <li key={key} className={token.task ? "markdown-preview__task" : undefined}>
       {token.task ? (
@@ -151,19 +198,19 @@ function renderListItem(token: Tokens.ListItem, key: string): ReactNode {
           {token.checked ? CHECKED_SYMBOL : UNCHECKED_SYMBOL}
         </span>
       ) : null}
-      {renderTokens(token.tokens, key)}
+      {renderTokens(token.tokens, key, context)}
     </li>
   );
 }
 
-function renderTable(token: Tokens.Table, key: string): ReactNode {
+function renderTable(token: Tokens.Table, key: string, context: MarkdownRenderContext): ReactNode {
   return (
     <table key={key}>
       <thead>
         <tr>
           {withStableKeys(token.header, tableCellIdentity).map(({ value: cell, key: cellKey }) => (
             <th className={alignmentClass(cell.align)} key={`${key}-header-${cellKey}`}>
-              {renderTokens(cell.tokens, `${key}-header-${cellKey}`)}
+              {renderTokens(cell.tokens, `${key}-header-${cellKey}`, context)}
             </th>
           ))}
         </tr>
@@ -174,7 +221,7 @@ function renderTable(token: Tokens.Table, key: string): ReactNode {
             <tr key={`${key}-row-${rowKey}`}>
               {withStableKeys(row, tableCellIdentity).map(({ value: cell, key: cellKey }) => (
                 <td className={alignmentClass(cell.align)} key={`${key}-cell-${rowKey}-${cellKey}`}>
-                  {renderTokens(cell.tokens, `${key}-cell-${rowKey}-${cellKey}`)}
+                  {renderTokens(cell.tokens, `${key}-cell-${rowKey}-${cellKey}`, context)}
                 </td>
               ))}
             </tr>
@@ -185,11 +232,48 @@ function renderTable(token: Tokens.Table, key: string): ReactNode {
   );
 }
 
+function PowerShellCodeBlock({ code }: { readonly code: string }) {
+  const lines = code.split(/\r?\n/u);
+  return (
+    <figure className="markdown-preview__terminal">
+      <figcaption className="markdown-preview__terminal-title">
+        <span aria-hidden="true" className="markdown-preview__terminal-icon">
+          {">_"}
+        </span>
+        <span>PowerShell</span>
+      </figcaption>
+      <pre>
+        <code data-language="powershell">
+          {withStableKeys(lines, (line) => line).map(({ value: line, key }) => (
+            <span
+              className={`markdown-preview__terminal-line${line === "" ? " markdown-preview__terminal-line--empty" : ""}`}
+              key={key}
+            >
+              {line}
+            </span>
+          ))}
+        </code>
+      </pre>
+    </figure>
+  );
+}
+
+function codeLanguage(value: string | undefined): string | null {
+  const language = value?.trim().split(/\s+/u)[0]?.toLowerCase();
+  return language === undefined || language === "" ? null : language;
+}
+
+function isPowerShellLanguage(language: string | null): boolean {
+  return language !== null && ["powershell", "ps1", "pwsh"].includes(language);
+}
+
 function SafeLink({
+  context,
   href,
   title,
   children,
 }: {
+  readonly context: MarkdownRenderContext;
   readonly href: string;
   readonly title: string | null | undefined;
   readonly children: ReactNode;
@@ -201,24 +285,64 @@ function SafeLink({
       </a>
     );
   }
-  if (!isExternalUrl(href)) {
-    return <span className="markdown-preview__unsafe-link">{children}</span>;
+  if (isExternalUrl(href)) {
+    return (
+      <a
+        className="markdown-preview__external-link"
+        href={href}
+        rel="noreferrer"
+        title={title ?? undefined}
+        onClick={(event) => {
+          event.preventDefault();
+          if (isDesktopRuntime()) {
+            void openExternalUrl(href);
+          }
+        }}
+      >
+        {children}
+      </a>
+    );
   }
-  return (
-    <a
-      href={href}
-      rel="noreferrer"
-      title={title ?? undefined}
-      onClick={(event) => {
-        event.preventDefault();
-        if (isDesktopRuntime()) {
-          void openExternalUrl(href);
-        }
-      }}
-    >
-      {children}
-    </a>
-  );
+  const documentLink = resolveDocumentLink(href, context.sourceUri);
+  if (documentLink !== null && context.onOpenDocument !== null) {
+    return (
+      <a
+        className="markdown-preview__document-link"
+        href={documentLink.uri}
+        title={title ?? undefined}
+        onClick={(event) => {
+          event.preventDefault();
+          context.onOpenDocument?.(documentLink.path);
+        }}
+      >
+        {children}
+      </a>
+    );
+  }
+  return <span className="markdown-preview__unsafe-link">{children}</span>;
+}
+
+function resolveDocumentLink(href: string, sourceUri: string | null): DocumentLink | null {
+  if (sourceUri === null) {
+    return null;
+  }
+  try {
+    const resolved = new URL(href, sourceUri);
+    if (resolved.protocol !== "file:") {
+      return null;
+    }
+    resolved.hash = "";
+    resolved.search = "";
+    const path = fileUriToPath(resolved.toString());
+    return path === null ? null : { uri: resolved.toString(), path };
+  } catch {
+    return null;
+  }
+}
+
+interface DocumentLink {
+  readonly uri: string;
+  readonly path: string;
 }
 
 function isExternalUrl(value: string): boolean {
