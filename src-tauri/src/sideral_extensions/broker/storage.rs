@@ -18,7 +18,7 @@ const KEY_VALUE_SCHEMA_VERSION: u8 = 1;
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct KeyValueDocument {
     schema_version: u8,
-    values: BTreeMap<String, Value>,
+    pub(super) values: BTreeMap<String, Value>,
 }
 
 #[derive(Clone, Copy)]
@@ -35,14 +35,14 @@ impl StoreKind {
         }
     }
 
-    const fn limit(self) -> u64 {
+    pub(super) const fn limit(self) -> u64 {
         match self {
             Self::Storage => STORAGE_DOCUMENT_LIMIT_BYTES,
             Self::Configuration => CONFIGURATION_DOCUMENT_LIMIT_BYTES,
         }
     }
 
-    fn gate(self, shared: &BrokerShared) -> &AsyncMutex<()> {
+    pub(super) fn gate(self, shared: &BrokerShared) -> &AsyncMutex<()> {
         match self {
             Self::Storage => &shared.storage_gate,
             Self::Configuration => &shared.configuration_gate,
@@ -115,7 +115,7 @@ impl CapabilityBroker {
             .map_err(|error| ExtensionError::Runtime(error.to_string()))
     }
 
-    fn store_path(&self, extension_id: &str, kind: StoreKind) -> PathBuf {
+    pub(super) fn store_path(&self, extension_id: &str, kind: StoreKind) -> PathBuf {
         self.shared
             .data_root
             .join("data")
@@ -146,7 +146,7 @@ pub(super) fn read_key_value_document(
     Ok(document)
 }
 
-fn write_key_value_document(
+pub(super) fn write_key_value_document(
     path: &std::path::Path,
     document: &KeyValueDocument,
     limit: u64,

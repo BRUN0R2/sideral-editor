@@ -24,7 +24,6 @@ import type { HostInstruction } from "../contracts";
 const BROKER_METHODS: readonly BrokerMethod[] = [
   "commands.execute",
   "configuration.get",
-  "configuration.update",
   "network.request",
   "processes.execute",
   "storage.delete",

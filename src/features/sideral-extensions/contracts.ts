@@ -2,9 +2,13 @@ import type {
   ActivationReason,
   BrokerMethod,
   CommandContribution,
+  CommandDocumentSync,
   CommandInvocation,
+  ConfigurationContribution,
+  ConfigurationProperty,
   JsonObject,
   JsonValue,
+  LanguageContribution,
   NetworkPermission,
   PermissionSet,
   PreviewAppearance,
@@ -17,7 +21,11 @@ import type {
 export type SideralRuntimeKind = "worker";
 export type {
   CommandContribution,
+  CommandDocumentSync,
   CommandInvocation,
+  ConfigurationContribution,
+  ConfigurationProperty,
+  LanguageContribution,
   NetworkPermission,
   PermissionSet,
   ProcessPermission,
@@ -43,6 +51,8 @@ export interface SideralExtensionInspection {
   readonly activationEvents: readonly string[];
   readonly commands: readonly CommandContribution[];
   readonly keybindings: readonly KeybindingContribution[];
+  readonly languages: readonly LanguageContribution[];
+  readonly configuration: ConfigurationContribution | null;
   readonly permissions: PermissionSet;
   readonly manifestBytes: number;
   readonly sizeBudget: ExtensionSizeBudget;
@@ -73,6 +83,12 @@ export interface ExtensionCommandView extends CommandContribution {
   readonly extensionId: string;
   readonly category: string | null;
   readonly invocation: CommandInvocation;
+  readonly documentSync: CommandDocumentSync;
+}
+
+export interface ExtensionLanguageView extends LanguageContribution {
+  readonly extensionId: string;
+  readonly aliases: readonly string[];
 }
 
 export interface KeybindingContribution {
@@ -105,6 +121,8 @@ export interface InstalledExtensionView {
   readonly activationEvents: readonly string[];
   readonly commands: readonly ExtensionCommandView[];
   readonly keybindings: readonly ExtensionKeybindingView[];
+  readonly languages: readonly ExtensionLanguageView[];
+  readonly configuration: ConfigurationContribution | null;
   readonly runtime: RuntimeDiagnostic;
   readonly rollbackVersion: string | null;
 }
@@ -115,6 +133,7 @@ export interface ExtensionSnapshot {
   readonly extensions: readonly InstalledExtensionView[];
   readonly commands: readonly ExtensionCommandView[];
   readonly keybindings: readonly ExtensionKeybindingView[];
+  readonly languages: readonly ExtensionLanguageView[];
 }
 
 export interface ClientHandshake {
@@ -299,8 +318,32 @@ export interface PackageInstallView {
   readonly activationEvents: readonly string[];
   readonly commands: readonly CommandContribution[];
   readonly keybindings: readonly KeybindingContribution[];
+  readonly languages: readonly LanguageContribution[];
+  readonly configuration: ConfigurationContribution | null;
   readonly replacesVersion: string | null;
 }
+
+export interface ExecutableConfigurationView {
+  readonly kind: "executable";
+  readonly key: string;
+  readonly title: string;
+  readonly description: string | null;
+  readonly defaultValue: string;
+  readonly value: string;
+  readonly userDefined: boolean;
+}
+
+export type ExtensionConfigurationPropertyView = ExecutableConfigurationView;
+
+export interface ExtensionConfigurationView {
+  readonly extensionId: string;
+  readonly title: string;
+  readonly properties: readonly ExtensionConfigurationPropertyView[];
+}
+
+export type ConfigurationUpdate =
+  | { readonly kind: "default" }
+  | { readonly kind: "value"; readonly value: string };
 
 export type PackageInspectionResult =
   | { readonly status: "ready"; readonly package: PackageInstallView }

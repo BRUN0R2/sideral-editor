@@ -21,8 +21,9 @@ use persistence::{
 use super::{
     error::ExtensionError,
     protocol::{
-        ExtensionCommandView, ExtensionKeybindingView, ExtensionRuntimeState, ExtensionSnapshot,
-        InstalledExtensionView, KeybindingUpdate, PackageInstallView, RuntimeDiagnostic,
+        ExtensionCommandView, ExtensionKeybindingView, ExtensionLanguageView,
+        ExtensionRuntimeState, ExtensionSnapshot, InstalledExtensionView, KeybindingUpdate,
+        PackageInstallView, RuntimeDiagnostic,
     },
 };
 
@@ -151,6 +152,8 @@ impl ExtensionRegistry {
             activation_events: package.manifest.activation_events.clone(),
             commands: package.manifest.contributes.commands.clone(),
             keybindings: package.manifest.contributes.keybindings.clone(),
+            languages: package.manifest.contributes.languages.clone(),
+            configuration: package.manifest.contributes.configuration.clone(),
             replaces_version: self
                 .document
                 .extensions
@@ -166,7 +169,7 @@ impl ExtensionRegistry {
         approve_publisher: bool,
     ) -> Result<(String, bool), ExtensionError> {
         let package = self.inspect_package(source_path)?;
-        self.ensure_command_ids_available(&package.manifest)?;
+        self.ensure_contributions_available(&package.manifest)?;
         if package.package_sha256 != expected_package_sha256 {
             return Err(ExtensionError::Conflict(
                 "package changed after it was inspected".to_owned(),
@@ -205,7 +208,7 @@ impl ExtensionRegistry {
         let bytes = read_package(source_path)?;
         let package = validate_package_bytes(&bytes)?;
         self.ensure_compatible(&package.manifest)?;
-        self.ensure_command_ids_available(&package.manifest)?;
+        self.ensure_contributions_available(&package.manifest)?;
         if package.package_sha256 != expected_package_sha256 {
             return Err(ExtensionError::Conflict(
                 "package changed after it was inspected".to_owned(),
@@ -316,6 +319,7 @@ impl ExtensionRegistry {
                 ))
             })?;
         self.validate_installed_slot(&rollback)?;
+        self.ensure_contributions_available(&rollback.manifest)?;
         let mut next_document = self.document.clone();
         let installed = next_document
             .extensions
@@ -350,7 +354,8 @@ impl ExtensionRegistry {
                     "extension {extension_id} has no rollback version"
                 ))
             })?;
-        self.validate_installed_slot(rollback).map(|_| ())
+        self.validate_installed_slot(rollback)?;
+        self.ensure_contributions_available(&rollback.manifest)
     }
 
     pub fn uninstall(&mut self, extension_id: &str) -> Result<Vec<PathBuf>, ExtensionError> {
@@ -386,6 +391,27 @@ impl ExtensionRegistry {
         }
         self.ensure_compatible(&installed.active.manifest)?;
         Ok(installed)
+    }
+
+    pub fn configurable_manifests(&self) -> Vec<ExtensionManifest> {
+        self.document
+            .extensions
+            .values()
+            .map(|installed| &installed.active.manifest)
+            .filter(|manifest| manifest.contributes.configuration.is_some())
+            .cloned()
+            .collect()
+    }
+
+    pub fn configuration_manifest(
+        &self,
+        extension_id: &str,
+    ) -> Result<ExtensionManifest, ExtensionError> {
+        self.document
+            .extensions
+            .get(extension_id)
+            .map(|installed| installed.active.manifest.clone())
+            .ok_or_else(|| ExtensionError::NotFound(extension_id.to_owned()))
     }
 
     pub fn update_keybinding(
@@ -483,6 +509,7 @@ impl ExtensionRegistry {
     pub fn snapshot(&self, runtimes: &BTreeMap<String, RuntimeDiagnostic>) -> ExtensionSnapshot {
         let mut extensions = Vec::with_capacity(self.document.extensions.len());
         let mut commands = Vec::new();
+        let mut languages = Vec::new();
         let mut keybindings_by_extension = BTreeMap::new();
         for (extension_id, installed) in &self.document.extensions {
             let command_titles = installed
@@ -569,8 +596,17 @@ impl ExtensionRegistry {
                 .iter()
                 .map(|command| ExtensionCommandView::from_contribution(extension_id, command))
                 .collect::<Vec<_>>();
+            let extension_languages = installed
+                .active
+                .manifest
+                .contributes
+                .languages
+                .iter()
+                .map(|language| ExtensionLanguageView::from_contribution(extension_id, language))
+                .collect::<Vec<_>>();
             if installed.enabled {
                 commands.extend(extension_commands.iter().cloned());
+                languages.extend(extension_languages.iter().cloned());
                 keybindings.extend(
                     keybindings_by_extension
                         .get(extension_id)
@@ -594,6 +630,8 @@ impl ExtensionRegistry {
                     .get(extension_id)
                     .cloned()
                     .unwrap_or_default(),
+                languages: extension_languages,
+                configuration: installed.active.manifest.contributes.configuration.clone(),
                 runtime: runtimes
                     .get(extension_id)
                     .cloned()
@@ -613,7 +651,16 @@ impl ExtensionRegistry {
             extensions,
             commands,
             keybindings,
+            languages,
         }
+    }
+
+    fn ensure_contributions_available(
+        &self,
+        manifest: &ExtensionManifest,
+    ) -> Result<(), ExtensionError> {
+        self.ensure_command_ids_available(manifest)?;
+        self.ensure_language_contributions_available(manifest)
     }
 
     fn ensure_compatible(&self, manifest: &ExtensionManifest) -> Result<(), ExtensionError> {
@@ -654,6 +701,41 @@ impl ExtensionRegistry {
                     "command {} is already contributed by {owner}",
                     command.id
                 )));
+            }
+        }
+        Ok(())
+    }
+
+    fn ensure_language_contributions_available(
+        &self,
+        manifest: &ExtensionManifest,
+    ) -> Result<(), ExtensionError> {
+        for language in &manifest.contributes.languages {
+            for (extension_id, installed) in &self.document.extensions {
+                if extension_id == &manifest.id {
+                    continue;
+                }
+                for existing_manifest in std::iter::once(&installed.active.manifest)
+                    .chain(installed.rollback.iter().map(|slot| &slot.manifest))
+                {
+                    for existing in &existing_manifest.contributes.languages {
+                        if existing.id == language.id {
+                            return Err(ExtensionError::Conflict(format!(
+                                "language {} is already contributed by {extension_id}",
+                                language.id
+                            )));
+                        }
+                        if let Some(extension) = language
+                            .extensions
+                            .iter()
+                            .find(|extension| existing.extensions.contains(extension))
+                        {
+                            return Err(ExtensionError::Conflict(format!(
+                                "language extension {extension} is already contributed by {extension_id}"
+                            )));
+                        }
+                    }
+                }
             }
         }
         Ok(())
@@ -847,7 +929,13 @@ fn validate_trust_document(document: &TrustDocument) -> Result<(), ExtensionErro
 
 #[cfg(test)]
 mod tests {
-    use super::RegistryDocument;
+    use std::{collections::BTreeMap, env, path::PathBuf};
+
+    use semver::Version;
+    use tempfile::tempdir;
+
+    use super::{ExtensionRegistry, RegistryDocument};
+    use crate::sideral_extensions::error::ExtensionError;
 
     #[test]
     fn rejects_registry_documents_without_keybinding_overrides() {
@@ -858,5 +946,65 @@ mod tests {
         }"#;
 
         assert!(serde_json::from_str::<RegistryDocument>(source).is_err());
+    }
+
+    #[test]
+    #[ignore = "requires SIDERAL_EXTENSION_E2E_PACKAGE"]
+    fn installs_and_restores_a_real_signed_extension_package() -> Result<(), ExtensionError> {
+        let package_path =
+            PathBuf::from(env::var("SIDERAL_EXTENSION_E2E_PACKAGE").map_err(|error| {
+                ExtensionError::InvalidRequest(format!("package environment is missing: {error}"))
+            })?);
+        let directory = tempdir().map_err(|error| {
+            ExtensionError::io("could not create registry E2E directory", error)
+        })?;
+        let root = directory.path().join("extensions");
+        let mut registry = ExtensionRegistry::load(
+            root.clone(),
+            Version::parse("0.1.0").map_err(|error| ExtensionError::Runtime(error.to_string()))?,
+        )?;
+        let package = registry.inspect_package(&package_path)?;
+        let view = registry.package_install_view(&package);
+        let extension_id = view.id.clone();
+        let command_ids = view
+            .commands
+            .iter()
+            .map(|command| command.id.clone())
+            .collect::<Vec<_>>();
+        let language_ids = view
+            .languages
+            .iter()
+            .map(|language| language.id.clone())
+            .collect::<Vec<_>>();
+
+        registry.install_package(&package_path, &package.package_sha256, true)?;
+        let snapshot = registry.snapshot(&BTreeMap::new());
+        assert!(
+            snapshot
+                .extensions
+                .iter()
+                .any(|extension| extension.id == extension_id)
+        );
+        assert!(command_ids.iter().all(|expected| {
+            snapshot
+                .commands
+                .iter()
+                .any(|command| command.id == *expected)
+        }));
+        assert!(language_ids.iter().all(|expected| {
+            snapshot
+                .languages
+                .iter()
+                .any(|language| language.id == *expected)
+        }));
+
+        let restored = ExtensionRegistry::load(
+            root,
+            Version::parse("0.1.0").map_err(|error| ExtensionError::Runtime(error.to_string()))?,
+        )?;
+        let restored_snapshot = restored.snapshot(&BTreeMap::new());
+        assert_eq!(restored_snapshot.extensions.len(), 1);
+        assert_eq!(restored_snapshot.extensions[0].id, extension_id);
+        Ok(())
     }
 }

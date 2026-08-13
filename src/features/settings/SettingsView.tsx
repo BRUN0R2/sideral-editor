@@ -7,6 +7,7 @@ import { toApplicationError } from "../../lib/errors";
 import { useI18n } from "../i18n/I18nProvider";
 import type { ExtensionSystem } from "../sideral-extensions/useExtensionSystem";
 import { useUpdates } from "../updates/UpdateProvider";
+import { ExtensionConfigurationSettings } from "./ExtensionConfigurationSettings";
 import { ExtensionKeybindingSettings } from "./ExtensionKeybindingSettings";
 import { JsonSchemaSettings } from "./JsonSchemaSettings";
 import type { DesktopPreferencesController } from "./useDesktopPreferences";
@@ -29,6 +30,17 @@ export function SettingsView({
   const [operationError, setOperationError] = useState<string | null>(null);
   const [changingLanguage, setChangingLanguage] = useState(false);
   const desktopPreferencesEnabled = bootstrap.runtime === "desktop";
+  const extensionConfigurationGeneration = useMemo(
+    () =>
+      JSON.stringify(
+        extensions.snapshot.extensions.flatMap((extension) =>
+          extension.configuration === null
+            ? []
+            : [{ id: extension.id, configuration: extension.configuration }],
+        ),
+      ),
+    [extensions.snapshot.extensions],
+  );
 
   const updateDesktopPreferences = (preferences: DesktopPreferences): void => {
     setOperationError(null);
@@ -252,6 +264,14 @@ export function SettingsView({
 
           {desktopPreferencesEnabled ? (
             <JsonSchemaSettings active={active} onTrustChange={onJsonSchemaTrustChange} />
+          ) : null}
+
+          {desktopPreferencesEnabled ? (
+            <ExtensionConfigurationSettings
+              key={extensionConfigurationGeneration}
+              active={active}
+              extensions={extensions.snapshot.extensions}
+            />
           ) : null}
 
           <ExtensionKeybindingSettings system={extensions} />

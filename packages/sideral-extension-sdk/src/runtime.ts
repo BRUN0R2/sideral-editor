@@ -50,8 +50,7 @@ export interface WorkspaceApi {
 }
 
 export interface ConfigurationApi {
-  get(section: string): Promise<JsonValue | undefined>;
-  update(section: string, value: JsonValue): Promise<void>;
+  get(section: string): Promise<string>;
 }
 
 export interface OutputChannel extends Disposable {
@@ -144,6 +143,7 @@ export interface NetworkApi {
 
 export interface ProcessRequest {
   readonly grant: string;
+  readonly inputs?: Readonly<Record<string, string>>;
   readonly signal?: AbortSignal;
 }
 

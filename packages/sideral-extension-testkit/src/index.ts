@@ -43,7 +43,7 @@ export interface TestPreviewPanel {
 export interface ExtensionHarnessOptions {
   readonly extensionId?: string;
   readonly activationReason?: ActivationReason;
-  readonly configuration?: Readonly<Record<string, JsonValue>>;
+  readonly configuration?: Readonly<Record<string, string>>;
   readonly storage?: Readonly<Record<string, JsonValue>>;
   readonly activeTextDocument?: TextDocument;
   readonly readTextDocument?: (uri: string, signal?: AbortSignal) => Promise<TextDocument>;
@@ -67,7 +67,7 @@ export interface ExtensionHarness {
   readonly outputs: readonly TestOutputChannel[];
   readonly previews: readonly TestPreviewPanel[];
   readonly storage: ReadonlyMap<string, JsonValue>;
-  readonly configuration: ReadonlyMap<string, JsonValue>;
+  readonly configuration: ReadonlyMap<string, string>;
   activate(): Promise<void>;
   executeCommand(
     commandId: string,
@@ -90,7 +90,7 @@ class Harness implements ExtensionHarness {
   readonly #messages: TestMessage[] = [];
   readonly #outputs: MutableOutputChannel[] = [];
   readonly #storage: Map<string, JsonValue>;
-  readonly #configuration: Map<string, JsonValue>;
+  readonly #configuration: Map<string, string>;
   readonly #commands = new Map<string, RegisteredCommand>();
   readonly #previews: MutablePreviewPanel[] = [];
   readonly #commandStack: string[] = [];
@@ -107,7 +107,7 @@ class Harness implements ExtensionHarness {
     this.#options = options;
     this.extensionId = options.extensionId ?? "test.extension";
     this.#storage = cloneEntries(options.storage);
-    this.#configuration = cloneEntries(options.configuration);
+    this.#configuration = new Map(Object.entries(options.configuration ?? {}));
   }
 
   get messages(): readonly TestMessage[] {
@@ -126,7 +126,7 @@ class Harness implements ExtensionHarness {
     return this.#storage;
   }
 
-  get configuration(): ReadonlyMap<string, JsonValue> {
+  get configuration(): ReadonlyMap<string, string> {
     return this.#configuration;
   }
 
@@ -227,9 +227,12 @@ class Harness implements ExtensionHarness {
           this.#invokeRegisteredCommand(id, arguments_, this.#currentTextDocument),
       },
       configuration: {
-        get: async (section) => cloneOptional(this.#configuration.get(section)),
-        update: async (section, value) => {
-          this.#configuration.set(section, clone(value));
+        get: async (section) => {
+          const value = this.#configuration.get(section);
+          if (value === undefined) {
+            throw new Error(`Configuration ${section} was not provided to the test harness.`);
+          }
+          return value;
         },
       },
       network: {

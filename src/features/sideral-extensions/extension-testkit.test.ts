@@ -141,6 +141,28 @@ describe("Sideral extension test kit", () => {
     await harness.dispose();
   });
 
+  it("provides declared configuration as read-only runtime input", async () => {
+    const extension: ExtensionModule = {
+      activate(context, api) {
+        context.subscriptions.add(
+          api.commands.registerCommand("test.extension.configuration", () =>
+            api.configuration.get("compiler-path"),
+          ),
+        );
+      },
+    };
+    const harness = createExtensionHarness(extension, {
+      configuration: { "compiler-path": "D:\\Tools\\compiler.exe" },
+    });
+
+    await harness.activate();
+
+    await expect(harness.executeCommand("test.extension.configuration")).resolves.toBe(
+      "D:\\Tools\\compiler.exe",
+    );
+    await harness.dispose();
+  });
+
   it("disposes every resource in reverse order when cleanup fails", async () => {
     const cleanupOrder: string[] = [];
     const extension: ExtensionModule = {

@@ -14,7 +14,7 @@ export interface PendingExtensionPackage {
 export function ExtensionCapabilityList({
   package_,
 }: {
-  readonly package_: Pick<PackageInstallView, "permissions" | "activationEvents">;
+  readonly package_: Pick<PackageInstallView, "permissions" | "activationEvents" | "configuration">;
 }) {
   const { t } = useI18n();
   const capabilities = permissionLabels(package_, t);
@@ -156,7 +156,7 @@ function DialogFrame({
 }
 
 function permissionLabels(
-  package_: Pick<PackageInstallView, "permissions" | "activationEvents">,
+  package_: Pick<PackageInstallView, "permissions" | "activationEvents" | "configuration">,
   t: ReturnType<typeof useI18n>["t"],
 ): string[] {
   const labels: string[] = [];
@@ -182,7 +182,9 @@ function permissionLabels(
   if (processes.length > 0) {
     labels.push(
       t("extensions.processes", {
-        value: processes.map((permission) => permission.id).join(", "),
+        value: processes
+          .map((permission) => processPermissionLabel(permission, package_.configuration))
+          .join(" · "),
       }),
     );
   }
@@ -190,4 +192,40 @@ function permissionLabels(
     labels.push(t("extensions.activation", { value: package_.activationEvents.join(", ") }));
   }
   return labels;
+}
+
+function processPermissionLabel(
+  permission: NonNullable<PackageInstallView["permissions"]["processes"]>[number],
+  configuration: PackageInstallView["configuration"],
+): string {
+  const arguments_ = (permission.arguments ?? []).map((argument) => {
+    if (argument.kind === "literal") {
+      return JSON.stringify(argument.value);
+    }
+    const prefix = argument.prefix ?? "";
+    const target =
+      argument.kind === "workspaceDirectory"
+        ? "directory"
+        : (argument.extensions?.join("|") ?? "any file");
+    return `${prefix}<${argument.name}:${argument.access}:${target}>`;
+  });
+  const executable =
+    permission.executable.kind === "literal"
+      ? permission.executable.value
+      : configurationExecutableLabel(permission.executable.key, configuration);
+  const command = [executable, ...arguments_].join(" ");
+  return `${permission.id}: ${command} [cwd=${permission.workingDirectory}]`;
+}
+
+function configurationExecutableLabel(
+  key: string,
+  configuration: PackageInstallView["configuration"],
+): string {
+  if (configuration === null) {
+    return `<configuration:${key}>`;
+  }
+  const property = configuration.properties.find((candidate) => candidate.key === key);
+  return property === undefined
+    ? `<configuration:${key}>`
+    : `<${configuration.title} › ${property.title}; default=${property.default}>`;
 }

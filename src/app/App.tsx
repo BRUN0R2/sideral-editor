@@ -83,7 +83,11 @@ function Workbench({ extensionHostConnection }: AppProps) {
     workspace.workspaceRoot?.path ?? null,
     workspace.activeDocument,
     extensionHostConnection,
+    workspace.saveDocument,
   );
+  useEffect(() => {
+    workspace.setExtensionLanguages(extensions.snapshot.languages);
+  }, [extensions.snapshot.languages, workspace.setExtensionLanguages]);
   const [primarySidebar, setPrimarySidebar] = useState<PrimarySidebarView>("explorer");
   const [navigation, navigate] = useReducer(
     reduceWorkbenchNavigation,

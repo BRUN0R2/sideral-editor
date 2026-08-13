@@ -28,7 +28,7 @@ React workbench
 
 Native extension service
   ├─ signed package registry + publisher trust + active/rollback slots
-  └─ capability broker ── canonical workspace, isolated data, pinned network, fixed processes
+  └─ capability broker ── canonical workspace, isolated data, pinned network, typed processes
 ```
 
 The frontend owns presentation state. Rust owns filesystem access, the active
@@ -62,9 +62,16 @@ terminate invalid work and never act as startup coordination. A generation
 invalidated by disable, reload or host failure cannot publish late state.
 
 The native broker is the sole authority for workspace, storage, configuration,
-network, process and window requests. Every process grant also declares its
-working directory as the canonical workspace or its isolated extension-data
-directory; there is no inherited application directory.
+network, process and window requests. Extension configuration is declared in the
+signed manifest, rendered generically by Settings and mutated only through a
+main-window command that validates and atomically persists the override. Workers
+receive read-only effective values. Every process grant declares either a signed
+literal executable or a reference to a declared executable setting, a signed
+sequence of literal or typed workspace-path arguments and its working directory
+as the canonical workspace, isolated extension data or resolved executable
+directory; there is no inherited application directory or shell-string path.
+Declarative language contributions flow through the native snapshot and update
+editor document models without loading extension code.
 
 The product boundary and package contract are recorded in
 `docs/decisions/0001-native-extension-system.md`; deterministic runtime
@@ -83,7 +90,7 @@ semantics are recorded in
 - `src/features/explorer`: recursive presentation of lazily loaded entries.
 - `src/features/i18n`: typed message keys, interpolation and active locale.
 - `src/features/settings`: dedicated workbench view for desktop, language,
-  translation and update preferences.
+  translation, declared extension configuration and update preferences.
 - `src/features/terminal`: lazy xterm.js surface, exact native contracts and a
   serialized connection lifecycle.
 - `src/features/sideral-extensions`: manifest, client, runtime supervisor and
@@ -119,8 +126,8 @@ within their own panel through the validated `appearance.scrollbar` contract.
 - `updater.rs`: official updater registration and configuration detection.
 - `error.rs`: structured operational failures exposed to TypeScript.
 - `sideral_extensions`: signed registry, trust, monotonic runtime snapshots,
-  lifecycle coordination and a capability broker split into network, process,
-  storage, workspace and window domains.
+  lifecycle coordination and a capability broker split into configuration,
+  network, process, storage, workspace and window domains.
 - `lib.rs`: command boundary and blocking-work isolation.
 
 ### Extension crates and SDK
@@ -129,8 +136,9 @@ within their own panel through the validated `appearance.scrollbar` contract.
   capabilities and executable size budgets.
 - `src-tauri/crates/sideral-extension-package`: bounded archive parsing,
   canonical Ed25519 signatures and deterministic package construction.
-- `src-tauri/crates/sideral-extension-tool`: non-overwriting scaffold, key,
-  pack and inspect commands.
+- `src-tauri/crates/sideral-extension-tool`: non-overwriting standalone
+  scaffold with a pinned SDK/testkit, plus check, key, pack and inspect
+  commands.
 - `packages/sideral-extension-sdk`: declaration-only authoring contract that
   contributes zero runtime bytes to extension bundles.
 - `packages/sideral-extension-testkit`: deterministic in-memory lifecycle and

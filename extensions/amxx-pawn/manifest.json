@@ -1,0 +1,112 @@
+{
+  "manifestVersion": 1,
+  "apiVersion": 1,
+  "id": "sideral.amxx-pawn",
+  "displayName": "AMXX Pawn Compiler",
+  "version": "0.1.0",
+  "description": "Compiles the active AMX Mod X Pawn source file from .sma to .amxx.",
+  "license": "MIT",
+  "engines": {
+    "sideral": "^0.1.0"
+  },
+  "runtime": {
+    "kind": "worker",
+    "entry": "dist/extension.mjs"
+  },
+  "activationEvents": ["onLanguage:amxxpawn"],
+  "permissions": {
+    "workspace": "readWrite",
+    "processes": [
+      {
+        "id": "sideral.amxx-pawn.amxxpc",
+        "executable": {
+          "kind": "configuration",
+          "key": "compiler-path"
+        },
+        "workingDirectory": "executable",
+        "arguments": [
+          {
+            "kind": "workspaceFile",
+            "name": "source",
+            "access": "read",
+            "extensions": [".sma"]
+          },
+          {
+            "kind": "workspaceFile",
+            "name": "output",
+            "access": "write",
+            "prefix": "-o",
+            "extensions": [".amxx"]
+          }
+        ]
+      },
+      {
+        "id": "sideral.amxx-pawn.amxxpc-project",
+        "executable": {
+          "kind": "configuration",
+          "key": "compiler-path"
+        },
+        "workingDirectory": "executable",
+        "arguments": [
+          {
+            "kind": "workspaceFile",
+            "name": "source",
+            "access": "read",
+            "extensions": [".sma"]
+          },
+          {
+            "kind": "workspaceDirectory",
+            "name": "project-include",
+            "access": "read",
+            "prefix": "-i"
+          },
+          {
+            "kind": "workspaceFile",
+            "name": "output",
+            "access": "write",
+            "prefix": "-o",
+            "extensions": [".amxx"]
+          }
+        ]
+      }
+    ]
+  },
+  "contributes": {
+    "configuration": {
+      "title": "AMXX Pawn",
+      "properties": [
+        {
+          "kind": "executable",
+          "key": "compiler-path",
+          "title": "Compiler Path",
+          "description": "AMX Mod X Pawn compiler executable used for build commands.",
+          "default": "amxxpc"
+        }
+      ]
+    },
+    "languages": [
+      {
+        "id": "amxxpawn",
+        "aliases": ["AMXX Pawn", "Pawn"],
+        "extensions": [".sma", ".inc"]
+      }
+    ],
+    "commands": [
+      {
+        "id": "sideral.amxx-pawn.compile",
+        "title": "Compile active plugin",
+        "category": "AMXX Pawn",
+        "invocation": "activeTextDocument",
+        "documentSync": "save"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "sideral.amxx-pawn.compile",
+        "key": "Ctrl+Shift+B",
+        "mac": "Shift+Meta+B",
+        "languages": ["amxxpawn"]
+      }
+    ]
+  }
+}

@@ -14,8 +14,9 @@ use tauri::{
 
 pub use error::{ExtensionCommandError, ExtensionError};
 pub use protocol::{
-    BrokerRequest, BrokerResponse, ClientHandshake, ExtensionClientInstruction, ExtensionSnapshot,
-    HostEvent, HostHandshake, HostInstruction, PackageInspectionResult,
+    BrokerRequest, BrokerResponse, ClientHandshake, ConfigurationUpdate,
+    ExtensionClientInstruction, ExtensionConfigurationView, ExtensionSnapshot, HostEvent,
+    HostHandshake, HostInstruction, PackageInspectionResult,
 };
 pub use service::SideralExtensionState;
 
@@ -193,6 +194,39 @@ pub async fn update_extension_keybinding(
         .publish_snapshot()
         .map_err(ExtensionCommandError::from)?;
     state.snapshot().map_err(ExtensionCommandError::from)
+}
+
+#[tauri::command]
+pub async fn extension_configurations(
+    window: WebviewWindow,
+    state: State<'_, SideralExtensionState>,
+) -> ExtensionCommandResult<Vec<ExtensionConfigurationView>> {
+    state
+        .require_main_window(&window)
+        .map_err(ExtensionCommandError::from)?;
+    state
+        .configurations()
+        .await
+        .map_err(ExtensionCommandError::from)
+}
+
+#[tauri::command]
+pub async fn update_extension_configuration(
+    window: WebviewWindow,
+    state: State<'_, SideralExtensionState>,
+    extension_id: String,
+    key: String,
+    update: ConfigurationUpdate,
+) -> ExtensionCommandResult<ExtensionConfigurationView> {
+    let state = state.inner().clone();
+    state
+        .require_main_window(&window)
+        .map_err(ExtensionCommandError::from)?;
+    let _mutation_guard = state.lock_mutations().await;
+    state
+        .update_configuration(&extension_id, key, update)
+        .await
+        .map_err(ExtensionCommandError::from)
 }
 
 #[tauri::command]

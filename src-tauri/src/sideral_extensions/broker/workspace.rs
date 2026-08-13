@@ -8,7 +8,7 @@ use std::{
 use globset::GlobBuilder;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use sideral_extension_core::{ExtensionManifest, WorkspaceAccess};
+use sideral_extension_core::{ExtensionManifest, LanguageContribution, WorkspaceAccess};
 use url::Url;
 
 use super::{
@@ -25,15 +25,18 @@ const MAX_TRAVERSED_ENTRIES: usize = 100_000;
 impl CapabilityBroker {
     pub(super) async fn read_workspace_document(
         &self,
+        manifest: &ExtensionManifest,
         uri: String,
     ) -> Result<Value, ExtensionError> {
         let broker = self.clone();
-        run_blocking(move || broker.read_workspace_document_blocking(&uri)).await
+        let languages = manifest.contributes.languages.clone();
+        run_blocking(move || broker.read_workspace_document_blocking(&uri, &languages)).await
     }
 
     pub(super) fn read_workspace_document_blocking(
         &self,
         uri: &str,
+        languages: &[LanguageContribution],
     ) -> Result<Value, ExtensionError> {
         let path = self.canonical_workspace_file(uri)?;
         let mut versions = lock(
@@ -52,7 +55,7 @@ impl CapabilityBroker {
         let version = track_document_version(&mut versions, &path, &content_sha256);
         Ok(json!({
             "uri": file_uri(&path)?,
-            "languageId": language_id(&path),
+            "languageId": language_id(&path, languages),
             "version": version,
             "content": content,
         }))
@@ -60,6 +63,7 @@ impl CapabilityBroker {
 
     pub(super) async fn write_workspace_document(
         &self,
+        manifest: &ExtensionManifest,
         payload: WriteDocumentPayload,
     ) -> Result<Value, ExtensionError> {
         if payload.content.len() as u64 > MAX_TEXT_DOCUMENT_BYTES {
@@ -73,12 +77,14 @@ impl CapabilityBroker {
             ));
         }
         let broker = self.clone();
-        run_blocking(move || broker.write_workspace_document_blocking(payload)).await
+        let languages = manifest.contributes.languages.clone();
+        run_blocking(move || broker.write_workspace_document_blocking(payload, &languages)).await
     }
 
     pub(super) fn write_workspace_document_blocking(
         &self,
         payload: WriteDocumentPayload,
+        languages: &[LanguageContribution],
     ) -> Result<Value, ExtensionError> {
         let path = self.canonical_workspace_file(&payload.uri)?;
         let mut versions = lock(
@@ -111,7 +117,7 @@ impl CapabilityBroker {
         );
         Ok(json!({
             "uri": file_uri(&path)?,
-            "languageId": language_id(&path),
+            "languageId": language_id(&path, languages),
             "version": version,
             "content": payload.content,
         }))
@@ -214,28 +220,9 @@ impl CapabilityBroker {
         serde_json::to_value(matches).map_err(|error| ExtensionError::Runtime(error.to_string()))
     }
 
-    fn canonical_workspace_file(&self, uri: &str) -> Result<PathBuf, ExtensionError> {
+    pub(super) fn canonical_workspace_file(&self, uri: &str) -> Result<PathBuf, ExtensionError> {
         let root = self.workspace_root()?;
-        let parsed = Url::parse(uri).map_err(|error| {
-            ExtensionError::InvalidRequest(format!("invalid file URI: {error}"))
-        })?;
-        if parsed.scheme() != "file" {
-            return Err(ExtensionError::InvalidRequest(
-                "workspace documents must use file URIs".to_owned(),
-            ));
-        }
-        if !parsed.username().is_empty()
-            || parsed.password().is_some()
-            || parsed.query().is_some()
-            || parsed.fragment().is_some()
-        {
-            return Err(ExtensionError::InvalidRequest(
-                "workspace file URIs cannot contain credentials, queries or fragments".to_owned(),
-            ));
-        }
-        let path = parsed.to_file_path().map_err(|()| {
-            ExtensionError::InvalidRequest("workspace URI is not a valid file path".to_owned())
-        })?;
+        let path = workspace_uri_path(uri)?;
         let canonical = fs::canonicalize(&path).map_err(|error| {
             ExtensionError::io(format!("could not resolve {}", path.display()), error)
         })?;
@@ -248,11 +235,89 @@ impl CapabilityBroker {
         Ok(canonical)
     }
 
+    pub(super) fn canonical_workspace_directory(
+        &self,
+        uri: &str,
+    ) -> Result<PathBuf, ExtensionError> {
+        let root = self.workspace_root()?;
+        let path = workspace_uri_path(uri)?;
+        let canonical = fs::canonicalize(&path).map_err(|error| {
+            ExtensionError::io(format!("could not resolve {}", path.display()), error)
+        })?;
+        if !canonical.starts_with(&root) || !canonical.is_dir() {
+            return Err(ExtensionError::PermissionDenied(format!(
+                "{} is outside the active workspace or is not a directory",
+                canonical.display()
+            )));
+        }
+        Ok(canonical)
+    }
+
+    pub(super) fn workspace_output_file(&self, uri: &str) -> Result<PathBuf, ExtensionError> {
+        let root = self.workspace_root()?;
+        let path = workspace_uri_path(uri)?;
+        let file_name = path.file_name().ok_or_else(|| {
+            ExtensionError::InvalidRequest("workspace output URI has no file name".to_owned())
+        })?;
+        if matches!(file_name.to_str(), Some("." | "..")) {
+            return Err(ExtensionError::InvalidRequest(
+                "workspace output URI has an invalid file name".to_owned(),
+            ));
+        }
+        if path.exists() {
+            let canonical = fs::canonicalize(&path).map_err(|error| {
+                ExtensionError::io(format!("could not resolve {}", path.display()), error)
+            })?;
+            if !canonical.starts_with(&root) || !canonical.is_file() {
+                return Err(ExtensionError::PermissionDenied(format!(
+                    "{} is outside the active workspace or is not a file",
+                    canonical.display()
+                )));
+            }
+            return Ok(canonical);
+        }
+        let parent = path.parent().ok_or_else(|| {
+            ExtensionError::InvalidRequest("workspace output URI has no parent".to_owned())
+        })?;
+        let canonical_parent = fs::canonicalize(parent).map_err(|error| {
+            ExtensionError::io(format!("could not resolve {}", parent.display()), error)
+        })?;
+        if !canonical_parent.starts_with(&root) || !canonical_parent.is_dir() {
+            return Err(ExtensionError::PermissionDenied(format!(
+                "{} is outside the active workspace or is not a directory",
+                canonical_parent.display()
+            )));
+        }
+        Ok(canonical_parent.join(file_name))
+    }
+
     pub(super) fn workspace_root(&self) -> Result<PathBuf, ExtensionError> {
         read_lock(&self.shared.workspace_root, "extension workspace")?
             .clone()
             .ok_or_else(|| ExtensionError::InvalidRequest("no workspace is open".to_owned()))
     }
+}
+
+fn workspace_uri_path(uri: &str) -> Result<PathBuf, ExtensionError> {
+    let parsed = Url::parse(uri)
+        .map_err(|error| ExtensionError::InvalidRequest(format!("invalid file URI: {error}")))?;
+    if parsed.scheme() != "file" {
+        return Err(ExtensionError::InvalidRequest(
+            "workspace documents must use file URIs".to_owned(),
+        ));
+    }
+    if !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+    {
+        return Err(ExtensionError::InvalidRequest(
+            "workspace file URIs cannot contain credentials, queries or fragments".to_owned(),
+        ));
+    }
+    parsed.to_file_path().map_err(|()| {
+        ExtensionError::InvalidRequest("workspace URI is not a valid file path".to_owned())
+    })
 }
 
 pub(super) fn require_workspace_permission(
@@ -308,23 +373,38 @@ pub(super) fn file_uri(path: &Path) -> Result<String, ExtensionError> {
         .map_err(|()| ExtensionError::Runtime(format!("{} has no file URI", path.display())))
 }
 
-fn language_id(path: &Path) -> &'static str {
-    match path.extension().and_then(|extension| extension.to_str()) {
-        Some("css") => "css",
-        Some("html" | "htm") => "html",
-        Some("js" | "mjs" | "cjs") => "javascript",
-        Some("json" | "jsonc") => "json",
-        Some("md") => "markdown",
-        Some("py") => "python",
-        Some("rs") => "rust",
-        Some("ts" | "mts" | "cts") => "typescript",
-        Some("tsx") => "typescriptreact",
-        Some("jsx") => "javascriptreact",
-        Some("toml") => "toml",
-        Some("xml") => "xml",
-        Some("yaml" | "yml") => "yaml",
+fn language_id(path: &Path, languages: &[LanguageContribution]) -> String {
+    let extension = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| format!(".{}", extension.to_ascii_lowercase()));
+    if let Some(language) = extension.as_deref().and_then(|extension| {
+        languages.iter().find(|language| {
+            language
+                .extensions
+                .iter()
+                .any(|candidate| candidate == extension)
+        })
+    }) {
+        return language.id.clone();
+    }
+    match extension.as_deref() {
+        Some(".css") => "css",
+        Some(".html" | ".htm") => "html",
+        Some(".js" | ".mjs" | ".cjs") => "javascript",
+        Some(".json" | ".jsonc") => "json",
+        Some(".md") => "markdown",
+        Some(".py") => "python",
+        Some(".rs") => "rust",
+        Some(".ts" | ".mts" | ".cts") => "typescript",
+        Some(".tsx") => "typescriptreact",
+        Some(".jsx") => "javascriptreact",
+        Some(".toml") => "toml",
+        Some(".xml") => "xml",
+        Some(".yaml" | ".yml") => "yaml",
         _ => "plaintext",
     }
+    .to_owned()
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {

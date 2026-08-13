@@ -12,4 +12,11 @@ describe("languageForFile", () => {
   ])("maps %s to %s", (fileName, expectedLanguage) => {
     expect(languageForFile(fileName)).toBe(expectedLanguage);
   });
+
+  it("uses declarative extension languages without hardcoding them in the editor", () => {
+    const languages = [{ id: "amxxpawn", extensions: [".sma", ".inc"] }];
+
+    expect(languageForFile("plugin.SMA", languages)).toBe("amxxpawn");
+    expect(languageForFile("shared.inc", languages)).toBe("amxxpawn");
+  });
 });

@@ -274,8 +274,68 @@
   gap: 6px;
 }
 
+.extension-configurations {
+  display: grid;
+  gap: 8px;
+}
+
+.extension-configurations__empty {
+  color: var(--text-subtle);
+  font-size: 10px;
+}
+
+.extension-configuration {
+  display: grid;
+  gap: 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 12px;
+  background: #20242a;
+}
+
+.extension-configuration__identity {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.extension-configuration__identity label {
+  color: #d5d8dd;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.extension-configuration__identity small,
+.extension-configuration__default {
+  color: var(--text-subtle);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.extension-configuration__control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+}
+
+.extension-configuration__path {
+  min-width: 0;
+  height: 34px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  color: #c5c9cf;
+  background: #191d22;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 10px;
+}
+
 @media (max-width: 900px) {
   .extension-keybinding {
+    grid-template-columns: 1fr;
+  }
+
+  .extension-configuration__control {
     grid-template-columns: 1fr;
   }
 

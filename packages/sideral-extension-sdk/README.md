@@ -3,6 +3,9 @@
 This package contains the versioned compile-time contracts for Sideral manifest
 v1, API v1 and the host/Worker protocol. Install it as a development dependency
 and use `import type`; it contributes zero runtime bytes to an extension bundle.
+Projects created by the official scaffold receive an exact local snapshot of
+this package, so they are immediately installable and buildable outside the
+Sideral repository. A registry publication is not required for that workflow.
 
 An extension ships one bundled ESM worker entry and its manifest. The editor
 supplies every runtime capability through `ExtensionApi`.
@@ -20,18 +23,26 @@ export const manifest = {
   runtime: { kind: "worker", entry: "dist/extension.mjs" },
   permissions: { workspace: "read" },
   contributes: {
+    languages: [
+      {
+        id: "sample-markdown",
+        aliases: ["Sample Markdown"],
+        extensions: [".samplemd"]
+      }
+    ],
     commands: [
       {
         id: "acme.sample.preview",
         title: "Toggle preview",
-        invocation: "activeTextDocument"
+        invocation: "activeTextDocument",
+        documentSync: "snapshot"
       }
     ],
     keybindings: [
       {
         command: "acme.sample.preview",
         key: "Ctrl+Shift+V",
-        languages: ["markdown"]
+        languages: ["sample-markdown"]
       }
     ]
   }
@@ -52,6 +63,63 @@ export const activate: ExtensionModule["activate"] = (context, api) => {
   );
 };
 ```
+
+Native tools use signed, typed process grants. Runtime code can supply only the
+named workspace-path inputs declared by the manifest:
+
+```ts
+await api.processes.execute({
+  grant: "acme.compiler.run",
+  inputs: {
+    source: document.uri,
+    output: document.uri.replace(/\.source$/u, ".output")
+  }
+});
+```
+
+The executable declaration is explicit as well. Use
+`{ kind: "literal", value: "compiler" }` for an immutable executable or
+reference a user-facing setting:
+
+```ts
+const manifest = {
+  permissions: {
+    processes: [
+      {
+        id: "acme.compiler.run",
+        executable: { kind: "configuration", key: "compiler-path" },
+        workingDirectory: "executable"
+      }
+    ]
+  },
+  contributes: {
+    configuration: {
+      title: "Acme Compiler",
+      properties: [
+        {
+          kind: "executable",
+          key: "compiler-path",
+          title: "Compiler Path",
+          default: "compiler"
+        }
+      ]
+    }
+  }
+} satisfies Pick<ExtensionManifest, "permissions" | "contributes">;
+```
+
+Sideral renders the executable selector, validates and persists user overrides,
+and resolves the effective value inside the native process broker. The signed
+default is a bare executable name resolved from `PATH`; selected overrides are
+absolute canonical paths. Worker code
+may read a declared value with `api.configuration.get("compiler-path")`, but it
+cannot change user configuration.
+
+The corresponding manifest argument is an immutable
+`{ kind: "literal", value }`, a validated
+`{ kind: "workspaceFile", name, access, prefix?, extensions? }`, or a validated
+`{ kind: "workspaceDirectory", name, access, prefix? }`. There is no shell API
+or caller-defined argument array.
 
 Preview panels inherit the host scrollbar theme by default. A panel can safely
 override it within its own surface without injecting CSS into the workbench:

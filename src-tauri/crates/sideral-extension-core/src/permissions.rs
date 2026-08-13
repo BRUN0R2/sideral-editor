@@ -3,11 +3,12 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::ManifestError;
+use crate::{ManifestError, configuration::validate_configuration_key};
 
 const MAX_NETWORK_ORIGINS: usize = 32;
 const MAX_PROCESS_PERMISSIONS: usize = 16;
 const MAX_PROCESS_ARGUMENTS: usize = 32;
+const MAX_PROCESS_ARGUMENT_EXTENSIONS: usize = 16;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,16 +24,63 @@ pub enum WorkspaceAccess {
 pub enum ProcessWorkingDirectory {
     Workspace,
     ExtensionData,
+    Executable,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ProcessPathAccess {
+    Read,
+    Write,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum ProcessExecutable {
+    Literal { value: String },
+    Configuration { key: String },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum ProcessArgument {
+    Literal {
+        value: String,
+    },
+    WorkspaceFile {
+        name: String,
+        access: ProcessPathAccess,
+        #[serde(default)]
+        prefix: Option<String>,
+        #[serde(default)]
+        extensions: Vec<String>,
+    },
+    WorkspaceDirectory {
+        name: String,
+        access: ProcessPathAccess,
+        #[serde(default)]
+        prefix: Option<String>,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProcessPermission {
     pub id: String,
-    pub executable: String,
+    pub executable: ProcessExecutable,
     pub working_directory: ProcessWorkingDirectory,
     #[serde(default)]
-    pub arguments: Vec<String>,
+    pub arguments: Vec<ProcessArgument>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -64,9 +112,18 @@ pub struct PermissionSet {
 }
 
 impl PermissionSet {
-    pub(crate) fn validate(&self, extension_id: &str) -> Result<(), ManifestError> {
+    pub(crate) fn validate(
+        &self,
+        extension_id: &str,
+        executable_configuration_keys: &HashSet<&str>,
+    ) -> Result<(), ManifestError> {
         validate_network_origins(&self.network)?;
-        validate_process_permissions(extension_id, self.workspace, &self.processes)
+        validate_process_permissions(
+            extension_id,
+            self.workspace,
+            &self.processes,
+            executable_configuration_keys,
+        )
     }
 
     pub(crate) fn is_empty(&self) -> bool {
@@ -161,6 +218,7 @@ fn validate_process_permissions(
     extension_id: &str,
     workspace_access: WorkspaceAccess,
     permissions: &[ProcessPermission],
+    executable_configuration_keys: &HashSet<&str>,
 ) -> Result<(), ManifestError> {
     if permissions.len() > MAX_PROCESS_PERMISSIONS {
         return Err(ManifestError::invalid(
@@ -173,19 +231,59 @@ fn validate_process_permissions(
     let expected_prefix = format!("{extension_id}.");
     for permission in permissions {
         validate_process_permission_id(&permission.id, &expected_prefix)?;
-        validate_clean_text(
-            "permissions.processes.executable",
-            &permission.executable,
-            260,
-        )?;
+        match &permission.executable {
+            ProcessExecutable::Literal { value } => {
+                validate_clean_text("permissions.processes.executable.value", value, 4_096)?
+            }
+            ProcessExecutable::Configuration { key } => {
+                validate_configuration_key("permissions.processes.executable.key", key)?;
+                if !executable_configuration_keys.contains(key.as_str()) {
+                    return Err(ManifestError::Inconsistent(format!(
+                        "process grant {} references undeclared executable configuration {key}",
+                        permission.id
+                    )));
+                }
+            }
+        }
         if permission.arguments.len() > MAX_PROCESS_ARGUMENTS {
             return Err(ManifestError::invalid(
                 "permissions.processes.arguments",
                 format!("at most {MAX_PROCESS_ARGUMENTS} arguments are allowed"),
             ));
         }
+        let mut input_names = HashSet::new();
         for argument in &permission.arguments {
-            validate_process_argument(argument)?;
+            match argument {
+                ProcessArgument::Literal { value } => validate_process_argument(value)?,
+                ProcessArgument::WorkspaceFile {
+                    name,
+                    access,
+                    prefix,
+                    extensions,
+                } => {
+                    validate_process_path_input(
+                        &permission.id,
+                        workspace_access,
+                        &mut input_names,
+                        name,
+                        *access,
+                        prefix.as_deref(),
+                    )?;
+                    validate_process_extensions(extensions)?;
+                }
+                ProcessArgument::WorkspaceDirectory {
+                    name,
+                    access,
+                    prefix,
+                } => validate_process_path_input(
+                    &permission.id,
+                    workspace_access,
+                    &mut input_names,
+                    name,
+                    *access,
+                    prefix.as_deref(),
+                )?,
+            }
         }
         if permission.working_directory == ProcessWorkingDirectory::Workspace
             && workspace_access == WorkspaceAccess::None
@@ -204,6 +302,39 @@ fn validate_process_permissions(
     }
 
     Ok(())
+}
+
+fn validate_process_path_input(
+    permission_id: &str,
+    workspace_access: WorkspaceAccess,
+    input_names: &mut HashSet<String>,
+    name: &str,
+    access: ProcessPathAccess,
+    prefix: Option<&str>,
+) -> Result<(), ManifestError> {
+    validate_process_input_name(name)?;
+    if !input_names.insert(name.to_owned()) {
+        return Err(ManifestError::Duplicate {
+            kind: "process input name",
+            value: name.to_owned(),
+        });
+    }
+    if let Some(prefix) = prefix {
+        validate_clean_text("permissions.processes.arguments.prefix", prefix, 64)?;
+    }
+    let permitted = match (workspace_access, access) {
+        (WorkspaceAccess::Read | WorkspaceAccess::ReadWrite, ProcessPathAccess::Read)
+        | (WorkspaceAccess::ReadWrite, ProcessPathAccess::Write) => true,
+        (WorkspaceAccess::None, ProcessPathAccess::Read | ProcessPathAccess::Write)
+        | (WorkspaceAccess::Read, ProcessPathAccess::Write) => false,
+    };
+    if permitted {
+        Ok(())
+    } else {
+        Err(ManifestError::Inconsistent(format!(
+            "process grant {permission_id} declares {access:?} workspace input {name} without sufficient workspace access"
+        )))
+    }
 }
 
 fn validate_process_permission_id(value: &str, expected_prefix: &str) -> Result<(), ManifestError> {
@@ -238,6 +369,54 @@ fn validate_process_argument(value: &str) -> Result<(), ManifestError> {
             "permissions.processes.arguments",
             "value cannot contain NUL bytes",
         ));
+    }
+    Ok(())
+}
+
+fn validate_process_input_name(value: &str) -> Result<(), ManifestError> {
+    if value.is_empty()
+        || value.len() > 64
+        || value.starts_with('-')
+        || value.ends_with('-')
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+    {
+        return Err(ManifestError::invalid(
+            "permissions.processes.arguments.name",
+            "value must use lowercase ASCII letters, digits or inner hyphens",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_process_extensions(extensions: &[String]) -> Result<(), ManifestError> {
+    if extensions.len() > MAX_PROCESS_ARGUMENT_EXTENSIONS {
+        return Err(ManifestError::invalid(
+            "permissions.processes.arguments.extensions",
+            format!("at most {MAX_PROCESS_ARGUMENT_EXTENSIONS} extensions are allowed"),
+        ));
+    }
+    let mut unique_extensions = HashSet::new();
+    for extension in extensions {
+        if extension.len() < 2
+            || extension.len() > 32
+            || !extension.starts_with('.')
+            || !extension[1..]
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+        {
+            return Err(ManifestError::invalid(
+                "permissions.processes.arguments.extensions",
+                "values must be lowercase dot-prefixed file extensions",
+            ));
+        }
+        if !unique_extensions.insert(extension.as_str()) {
+            return Err(ManifestError::Duplicate {
+                kind: "process argument extension",
+                value: extension.clone(),
+            });
+        }
     }
     Ok(())
 }

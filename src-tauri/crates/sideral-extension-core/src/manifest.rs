@@ -4,7 +4,7 @@ use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ExtensionSizeBudget, ManifestError, PermissionSet, WorkspaceAccess,
+    ConfigurationContribution, ExtensionSizeBudget, ManifestError, PermissionSet, WorkspaceAccess,
     budgets::MAX_MANIFEST_BYTES, extension_size_budget,
 };
 
@@ -14,6 +14,9 @@ const MAX_ACTIVATION_EVENTS: usize = 64;
 const MAX_COMMANDS: usize = 128;
 const MAX_KEYBINDINGS: usize = 128;
 const MAX_KEYBINDING_LANGUAGES: usize = 32;
+const MAX_LANGUAGES: usize = 32;
+const MAX_LANGUAGE_ALIASES: usize = 16;
+const MAX_LANGUAGE_EXTENSIONS: usize = 32;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -42,6 +45,14 @@ pub enum CommandInvocation {
     ActiveTextDocument,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CommandDocumentSync {
+    #[default]
+    Snapshot,
+    Save,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CommandContribution {
@@ -51,6 +62,17 @@ pub struct CommandContribution {
     pub category: Option<String>,
     #[serde(default)]
     pub invocation: CommandInvocation,
+    #[serde(default)]
+    pub document_sync: CommandDocumentSync,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LanguageContribution {
+    pub id: String,
+    #[serde(default)]
+    pub aliases: Vec<String>,
+    pub extensions: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -71,6 +93,10 @@ pub struct Contributions {
     pub commands: Vec<CommandContribution>,
     #[serde(default)]
     pub keybindings: Vec<KeybindingContribution>,
+    #[serde(default)]
+    pub languages: Vec<LanguageContribution>,
+    #[serde(default)]
+    pub configuration: Option<ConfigurationContribution>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -110,6 +136,8 @@ pub struct ExtensionInspection {
     pub activation_events: Vec<String>,
     pub commands: Vec<CommandContribution>,
     pub keybindings: Vec<KeybindingContribution>,
+    pub languages: Vec<LanguageContribution>,
+    pub configuration: Option<ConfigurationContribution>,
     pub permissions: PermissionSet,
     pub manifest_bytes: usize,
     pub size_budget: ExtensionSizeBudget,
@@ -160,10 +188,13 @@ impl ExtensionManifest {
             validate_worker_entry(&runtime.entry)?;
         }
 
+        let executable_configuration_keys = self.validate_configuration()?;
         let command_ids = self.validate_commands()?;
         self.validate_keybindings(&command_ids)?;
+        self.validate_languages()?;
         self.validate_activation_events()?;
-        self.permissions.validate(&self.id)?;
+        self.permissions
+            .validate(&self.id, &executable_configuration_keys)?;
         self.validate_runtime_consistency()?;
         Ok(())
     }
@@ -206,8 +237,79 @@ impl ExtensionManifest {
                     command.id
                 )));
             }
+            if command.document_sync == CommandDocumentSync::Save
+                && command.invocation != CommandInvocation::ActiveTextDocument
+            {
+                return Err(ManifestError::Inconsistent(format!(
+                    "command {} can save only an active text document",
+                    command.id
+                )));
+            }
         }
         Ok(command_ids)
+    }
+
+    fn validate_configuration(&self) -> Result<HashSet<&str>, ManifestError> {
+        let Some(configuration) = &self.contributes.configuration else {
+            return Ok(HashSet::new());
+        };
+        configuration.validate()
+    }
+
+    fn validate_languages(&self) -> Result<(), ManifestError> {
+        if self.contributes.languages.len() > MAX_LANGUAGES {
+            return Err(ManifestError::invalid(
+                "contributes.languages",
+                format!("at most {MAX_LANGUAGES} languages are allowed"),
+            ));
+        }
+
+        let mut language_ids = HashSet::new();
+        let mut file_extensions = HashSet::new();
+        for language in &self.contributes.languages {
+            validate_identifier("contributes.languages.id", &language.id, false)?;
+            if !language_ids.insert(language.id.as_str()) {
+                return Err(ManifestError::Duplicate {
+                    kind: "language",
+                    value: language.id.clone(),
+                });
+            }
+            if language.aliases.len() > MAX_LANGUAGE_ALIASES {
+                return Err(ManifestError::invalid(
+                    "contributes.languages.aliases",
+                    format!("at most {MAX_LANGUAGE_ALIASES} aliases are allowed"),
+                ));
+            }
+            let mut aliases = HashSet::new();
+            for alias in &language.aliases {
+                validate_text("contributes.languages.aliases", alias, 80)?;
+                if !aliases.insert(alias.to_lowercase()) {
+                    return Err(ManifestError::Duplicate {
+                        kind: "language alias",
+                        value: alias.clone(),
+                    });
+                }
+            }
+            if language.extensions.is_empty() || language.extensions.len() > MAX_LANGUAGE_EXTENSIONS
+            {
+                return Err(ManifestError::invalid(
+                    "contributes.languages.extensions",
+                    format!(
+                        "each language requires between 1 and {MAX_LANGUAGE_EXTENSIONS} extensions"
+                    ),
+                ));
+            }
+            for extension in &language.extensions {
+                validate_language_extension(extension)?;
+                if !file_extensions.insert(extension.as_str()) {
+                    return Err(ManifestError::Duplicate {
+                        kind: "language file extension",
+                        value: extension.clone(),
+                    });
+                }
+            }
+        }
+        Ok(())
     }
 
     fn validate_keybindings(&self, command_ids: &HashSet<&str>) -> Result<(), ManifestError> {
@@ -340,11 +442,29 @@ impl ExtensionManifest {
             activation_events: self.activation_events.clone(),
             commands: self.contributes.commands.clone(),
             keybindings: self.contributes.keybindings.clone(),
+            languages: self.contributes.languages.clone(),
+            configuration: self.contributes.configuration.clone(),
             permissions: self.permissions.clone(),
             manifest_bytes,
             size_budget: extension_size_budget(),
         }
     }
+}
+
+fn validate_language_extension(value: &str) -> Result<(), ManifestError> {
+    if value.len() < 2
+        || value.len() > 32
+        || !value.starts_with('.')
+        || !value[1..]
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+    {
+        return Err(ManifestError::invalid(
+            "contributes.languages.extensions",
+            "values must be lowercase dot-prefixed file extensions",
+        ));
+    }
+    Ok(())
 }
 
 pub fn normalize_keybinding(value: &str) -> Result<String, ManifestError> {
@@ -720,7 +840,7 @@ mod tests {
     fn rejects_duplicate_process_grant_ids() {
         let source = VALID_MANIFEST.replace(
             "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }]",
-            "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }], \"processes\": [{ \"id\": \"sample.hello.tool\", \"executable\": \"tool\", \"workingDirectory\": \"extensionData\", \"arguments\": [\"one\"] }, { \"id\": \"sample.hello.tool\", \"executable\": \"tool\", \"workingDirectory\": \"extensionData\", \"arguments\": [\"two\"] }]",
+            "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }], \"processes\": [{ \"id\": \"sample.hello.tool\", \"executable\": { \"kind\": \"literal\", \"value\": \"tool\" }, \"workingDirectory\": \"extensionData\", \"arguments\": [{ \"kind\": \"literal\", \"value\": \"one\" }] }, { \"id\": \"sample.hello.tool\", \"executable\": { \"kind\": \"literal\", \"value\": \"tool\" }, \"workingDirectory\": \"extensionData\", \"arguments\": [{ \"kind\": \"literal\", \"value\": \"two\" }] }]",
         );
 
         assert!(matches!(
@@ -736,7 +856,7 @@ mod tests {
     fn rejects_process_grants_without_an_explicit_working_directory() {
         let source = VALID_MANIFEST.replace(
             "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }]",
-            "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }], \"processes\": [{ \"id\": \"sample.hello.tool\", \"executable\": \"tool\" }]",
+            "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }], \"processes\": [{ \"id\": \"sample.hello.tool\", \"executable\": { \"kind\": \"literal\", \"value\": \"tool\" } }]",
         );
 
         assert!(matches!(
@@ -751,8 +871,56 @@ mod tests {
             .replace("\"workspace\": \"read\"", "\"workspace\": \"none\"")
             .replace(
                 "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }]",
-                "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }], \"processes\": [{ \"id\": \"sample.hello.tool\", \"executable\": \"tool\", \"workingDirectory\": \"workspace\" }]",
+                "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }], \"processes\": [{ \"id\": \"sample.hello.tool\", \"executable\": { \"kind\": \"literal\", \"value\": \"tool\" }, \"workingDirectory\": \"workspace\" }]",
             );
+
+        assert!(matches!(
+            validate_manifest_json(&source),
+            Err(ManifestError::Inconsistent(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_undeclared_process_executable_configuration() {
+        let source = VALID_MANIFEST.replace(
+            "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }]",
+            "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }], \"processes\": [{ \"id\": \"sample.hello.tool\", \"executable\": { \"kind\": \"configuration\", \"key\": \"tool-path\" }, \"workingDirectory\": \"extensionData\" }]",
+        );
+
+        assert!(matches!(
+            validate_manifest_json(&source),
+            Err(ManifestError::Inconsistent(message))
+                if message.contains("undeclared executable configuration tool-path")
+        ));
+    }
+
+    #[test]
+    fn accepts_typed_workspace_process_arguments_and_language_contributions() {
+        let source = VALID_MANIFEST
+            .replace("\"workspace\": \"read\"", "\"workspace\": \"readWrite\"")
+            .replace(
+                "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }]",
+                "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }], \"processes\": [{ \"id\": \"sample.hello.compiler\", \"executable\": { \"kind\": \"literal\", \"value\": \"compiler\" }, \"workingDirectory\": \"executable\", \"arguments\": [{ \"kind\": \"workspaceFile\", \"name\": \"source\", \"access\": \"read\", \"extensions\": [\".input\"] }, { \"kind\": \"workspaceDirectory\", \"name\": \"project-include\", \"access\": \"read\", \"prefix\": \"-i\" }, { \"kind\": \"workspaceFile\", \"name\": \"output\", \"access\": \"write\", \"prefix\": \"-o\", \"extensions\": [\".output\"] }] }]",
+            )
+            .replace(
+                "\"commands\": [{ \"id\": \"sample.hello.run\", \"title\": \"Run Hello\" }]",
+                "\"commands\": [{ \"id\": \"sample.hello.run\", \"title\": \"Run Hello\", \"invocation\": \"activeTextDocument\", \"documentSync\": \"save\" }], \"languages\": [{ \"id\": \"samplelang\", \"aliases\": [\"Sample Language\"], \"extensions\": [\".sample\", \".sampleinc\"] }]",
+            );
+
+        assert!(matches!(
+            validate_manifest_json(&source),
+            Ok(inspection)
+                if inspection.languages[0].id == "samplelang"
+                    && inspection.permissions.processes.len() == 1
+        ));
+    }
+
+    #[test]
+    fn rejects_process_write_inputs_without_workspace_write_access() {
+        let source = VALID_MANIFEST.replace(
+            "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }]",
+            "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }], \"processes\": [{ \"id\": \"sample.hello.compiler\", \"executable\": { \"kind\": \"literal\", \"value\": \"compiler\" }, \"workingDirectory\": \"executable\", \"arguments\": [{ \"kind\": \"workspaceFile\", \"name\": \"output\", \"access\": \"write\", \"extensions\": [\".output\"] }] }]",
+        );
 
         assert!(matches!(
             validate_manifest_json(&source),

@@ -24,7 +24,6 @@ export interface ProtocolFailure {
 export type BrokerMethod =
   | "commands.execute"
   | "configuration.get"
-  | "configuration.update"
   | "network.request"
   | "processes.execute"
   | "storage.delete"

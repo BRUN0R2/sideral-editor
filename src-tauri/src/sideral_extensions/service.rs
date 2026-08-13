@@ -21,10 +21,11 @@ use super::{
     broker::CapabilityBroker,
     error::ExtensionError,
     protocol::{
-        BrokerRequest, BrokerResponse, ClientHandshake, DeactivationReason,
-        EXTENSION_PROTOCOL_VERSION, ExtensionClientInstruction, ExtensionRuntimeState,
-        ExtensionSnapshot, HostEvent, HostHandshake, HostInstruction, PackageInspectionResult,
-        ProtocolFailure, RuntimeDiagnostic, TextDocumentView, WORKER_SHUTDOWN_GRACE_MILLISECONDS,
+        BrokerRequest, BrokerResponse, ClientHandshake, ConfigurationUpdate, DeactivationReason,
+        EXTENSION_PROTOCOL_VERSION, ExtensionClientInstruction, ExtensionConfigurationView,
+        ExtensionRuntimeState, ExtensionSnapshot, HostEvent, HostHandshake, HostInstruction,
+        PackageInspectionResult, ProtocolFailure, RuntimeDiagnostic, TextDocumentView,
+        WORKER_SHUTDOWN_GRACE_MILLISECONDS,
     },
     registry::ExtensionRegistry,
 };
@@ -525,6 +526,24 @@ impl SideralExtensionState {
         update: super::protocol::KeybindingUpdate,
     ) -> Result<(), ExtensionError> {
         self.registry()?.update_keybinding(command_id, update)
+    }
+
+    pub async fn configurations(&self) -> Result<Vec<ExtensionConfigurationView>, ExtensionError> {
+        let manifests = self.registry()?.configurable_manifests();
+        self.service.broker.configuration_views(manifests).await
+    }
+
+    pub async fn update_configuration(
+        &self,
+        extension_id: &str,
+        key: String,
+        update: ConfigurationUpdate,
+    ) -> Result<ExtensionConfigurationView, ExtensionError> {
+        let manifest = self.registry()?.configuration_manifest(extension_id)?;
+        self.service
+            .broker
+            .update_configuration(manifest, key, update)
+            .await
     }
 
     pub fn preflight_install(

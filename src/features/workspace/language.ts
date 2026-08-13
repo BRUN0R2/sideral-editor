@@ -46,12 +46,28 @@ const LANGUAGE_BY_FILENAME: Readonly<Record<string, string>> = {
   ".editorconfig": "ini",
 };
 
-export function languageForFile(name: string): string {
+export interface LanguageAssociation {
+  readonly id: string;
+  readonly extensions: readonly string[];
+}
+
+export function languageForFile(
+  name: string,
+  extensionLanguages: readonly LanguageAssociation[] = [],
+): string {
   const normalized = name.toLowerCase();
   const byName = LANGUAGE_BY_FILENAME[normalized];
   if (byName !== undefined) {
     return byName;
   }
   const extension = normalized.includes(".") ? normalized.split(".").at(-1) : undefined;
+  if (extension !== undefined) {
+    const contributed = extensionLanguages.find((language) =>
+      language.extensions.includes(`.${extension}`),
+    );
+    if (contributed !== undefined) {
+      return contributed.id;
+    }
+  }
   return extension === undefined ? "plaintext" : (LANGUAGE_BY_EXTENSION[extension] ?? "plaintext");
 }

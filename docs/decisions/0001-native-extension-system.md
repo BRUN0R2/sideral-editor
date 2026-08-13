@@ -42,10 +42,22 @@ compressed at rest and is revalidated before every bundle load.
 
 The editor supplies shared APIs through a capability broker. An extension never
 embeds a JavaScript engine and never receives direct native filesystem or Tauri
-IPC access. Process execution is available only through an exact manifest grant
-with a declared working directory; it never accepts caller-supplied arguments
-or a shell string. The worker can request only capabilities declared in its own
-signed manifest.
+IPC access. User-facing extension configuration is a signed contribution. Its
+native Settings renderer is schema-driven; executable overrides require an
+explicit file selection and native validation, are stored atomically per
+extension and are read-only to Worker code.
+
+Process execution is available only through an exact manifest grant with a
+declared working directory. The executable source is either an immutable
+literal or a reference to an executable configuration property declared by the
+same signed manifest. The signed grant owns argument order and shape: literals
+are immutable, while typed workspace file and directory slots accept only
+runtime `file:` URIs whose read/write containment and allowed file extensions
+are validated natively. It never accepts an untyped caller-supplied argument
+list or a shell string. Canonical Windows paths are converted from the verbatim
+`\\?\` representation only after validation so native tools receive compatible
+arguments. The worker can request only capabilities declared in its own signed
+manifest.
 
 ## Enforced size budget
 

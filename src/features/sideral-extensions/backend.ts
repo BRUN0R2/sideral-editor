@@ -5,12 +5,16 @@ import {
   decodeClientHandshake,
   decodeExtensionClientInstruction,
   decodeExtensionCommandResult,
+  decodeExtensionConfiguration,
+  decodeExtensionConfigurations,
   decodeExtensionSnapshot,
   decodePackageInspection,
   decodeSideralExtensionInspection,
 } from "./contract-validation";
 import type {
+  ConfigurationUpdate,
   ExtensionClientInstruction,
+  ExtensionConfigurationView,
   ExtensionSnapshot,
   KeybindingUpdate,
   OutputChannelView,
@@ -102,6 +106,22 @@ export function updateExtensionKeybinding(
     "update_extension_keybinding",
     { commandId, update },
     decodeExtensionSnapshot,
+  );
+}
+
+export function getExtensionConfigurations(): Promise<readonly ExtensionConfigurationView[]> {
+  return invokeDecoded("extension_configurations", undefined, decodeExtensionConfigurations);
+}
+
+export function updateExtensionConfiguration(
+  extensionId: string,
+  key: string,
+  update: ConfigurationUpdate,
+): Promise<ExtensionConfigurationView> {
+  return invokeDecoded(
+    "update_extension_configuration",
+    { extensionId, key, update },
+    decodeExtensionConfiguration,
   );
 }
 

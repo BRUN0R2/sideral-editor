@@ -330,11 +330,11 @@ function createApi(): ExtensionApi {
     },
     configuration: {
       async get(section) {
-        const result = asStoredValue(await brokerRequest("configuration.get", { key: section }));
-        return result.found ? result.value : undefined;
-      },
-      async update(section, value) {
-        await brokerRequest("configuration.update", { key: section, value });
+        const value = await brokerRequest("configuration.get", { key: section });
+        if (typeof value !== "string") {
+          throw new Error("The configuration broker returned an invalid value.");
+        }
+        return value;
       },
     },
     network: {
@@ -480,7 +480,18 @@ async function requestNetwork(request: NetworkRequest): Promise<NetworkResponse>
 }
 
 async function executeProcess(request: ProcessRequest): Promise<ProcessResult> {
-  const result = await brokerRequest("processes.execute", { grant: request.grant }, request.signal);
+  const inputs: Record<string, string> = {};
+  for (const [name, value] of Object.entries(request.inputs ?? {})) {
+    if (typeof value !== "string") {
+      throw new TypeError(`Process input ${name} must be a string URI.`);
+    }
+    inputs[name] = value;
+  }
+  const result = await brokerRequest(
+    "processes.execute",
+    { grant: request.grant, inputs },
+    request.signal,
+  );
   if (
     !isRecord(result) ||
     typeof result.exitCode !== "number" ||

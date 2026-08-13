@@ -10,7 +10,9 @@ use std::{
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
-use sideral_extension_core::{parse_manifest_json, validate_package_path};
+use sideral_extension_core::{
+    assess_worker_bundle_size, parse_manifest_json, validate_package_path,
+};
 use sideral_extension_package::{build_signed_package, validate_package_bytes};
 use tempfile::{NamedTempFile, TempDir};
 use thiserror::Error;
@@ -19,6 +21,16 @@ const KEY_SCHEMA_VERSION: u8 = 1;
 const MAX_KEY_FILE_BYTES: u64 = 16 * 1024;
 const MAX_PROJECT_FILES: usize = 256;
 const MANIFEST_PATH: &str = "manifest.json";
+const SDK_INDEX_SOURCE: &str =
+    include_str!("../../../../packages/sideral-extension-sdk/src/index.ts");
+const SDK_MANIFEST_SOURCE: &str =
+    include_str!("../../../../packages/sideral-extension-sdk/src/manifest.ts");
+const SDK_PROTOCOL_SOURCE: &str =
+    include_str!("../../../../packages/sideral-extension-sdk/src/protocol.ts");
+const SDK_RUNTIME_SOURCE: &str =
+    include_str!("../../../../packages/sideral-extension-sdk/src/runtime.ts");
+const TESTKIT_INDEX_SOURCE: &str =
+    include_str!("../../../../packages/sideral-extension-testkit/src/index.ts");
 
 #[derive(Debug, Error)]
 enum ToolError {
@@ -65,6 +77,7 @@ fn run() -> Result<(), ToolError> {
             pack(Path::new(project), Path::new(key), Path::new(output))
         }
         [command, package] if command == "inspect" => inspect(Path::new(package)),
+        [command, project] if command == "check" => check(Path::new(project)),
         [command, publisher, name, directory] if command == "scaffold" => {
             scaffold(publisher, name, Path::new(directory))
         }
@@ -73,7 +86,7 @@ fn run() -> Result<(), ToolError> {
 }
 
 fn usage() -> &'static str {
-    "Usage:\n  sideral-extension-tool keygen <key-file>\n  sideral-extension-tool pack <project-directory> <key-file> <output.sideralx>\n  sideral-extension-tool inspect <package.sideralx>\n  sideral-extension-tool scaffold <publisher> <name> <directory>"
+    "Usage:\n  sideral-extension-tool keygen <key-file>\n  sideral-extension-tool check <project-directory>\n  sideral-extension-tool pack <project-directory> <key-file> <output.sideralx>\n  sideral-extension-tool inspect <package.sideralx>\n  sideral-extension-tool scaffold <publisher> <name> <directory>"
 }
 
 fn keygen(output: &Path) -> Result<(), ToolError> {
@@ -159,6 +172,38 @@ fn inspect(package: &Path) -> Result<(), ToolError> {
     Ok(())
 }
 
+fn check(project: &Path) -> Result<(), ToolError> {
+    let project = canonical_directory(project)?;
+    let manifest_source = read_bounded(&project.join(MANIFEST_PATH), 64 * 1024)?;
+    let manifest_text = std::str::from_utf8(&manifest_source).map_err(|error| {
+        ToolError::InvalidProject(format!("manifest.json is not UTF-8: {error}"))
+    })?;
+    let manifest = parse_manifest_json(manifest_text)?;
+    let runtime = manifest.runtime.as_ref().ok_or_else(|| {
+        ToolError::InvalidProject("manifest must declare a worker runtime".to_owned())
+    })?;
+    let mut files = BTreeMap::from([(MANIFEST_PATH.to_owned(), manifest_source)]);
+    insert_project_file(&project, &runtime.entry, &mut files)?;
+    collect_assets(&project, &mut files)?;
+    let bundle = files
+        .get(&runtime.entry)
+        .ok_or_else(|| ToolError::InvalidProject("worker bundle was not collected".to_owned()))?;
+    let assessment = assess_worker_bundle_size(bundle.len())?;
+    println!(
+        "Checked {} {}: worker {} bytes, {} packaged project files{}.",
+        manifest.id,
+        manifest.version,
+        assessment.actual_bytes,
+        files.len(),
+        if assessment.exceeds_recommendation {
+            " (worker exceeds the recommended size)"
+        } else {
+            ""
+        }
+    );
+    Ok(())
+}
+
 fn scaffold(publisher: &str, name: &str, directory: &Path) -> Result<(), ToolError> {
     validate_identifier_segment("publisher", publisher)?;
     validate_identifier_segment("name", name)?;
@@ -181,10 +226,15 @@ fn scaffold(publisher: &str, name: &str, directory: &Path) -> Result<(), ToolErr
         source,
     })?;
     let project = temporary.path();
-    fs::create_dir(project.join("src")).map_err(|source| ToolError::Io {
-        context: "could not create extension source directory".to_owned(),
-        source,
-    })?;
+    create_directory(&project.join("src"), "extension source directory")?;
+    create_directory(
+        &project.join("vendor/sideral-extension-sdk/src"),
+        "embedded extension SDK directory",
+    )?;
+    create_directory(
+        &project.join("vendor/sideral-extension-testkit/src"),
+        "embedded extension testkit directory",
+    )?;
     let extension_id = format!("{publisher}.{name}");
     let command_id = format!("{extension_id}.hello");
     write_new_file(
@@ -200,6 +250,15 @@ fn scaffold(publisher: &str, name: &str, directory: &Path) -> Result<(), ToolErr
         &project.join("src").join("extension.ts"),
         scaffold_source(&command_id).as_bytes(),
     )?;
+    write_new_file(
+        &project.join("src").join("extension.test.ts"),
+        scaffold_test(&extension_id, &command_id).as_bytes(),
+    )?;
+    write_new_file(
+        &project.join("README.md"),
+        scaffold_readme(&extension_id).as_bytes(),
+    )?;
+    write_embedded_devkit(project)?;
     write_new_file(
         &project.join(".gitignore"),
         b"dist/\n*.sideralx\n.sideral/\n",
@@ -218,6 +277,36 @@ fn scaffold(publisher: &str, name: &str, directory: &Path) -> Result<(), ToolErr
         directory.display()
     );
     Ok(())
+}
+
+fn create_directory(path: &Path, description: &str) -> Result<(), ToolError> {
+    fs::create_dir_all(path).map_err(|source| ToolError::Io {
+        context: format!("could not create {description}"),
+        source,
+    })
+}
+
+fn write_embedded_devkit(project: &Path) -> Result<(), ToolError> {
+    let sdk = project.join("vendor/sideral-extension-sdk");
+    write_new_file(&sdk.join("package.json"), EMBEDDED_SDK_PACKAGE.as_bytes())?;
+    for (name, source) in [
+        ("index.ts", SDK_INDEX_SOURCE),
+        ("manifest.ts", SDK_MANIFEST_SOURCE),
+        ("protocol.ts", SDK_PROTOCOL_SOURCE),
+        ("runtime.ts", SDK_RUNTIME_SOURCE),
+    ] {
+        write_new_file(&sdk.join("src").join(name), source.as_bytes())?;
+    }
+
+    let testkit = project.join("vendor/sideral-extension-testkit");
+    write_new_file(
+        &testkit.join("package.json"),
+        EMBEDDED_TESTKIT_PACKAGE.as_bytes(),
+    )?;
+    write_new_file(
+        &testkit.join("src/index.ts"),
+        TESTKIT_INDEX_SOURCE.as_bytes(),
+    )
 }
 
 fn read_signing_key(path: &Path) -> Result<SigningKey, ToolError> {
@@ -472,15 +561,65 @@ fn scaffold_package_json(extension_id: &str) -> String {
   "version": "0.1.0",
   "type": "module",
   "scripts": {{
-    "build": "esbuild src/extension.ts --bundle --format=esm --platform=browser --target=es2024 --outfile=dist/extension.mjs --minify",
+    "build": "rolldown src/extension.ts --file dist/extension.mjs --format esm --platform browser --minify",
+    "check": "npm run typecheck && npm test && npm run build",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   }},
   "devDependencies": {{
-    "@sideral/extension-sdk": "0.1.0",
-    "esbuild": "^0.28.2",
-    "typescript": "^7.0.0"
+    "@sideral/extension-sdk": "file:vendor/sideral-extension-sdk",
+    "@sideral/extension-testkit": "file:vendor/sideral-extension-testkit",
+    "rolldown": "1.2.3",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
   }}
 }}
+"#
+    )
+}
+
+fn scaffold_test(extension_id: &str, command_id: &str) -> String {
+    format!(
+        r#"import type {{ ExtensionModule }} from "@sideral/extension-sdk";
+import {{ createExtensionHarness }} from "@sideral/extension-testkit";
+import {{ describe, expect, it }} from "vitest";
+import {{ activate }} from "./extension";
+
+const extensionModule: ExtensionModule = {{ activate }};
+
+describe("{extension_id}", () => {{
+  it("registers and executes its declared command", async () => {{
+    const harness = createExtensionHarness(extensionModule, {{
+      extensionId: "{extension_id}",
+    }});
+
+    await harness.activate();
+    await expect(harness.executeCommand("{command_id}")).resolves.toEqual({{ ok: true }});
+    expect(harness.messages).toEqual([
+      {{ severity: "information", message: "Hello from a Sideral extension." }},
+    ]);
+    await harness.dispose();
+  }});
+}});
+"#
+    )
+}
+
+fn scaffold_readme(extension_id: &str) -> String {
+    format!(
+        r#"# {extension_id}
+
+This is a standalone Sideral extension generated with the official tool.
+
+```powershell
+npm install
+npm run check
+```
+
+The exact type-only SDK and deterministic testkit used by this scaffold are
+pinned under `vendor/`, so development does not depend on the Sideral source
+tree or an unpublished registry package. Only `manifest.json`, the built Worker
+and optional `assets/` enter the signed `.sideralx` package.
 "#
     )
 }
@@ -514,3 +653,75 @@ const SCAFFOLD_TSCONFIG: &str = r#"{
   "include": ["src"]
 }
 "#;
+
+const EMBEDDED_SDK_PACKAGE: &str = r#"{
+  "name": "@sideral/extension-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": { "types": "./src/index.ts" },
+    "./protocol": { "types": "./src/protocol.ts" }
+  }
+}
+"#;
+
+const EMBEDDED_TESTKIT_PACKAGE: &str = r#"{
+  "name": "@sideral/extension-testkit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "peerDependencies": {
+    "@sideral/extension-sdk": "0.1.0"
+  }
+}
+"#;
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use serde_json::Value;
+    use tempfile::tempdir;
+
+    use super::{check, scaffold};
+
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    #[test]
+    fn scaffold_is_standalone_and_passes_project_validation_after_build() -> TestResult {
+        let directory = tempdir()?;
+        let project = directory.path().join("acme-sample");
+
+        scaffold("acme", "sample", &project)?;
+
+        let package: Value = serde_json::from_slice(&fs::read(project.join("package.json"))?)?;
+        assert_eq!(
+            package["devDependencies"]["@sideral/extension-sdk"],
+            "file:vendor/sideral-extension-sdk"
+        );
+        assert_eq!(
+            package["devDependencies"]["@sideral/extension-testkit"],
+            "file:vendor/sideral-extension-testkit"
+        );
+        let embedded_sdk =
+            fs::read_to_string(project.join("vendor/sideral-extension-sdk/src/runtime.ts"))?;
+        assert!(embedded_sdk.contains("export interface ProcessRequest"));
+        assert!(project.join("src/extension.test.ts").is_file());
+
+        fs::create_dir(project.join("dist"))?;
+        fs::write(
+            project.join("dist/extension.mjs"),
+            b"export const activate=()=>{};\n",
+        )?;
+        check(&project)?;
+        Ok(())
+    }
+}

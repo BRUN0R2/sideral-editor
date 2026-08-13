@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sideral_extension_core::{
-    CommandContribution, CommandInvocation, KeybindingContribution, PermissionSet,
+    CommandContribution, CommandDocumentSync, CommandInvocation, ConfigurationContribution,
+    KeybindingContribution, LanguageContribution, PermissionSet,
 };
 
 pub const EXTENSION_PROTOCOL_VERSION: u16 = 1;
@@ -79,6 +80,7 @@ pub struct ExtensionCommandView {
     pub title: String,
     pub category: Option<String>,
     pub invocation: CommandInvocation,
+    pub document_sync: CommandDocumentSync,
     pub extension_id: String,
 }
 
@@ -89,7 +91,28 @@ impl ExtensionCommandView {
             title: command.title.clone(),
             category: command.category.clone(),
             invocation: command.invocation,
+            document_sync: command.document_sync,
             extension_id: extension_id.to_owned(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionLanguageView {
+    pub extension_id: String,
+    pub id: String,
+    pub aliases: Vec<String>,
+    pub extensions: Vec<String>,
+}
+
+impl ExtensionLanguageView {
+    pub fn from_contribution(extension_id: &str, language: &LanguageContribution) -> Self {
+        Self {
+            extension_id: extension_id.to_owned(),
+            id: language.id.clone(),
+            aliases: language.aliases.clone(),
+            extensions: language.extensions.clone(),
         }
     }
 }
@@ -121,6 +144,8 @@ pub struct InstalledExtensionView {
     pub activation_events: Vec<String>,
     pub commands: Vec<ExtensionCommandView>,
     pub keybindings: Vec<ExtensionKeybindingView>,
+    pub languages: Vec<ExtensionLanguageView>,
+    pub configuration: Option<ConfigurationContribution>,
     pub runtime: RuntimeDiagnostic,
     pub rollback_version: Option<String>,
 }
@@ -133,6 +158,7 @@ pub struct ExtensionSnapshot {
     pub extensions: Vec<InstalledExtensionView>,
     pub commands: Vec<ExtensionCommandView>,
     pub keybindings: Vec<ExtensionKeybindingView>,
+    pub languages: Vec<ExtensionLanguageView>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -395,6 +421,43 @@ pub enum KeybindingUpdate {
     Custom { key: String },
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtensionConfigurationView {
+    pub extension_id: String,
+    pub title: String,
+    pub properties: Vec<ExtensionConfigurationPropertyView>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum ExtensionConfigurationPropertyView {
+    Executable {
+        key: String,
+        title: String,
+        description: Option<String>,
+        default_value: String,
+        value: String,
+        user_defined: bool,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum ConfigurationUpdate {
+    Default,
+    Value { value: String },
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BrokerRequest {
@@ -412,8 +475,6 @@ pub enum BrokerMethod {
     CommandsExecute,
     #[serde(rename = "configuration.get")]
     ConfigurationGet,
-    #[serde(rename = "configuration.update")]
-    ConfigurationUpdate,
     #[serde(rename = "network.request")]
     NetworkRequest,
     #[serde(rename = "processes.execute")]
@@ -499,6 +560,8 @@ pub struct PackageInstallView {
     pub activation_events: Vec<String>,
     pub commands: Vec<CommandContribution>,
     pub keybindings: Vec<KeybindingContribution>,
+    pub languages: Vec<LanguageContribution>,
+    pub configuration: Option<ConfigurationContribution>,
     pub replaces_version: Option<String>,
 }
 

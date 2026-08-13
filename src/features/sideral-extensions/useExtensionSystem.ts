@@ -37,6 +37,7 @@ const EMPTY_SNAPSHOT: ExtensionSnapshot = {
   extensions: [],
   commands: [],
   keybindings: [],
+  languages: [],
 };
 const MAX_NOTICES: number = 20;
 
@@ -77,6 +78,7 @@ export function useExtensionSystem(
   workspaceRootPath: string | null,
   activeDocument: EditorDocument | null,
   hostConnection: Promise<ExtensionHostConnection> | null,
+  saveDocument: (documentId: string) => Promise<boolean>,
 ): ExtensionSystem {
   const desktop = isDesktopRuntime();
   const [status, setStatus] = useState<ExtensionSystem["status"]>(
@@ -97,6 +99,8 @@ export function useExtensionSystem(
   workspaceRootRef.current = workspaceRootPath;
   const activeDocumentRef = useRef(activeDocument);
   activeDocumentRef.current = activeDocument;
+  const saveDocumentRef = useRef(saveDocument);
+  saveDocumentRef.current = saveDocument;
   const busyExtensionIds = useMemo(() => new Set(busyCounts.keys()), [busyCounts]);
 
   const updateBusyCount = useCallback((extensionId: string, change: 1 | -1): void => {
@@ -299,9 +303,22 @@ export function useExtensionSystem(
         setError(null);
         try {
           const command = snapshot.commands.find((candidate) => candidate.id === commandId);
+          const active = activeDocumentRef.current;
+          if (command?.invocation === "activeTextDocument" && active === null) {
+            throw new Error(`Command ${commandId} requires an active text document.`);
+          }
+          if (command?.documentSync === "save" && active !== null) {
+            if (active.path === null) {
+              throw new Error(`Command ${commandId} requires a saved workspace file.`);
+            }
+            const saved = await saveDocumentRef.current(active.id);
+            if (!saved) {
+              throw new Error(`The active document could not be saved before ${commandId}.`);
+            }
+          }
           const document =
-            command?.invocation === "activeTextDocument" && activeDocumentRef.current !== null
-              ? toExtensionTextDocument(activeDocumentRef.current)
+            command?.invocation === "activeTextDocument" && active !== null
+              ? toExtensionTextDocument(active)
               : null;
           return await executeExtensionCommand(commandId, arguments_, document);
         } catch (reason: unknown) {

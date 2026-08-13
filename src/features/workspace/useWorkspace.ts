@@ -13,7 +13,7 @@ import type { AutoSaveMode, DirectoryEntry, WorkspaceSnapshot } from "../../lib/
 import { ApplicationError, toApplicationError } from "../../lib/errors";
 import { AUTO_SAVE_DELAY_MS, autoSaveDocuments } from "./auto-save";
 import { reorderDocumentAt } from "./document-order";
-import { languageForFile } from "./language";
+import { type LanguageAssociation, languageForFile } from "./language";
 import {
   type CursorPosition,
   type EditorDocument,
@@ -56,6 +56,7 @@ export function useWorkspace(autoSave: AutoSaveMode) {
   const openFolderRequest = useRef<Promise<void> | null>(null);
   const workspaceRootRef = useRef(workspaceRoot);
   const documentsRef = useRef(documents);
+  const extensionLanguagesRef = useRef<readonly LanguageAssociation[]>([]);
   workspaceRootRef.current = workspaceRoot;
   documentsRef.current = documents;
 
@@ -135,7 +136,7 @@ export function useWorkspace(autoSave: AutoSaveMode) {
       name: payload.name,
       content: payload.content,
       savedContent: payload.content,
-      languageId: languageForFile(payload.name),
+      languageId: languageForFile(payload.name, extensionLanguagesRef.current),
       version: 1,
     };
 
@@ -188,7 +189,7 @@ export function useWorkspace(autoSave: AutoSaveMode) {
               name: payload.name,
               content: payload.content,
               savedContent: payload.content,
-              languageId: languageForFile(payload.name),
+              languageId: languageForFile(payload.name, extensionLanguagesRef.current),
               version: 1,
             };
             setDocuments((current) => {
@@ -353,7 +354,7 @@ export function useWorkspace(autoSave: AutoSaveMode) {
                     path: result.path,
                     name: workspaceFileName(result.path),
                     savedContent: contentSnapshot,
-                    languageId: languageForFile(result.path),
+                    languageId: languageForFile(result.path, extensionLanguagesRef.current),
                   }
                 : item,
             ),
@@ -454,6 +455,19 @@ export function useWorkspace(autoSave: AutoSaveMode) {
     }
   }, [pendingCloseId, saveDocument]);
 
+  const setExtensionLanguages = useCallback((languages: readonly LanguageAssociation[]) => {
+    extensionLanguagesRef.current = languages;
+    setDocuments((current) =>
+      current.map((document) => {
+        if (document.path === null) {
+          return document;
+        }
+        const languageId = languageForFile(document.name, languages);
+        return languageId === document.languageId ? document : { ...document, languageId };
+      }),
+    );
+  }, []);
+
   return {
     workspaceRoot,
     entries,
@@ -479,6 +493,7 @@ export function useWorkspace(autoSave: AutoSaveMode) {
     cancelPendingClose: () => setPendingCloseId(null),
     saveDocument,
     saveActiveDocument,
+    setExtensionLanguages,
     setCursor,
     clearError: () => setError(null),
   };

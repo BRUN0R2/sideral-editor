@@ -16,6 +16,7 @@ use sideral_extension_core::ExtensionManifest;
 use tempfile::NamedTempFile;
 use tokio::sync::{Mutex as AsyncMutex, Notify, Semaphore};
 
+mod configuration;
 mod network;
 mod process;
 mod storage;
@@ -206,6 +207,8 @@ struct NetworkRequestPayload {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ProcessPayload {
     grant: String,
+    #[serde(default)]
+    inputs: BTreeMap<String, String>,
 }
 
 #[derive(Deserialize)]
@@ -372,18 +375,9 @@ impl CapabilityBroker {
             }
             BrokerMethod::ConfigurationGet => {
                 let payload: KeyPayload = parse_payload(request.payload)?;
-                self.get_stored_value(manifest, StoreKind::Configuration, payload.key)
+                self.configuration_value(manifest, &payload.key)
                     .await
-            }
-            BrokerMethod::ConfigurationUpdate => {
-                let payload: UpdateValuePayload = parse_payload(request.payload)?;
-                self.update_stored_value(
-                    manifest,
-                    StoreKind::Configuration,
-                    payload.key,
-                    Some(payload.value),
-                )
-                .await
+                    .map(Value::String)
             }
             BrokerMethod::StorageGet => {
                 let payload: KeyPayload = parse_payload(request.payload)?;
@@ -412,12 +406,12 @@ impl CapabilityBroker {
             BrokerMethod::WorkspaceReadTextDocument => {
                 require_workspace_permission(manifest, false)?;
                 let payload: ReadDocumentPayload = parse_payload(request.payload)?;
-                self.read_workspace_document(payload.uri).await
+                self.read_workspace_document(manifest, payload.uri).await
             }
             BrokerMethod::WorkspaceWriteTextDocument => {
                 require_workspace_permission(manifest, true)?;
                 let payload: WriteDocumentPayload = parse_payload(request.payload)?;
-                self.write_workspace_document(payload).await
+                self.write_workspace_document(manifest, payload).await
             }
             BrokerMethod::WorkspaceFindFiles => {
                 require_workspace_permission(manifest, false)?;
@@ -430,7 +424,7 @@ impl CapabilityBroker {
             }
             BrokerMethod::ProcessesExecute => {
                 let payload: ProcessPayload = parse_payload(request.payload)?;
-                self.execute_process(manifest, payload.grant, cancellation)
+                self.execute_process(manifest, payload.grant, payload.inputs, cancellation)
                     .await
             }
             BrokerMethod::WindowShowInformationMessage => {
@@ -979,20 +973,26 @@ mod tests {
         broker.set_workspace_root(Some(workspace))?;
         let uri = file_uri(&document)?;
 
-        let first = broker.read_workspace_document_blocking(&uri)?;
+        let first = broker.read_workspace_document_blocking(&uri, &[])?;
         assert_eq!(first["version"], serde_json::json!(1));
-        let updated = broker.write_workspace_document_blocking(WriteDocumentPayload {
-            uri: uri.clone(),
-            content: "second".to_owned(),
-            expected_version: 1,
-        })?;
+        let updated = broker.write_workspace_document_blocking(
+            WriteDocumentPayload {
+                uri: uri.clone(),
+                content: "second".to_owned(),
+                expected_version: 1,
+            },
+            &[],
+        )?;
         assert_eq!(updated["version"], serde_json::json!(2));
 
-        let stale = broker.write_workspace_document_blocking(WriteDocumentPayload {
-            uri,
-            content: "stale".to_owned(),
-            expected_version: 1,
-        });
+        let stale = broker.write_workspace_document_blocking(
+            WriteDocumentPayload {
+                uri,
+                content: "stale".to_owned(),
+                expected_version: 1,
+            },
+            &[],
+        );
         assert!(matches!(stale, Err(ExtensionError::Conflict(_))));
         Ok(())
     }

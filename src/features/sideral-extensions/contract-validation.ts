@@ -1,12 +1,16 @@
 import type {
   ActivationReason,
   CommandContribution,
+  ConfigurationContribution,
   JsonObject,
   JsonValue,
+  LanguageContribution,
   NetworkMethod,
   PermissionSet,
   PreviewAppearance,
   PreviewScrollbarAppearance,
+  ProcessArgument,
+  ProcessExecutable,
   ProtocolFailure,
   TextDocument,
 } from "@sideral/extension-sdk";
@@ -30,7 +34,10 @@ import type {
   ClientHandshake,
   ExtensionClientInstruction,
   ExtensionCommandView,
+  ExtensionConfigurationPropertyView,
+  ExtensionConfigurationView,
   ExtensionKeybindingView,
+  ExtensionLanguageView,
   ExtensionRuntimeState,
   ExtensionSnapshot,
   HostHandshake,
@@ -69,6 +76,8 @@ export function decodeSideralExtensionInspection(value: unknown): SideralExtensi
     "activationEvents",
     "commands",
     "keybindings",
+    "languages",
+    "configuration",
     "permissions",
     "manifestBytes",
     "sizeBudget",
@@ -111,6 +120,16 @@ export function decodeSideralExtensionInspection(value: unknown): SideralExtensi
       `${path}.keybindings`,
       decodeKeybindingContribution,
     ),
+    languages: arrayOf(
+      required(source, "languages", path),
+      `${path}.languages`,
+      decodeLanguageContribution,
+    ),
+    configuration: nullable(
+      required(source, "configuration", path),
+      `${path}.configuration`,
+      decodeConfigurationContribution,
+    ),
     permissions: decodePermissionSet(required(source, "permissions", path), `${path}.permissions`),
     manifestBytes: safeInteger(required(source, "manifestBytes", path), `${path}.manifestBytes`),
     sizeBudget: {
@@ -136,6 +155,16 @@ export function decodeSideralExtensionInspection(value: unknown): SideralExtensi
 
 export function decodeExtensionSnapshot(value: unknown): ExtensionSnapshot {
   return decodeSnapshot(value, "extension snapshot response");
+}
+
+export function decodeExtensionConfigurations(
+  value: unknown,
+): readonly ExtensionConfigurationView[] {
+  return arrayOf(value, "extension configurations response", decodeExtensionConfiguration);
+}
+
+export function decodeExtensionConfiguration(value: unknown): ExtensionConfigurationView {
+  return decodeExtensionConfigurationValue(value, "extension configuration response");
 }
 
 export function decodeClientHandshake(value: unknown): ClientHandshake {
@@ -334,6 +363,7 @@ function decodeSnapshot(value: unknown, path: string): ExtensionSnapshot {
     "extensions",
     "commands",
     "keybindings",
+    "languages",
   ]);
   return {
     sequence: safeInteger(required(source, "sequence", path), `${path}.sequence`),
@@ -353,6 +383,11 @@ function decodeSnapshot(value: unknown, path: string): ExtensionSnapshot {
       `${path}.keybindings`,
       decodeExtensionKeybinding,
     ),
+    languages: arrayOf(
+      required(source, "languages", path),
+      `${path}.languages`,
+      decodeExtensionLanguage,
+    ),
   };
 }
 
@@ -369,6 +404,8 @@ function decodeInstalledExtension(value: unknown, path: string): InstalledExtens
     "activationEvents",
     "commands",
     "keybindings",
+    "languages",
+    "configuration",
     "runtime",
     "rollbackVersion",
   ]);
@@ -398,6 +435,16 @@ function decodeInstalledExtension(value: unknown, path: string): InstalledExtens
       required(source, "keybindings", path),
       `${path}.keybindings`,
       decodeExtensionKeybinding,
+    ),
+    languages: arrayOf(
+      required(source, "languages", path),
+      `${path}.languages`,
+      decodeExtensionLanguage,
+    ),
+    configuration: nullable(
+      required(source, "configuration", path),
+      `${path}.configuration`,
+      decodeConfigurationContribution,
     ),
     runtime: decodeRuntimeDiagnostic(required(source, "runtime", path), `${path}.runtime`),
     rollbackVersion: nullable(
@@ -456,7 +503,14 @@ function decodeRuntimeDiagnostic(value: unknown, path: string): RuntimeDiagnosti
 }
 
 function decodeExtensionCommand(value: unknown, path: string): ExtensionCommandView {
-  const source = record(value, path, ["id", "title", "category", "invocation", "extensionId"]);
+  const source = record(value, path, [
+    "id",
+    "title",
+    "category",
+    "invocation",
+    "documentSync",
+    "extensionId",
+  ]);
   return {
     id: stringValue(required(source, "id", path), `${path}.id`),
     title: stringValue(required(source, "title", path), `${path}.title`),
@@ -466,7 +520,22 @@ function decodeExtensionCommand(value: unknown, path: string): ExtensionCommandV
       ["workbench", "activeTextDocument"],
       `${path}.invocation`,
     ),
+    documentSync: enumeration(
+      required(source, "documentSync", path),
+      ["snapshot", "save"],
+      `${path}.documentSync`,
+    ),
     extensionId: stringValue(required(source, "extensionId", path), `${path}.extensionId`),
+  };
+}
+
+function decodeExtensionLanguage(value: unknown, path: string): ExtensionLanguageView {
+  const source = record(value, path, ["extensionId", "id", "aliases", "extensions"]);
+  return {
+    extensionId: stringValue(required(source, "extensionId", path), `${path}.extensionId`),
+    id: stringValue(required(source, "id", path), `${path}.id`),
+    aliases: decodeStrings(required(source, "aliases", path), `${path}.aliases`),
+    extensions: decodeStrings(required(source, "extensions", path), `${path}.extensions`),
   };
 }
 
@@ -524,18 +593,19 @@ function decodePermissionSet(value: unknown, path: string): PermissionSet {
         ]);
         return {
           id: stringValue(required(permission, "id", itemPath), `${itemPath}.id`),
-          executable: stringValue(
+          executable: decodeProcessExecutable(
             required(permission, "executable", itemPath),
             `${itemPath}.executable`,
           ),
           workingDirectory: enumeration(
             required(permission, "workingDirectory", itemPath),
-            ["workspace", "extensionData"],
+            ["workspace", "extensionData", "executable"],
             `${itemPath}.workingDirectory`,
           ),
-          arguments: decodeStrings(
+          arguments: arrayOf(
             required(permission, "arguments", itemPath),
             `${itemPath}.arguments`,
+            decodeProcessArgument,
           ),
         };
       },
@@ -544,7 +614,7 @@ function decodePermissionSet(value: unknown, path: string): PermissionSet {
 }
 
 function decodeCommandContribution(value: unknown, path: string): CommandContribution {
-  const source = record(value, path, ["id", "title", "category", "invocation"]);
+  const source = record(value, path, ["id", "title", "category", "invocation", "documentSync"]);
   return {
     id: stringValue(required(source, "id", path), `${path}.id`),
     title: stringValue(required(source, "title", path), `${path}.title`),
@@ -554,6 +624,154 @@ function decodeCommandContribution(value: unknown, path: string): CommandContrib
       ["workbench", "activeTextDocument"],
       `${path}.invocation`,
     ),
+    documentSync: enumeration(
+      required(source, "documentSync", path),
+      ["snapshot", "save"],
+      `${path}.documentSync`,
+    ),
+  };
+}
+
+function decodeLanguageContribution(value: unknown, path: string): LanguageContribution {
+  const source = record(value, path, ["id", "aliases", "extensions"]);
+  return {
+    id: stringValue(required(source, "id", path), `${path}.id`),
+    aliases: decodeStrings(required(source, "aliases", path), `${path}.aliases`),
+    extensions: decodeStrings(required(source, "extensions", path), `${path}.extensions`),
+  };
+}
+
+function decodeProcessArgument(value: unknown, path: string): ProcessArgument {
+  const tagged = record(value, path, ["kind", "value", "name", "access", "prefix", "extensions"]);
+  const kind = enumeration(
+    required(tagged, "kind", path),
+    ["literal", "workspaceFile", "workspaceDirectory"],
+    `${path}.kind`,
+  );
+  if (kind === "literal") {
+    const source = record(value, path, ["kind", "value"]);
+    return {
+      kind,
+      value: stringValue(required(source, "value", path), `${path}.value`),
+    };
+  }
+  if (kind === "workspaceDirectory") {
+    const source = record(value, path, ["kind", "name", "access", "prefix"]);
+    return {
+      kind,
+      name: stringValue(required(source, "name", path), `${path}.name`),
+      access: enumeration(required(source, "access", path), ["read", "write"], `${path}.access`),
+      prefix: nullable(required(source, "prefix", path), `${path}.prefix`, stringValue),
+    };
+  }
+  const source = record(value, path, ["kind", "name", "access", "prefix", "extensions"]);
+  return {
+    kind,
+    name: stringValue(required(source, "name", path), `${path}.name`),
+    access: enumeration(required(source, "access", path), ["read", "write"], `${path}.access`),
+    prefix: nullable(required(source, "prefix", path), `${path}.prefix`, stringValue),
+    extensions: decodeStrings(required(source, "extensions", path), `${path}.extensions`),
+  };
+}
+
+function decodeProcessExecutable(value: unknown, path: string): ProcessExecutable {
+  const tagged = record(value, path);
+  const kind = enumeration(
+    required(tagged, "kind", path),
+    ["literal", "configuration"],
+    `${path}.kind`,
+  );
+  if (kind === "literal") {
+    const source = record(value, path, ["kind", "value"]);
+    return {
+      kind,
+      value: stringValue(required(source, "value", path), `${path}.value`),
+    };
+  }
+  const source = record(value, path, ["kind", "key"]);
+  return {
+    kind,
+    key: stringValue(required(source, "key", path), `${path}.key`),
+  };
+}
+
+function decodeConfigurationContribution(value: unknown, path: string): ConfigurationContribution {
+  const source = record(value, path, ["title", "properties"]);
+  return {
+    title: stringValue(required(source, "title", path), `${path}.title`),
+    properties: arrayOf(
+      required(source, "properties", path),
+      `${path}.properties`,
+      (property, propertyPath) => {
+        const entry = record(property, propertyPath, [
+          "kind",
+          "key",
+          "title",
+          "description",
+          "default",
+        ]);
+        const description = nullable(
+          required(entry, "description", propertyPath),
+          `${propertyPath}.description`,
+          stringValue,
+        );
+        return {
+          kind: literal(
+            required(entry, "kind", propertyPath),
+            "executable",
+            `${propertyPath}.kind`,
+          ),
+          key: stringValue(required(entry, "key", propertyPath), `${propertyPath}.key`),
+          title: stringValue(required(entry, "title", propertyPath), `${propertyPath}.title`),
+          ...(description === null ? {} : { description }),
+          default: stringValue(required(entry, "default", propertyPath), `${propertyPath}.default`),
+        };
+      },
+    ),
+  };
+}
+
+function decodeExtensionConfigurationValue(
+  value: unknown,
+  path: string,
+): ExtensionConfigurationView {
+  const source = record(value, path, ["extensionId", "title", "properties"]);
+  return {
+    extensionId: stringValue(required(source, "extensionId", path), `${path}.extensionId`),
+    title: stringValue(required(source, "title", path), `${path}.title`),
+    properties: arrayOf(
+      required(source, "properties", path),
+      `${path}.properties`,
+      decodeExtensionConfigurationProperty,
+    ),
+  };
+}
+
+function decodeExtensionConfigurationProperty(
+  value: unknown,
+  path: string,
+): ExtensionConfigurationPropertyView {
+  const source = record(value, path, [
+    "kind",
+    "key",
+    "title",
+    "description",
+    "defaultValue",
+    "value",
+    "userDefined",
+  ]);
+  return {
+    kind: literal(required(source, "kind", path), "executable", `${path}.kind`),
+    key: stringValue(required(source, "key", path), `${path}.key`),
+    title: stringValue(required(source, "title", path), `${path}.title`),
+    description: nullable(
+      required(source, "description", path),
+      `${path}.description`,
+      stringValue,
+    ),
+    defaultValue: stringValue(required(source, "defaultValue", path), `${path}.defaultValue`),
+    value: stringValue(required(source, "value", path), `${path}.value`),
+    userDefined: booleanValue(required(source, "userDefined", path), `${path}.userDefined`),
   };
 }
 
@@ -675,6 +893,8 @@ function decodePackage(value: unknown, path: string): PackageInstallView {
     "activationEvents",
     "commands",
     "keybindings",
+    "languages",
+    "configuration",
     "replacesVersion",
   ]);
   return {
@@ -705,6 +925,16 @@ function decodePackage(value: unknown, path: string): PackageInstallView {
       required(source, "keybindings", path),
       `${path}.keybindings`,
       decodeKeybindingContribution,
+    ),
+    languages: arrayOf(
+      required(source, "languages", path),
+      `${path}.languages`,
+      decodeLanguageContribution,
+    ),
+    configuration: nullable(
+      required(source, "configuration", path),
+      `${path}.configuration`,
+      decodeConfigurationContribution,
     ),
     replacesVersion: nullable(
       required(source, "replacesVersion", path),

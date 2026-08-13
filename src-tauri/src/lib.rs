@@ -314,6 +314,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             sideral_extensions::set_extension_workspace,
             sideral_extensions::dismiss_extension_preview,
             sideral_extensions::update_extension_keybinding,
+            sideral_extensions::extension_configurations,
+            sideral_extensions::update_extension_configuration,
             sideral_extensions::inspect_extension_package,
             sideral_extensions::install_extension_package,
             sideral_extensions::set_extension_enabled,
