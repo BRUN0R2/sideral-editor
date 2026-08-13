@@ -9,6 +9,7 @@ import type {
   NetworkRequest,
   NetworkResponse,
   OutputChannel,
+  PreviewAppearance,
   PreviewDocument,
   PreviewPanel,
   ProcessRequest,
@@ -34,6 +35,7 @@ export interface TestPreviewPanel {
   readonly format: PreviewDocument["format"];
   readonly content: string;
   readonly sourceUri: string | undefined;
+  readonly appearance: PreviewAppearance | undefined;
   readonly visible: boolean;
   readonly disposed: boolean;
 }
@@ -369,6 +371,7 @@ class MutablePreviewPanel implements PreviewPanel, TestPreviewPanel {
   format: PreviewDocument["format"];
   content: string;
   sourceUri: string | undefined;
+  appearance: PreviewAppearance | undefined;
   visible = false;
   disposed = false;
 
@@ -377,6 +380,7 @@ class MutablePreviewPanel implements PreviewPanel, TestPreviewPanel {
     this.format = document.format;
     this.content = document.content;
     this.sourceUri = document.sourceUri;
+    this.appearance = clonePreviewAppearance(document.appearance);
   }
 
   async update(document: PreviewDocument): Promise<void> {
@@ -385,6 +389,7 @@ class MutablePreviewPanel implements PreviewPanel, TestPreviewPanel {
     this.format = document.format;
     this.content = document.content;
     this.sourceUri = document.sourceUri;
+    this.appearance = clonePreviewAppearance(document.appearance);
   }
 
   async show(): Promise<void> {
@@ -413,6 +418,12 @@ class MutablePreviewPanel implements PreviewPanel, TestPreviewPanel {
       throw new Error(`Preview panel ${this.title} is disposed.`);
     }
   }
+}
+
+function clonePreviewAppearance(
+  appearance: PreviewAppearance | undefined,
+): PreviewAppearance | undefined {
+  return appearance === undefined ? undefined : structuredClone(appearance);
 }
 
 function once(operation: () => unknown): Disposable {

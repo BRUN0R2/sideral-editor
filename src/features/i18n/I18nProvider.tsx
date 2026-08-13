@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { SideralLogo } from "../../components/SideralLogo";
 import {
   bootstrapApplication,
   isDesktopRuntime,
@@ -160,7 +161,7 @@ export function I18nProvider({ children }: { readonly children: ReactNode }) {
     return (
       <main className="startup-state" role="alert">
         <div className="startup-mark" aria-hidden="true">
-          A
+          <SideralLogo className="startup-mark__logo" />
         </div>
         <h1>Sideral Editor could not start</h1>
         <p>{startupError}</p>
@@ -175,7 +176,7 @@ export function I18nProvider({ children }: { readonly children: ReactNode }) {
     return (
       <main className="startup-state" aria-label="Starting Sideral Editor">
         <div className="startup-mark startup-mark--loading" aria-hidden="true">
-          A
+          <SideralLogo className="startup-mark__logo" />
         </div>
       </main>
     );

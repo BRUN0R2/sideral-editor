@@ -37,16 +37,6 @@
   --window-chrome-height: 34px;
   --window-control-width: 46px;
   --shadow-lg: 0 24px 80px rgb(0 0 0 / 45%);
-  --scrollbar-size: 14px;
-  --scrollbar-thumb: #4f555e;
-  --scrollbar-thumb-hover: #656c76;
-  --scrollbar-thumb-active: #747c87;
-  --scrollbar-arrow: #858c96;
-  --scrollbar-arrow-hover: #c4c8ce;
-  --scrollbar-arrow-disabled: #4c5159;
-  --scrollbar-fade-duration: 260ms;
-  --scrollbar-arrow-up: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2010%206'%3E%3Cpath%20d='M5%200%2010%206H0Z'/%3E%3C/svg%3E");
-  --scrollbar-arrow-down: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2010%206'%3E%3Cpath%20d='M0%200H10L5%206Z'/%3E%3C/svg%3E");
 }
 
 * {
@@ -95,76 +85,6 @@ button:disabled {
 ::selection {
   color: #fff;
   background: #616771;
-}
-
-::-webkit-scrollbar {
-  width: var(--scrollbar-size);
-  height: var(--scrollbar-size);
-  background: transparent;
-}
-
-::-webkit-scrollbar-track,
-::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background-color: var(--scrollbar-thumb);
-  background-clip: padding-box;
-  min-height: 44px;
-  transition: background-color var(--scrollbar-fade-duration) ease;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background-color: var(--scrollbar-thumb-hover);
-  background-clip: padding-box;
-}
-
-::-webkit-scrollbar-thumb:active {
-  background-color: var(--scrollbar-thumb-active);
-}
-
-::-webkit-scrollbar-button:horizontal {
-  display: none;
-}
-
-::-webkit-scrollbar-button:single-button:vertical {
-  display: block;
-  width: var(--scrollbar-size);
-  height: 16px;
-  background-color: var(--scrollbar-arrow);
-  -webkit-mask-position: center;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-size: 8px 5px;
-  mask-position: center;
-  mask-repeat: no-repeat;
-  mask-size: 8px 5px;
-  transition: background-color var(--scrollbar-fade-duration) ease;
-}
-
-::-webkit-scrollbar-button:single-button:vertical:decrement {
-  -webkit-mask-image: var(--scrollbar-arrow-up);
-  mask-image: var(--scrollbar-arrow-up);
-}
-
-::-webkit-scrollbar-button:single-button:vertical:increment {
-  -webkit-mask-image: var(--scrollbar-arrow-down);
-  mask-image: var(--scrollbar-arrow-down);
-}
-
-::-webkit-scrollbar-button:single-button:vertical:hover {
-  background-color: var(--scrollbar-arrow-hover);
-}
-
-::-webkit-scrollbar-button:single-button:vertical:disabled {
-  background-color: var(--scrollbar-arrow-disabled);
-}
-
-::-webkit-scrollbar-thumb:window-inactive,
-::-webkit-scrollbar-button:single-button:vertical:window-inactive {
-  background-color: transparent;
 }
 
 .primary-button,
@@ -308,9 +228,12 @@ button:disabled {
   border-radius: 15px;
   color: #d6d8dc;
   background: linear-gradient(145deg, #3a3f47, #292d34);
-  font-size: 23px;
-  font-weight: 700;
   box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
+}
+
+.startup-mark__logo {
+  width: 23px;
+  height: auto;
 }
 
 .startup-mark--loading {
@@ -334,10 +257,5 @@ button:disabled {
 
   .startup-mark--loading {
     animation: none;
-  }
-
-  ::-webkit-scrollbar-thumb,
-  ::-webkit-scrollbar-button:single-button:vertical {
-    transition-duration: 0.01ms;
   }
 }

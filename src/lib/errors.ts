@@ -3,6 +3,11 @@ export interface CommandFailure {
   readonly message: string;
 }
 
+interface CommandFailureRecord extends Readonly<Record<string, unknown>> {
+  readonly code?: unknown;
+  readonly message?: unknown;
+}
+
 export class ApplicationError extends Error {
   readonly code: string;
 
@@ -27,9 +32,9 @@ export function toApplicationError(error: unknown): ApplicationError {
 }
 
 function isCommandFailure(value: unknown): value is CommandFailure {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-  const candidate = value as Partial<CommandFailure>;
-  return typeof candidate.code === "string" && typeof candidate.message === "string";
+  return isRecord(value) && typeof value.code === "string" && typeof value.message === "string";
+}
+
+function isRecord(value: unknown): value is CommandFailureRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -12,7 +12,6 @@ const modernRoots = [
   "packages/sideral-extension-sdk",
   "packages/sideral-extension-testkit",
 ];
-const legacyRoots = ["src-tauri/crates/vscode-legacy-core", "src/features/vscode-legacy"];
 const textExtensions = new Set([
   ".css",
   ".html",
@@ -29,6 +28,9 @@ const retiredHostArtifacts = [
   "extension-host.html",
   "src/extension-host.ts",
   "src-tauri/capabilities/extension-host.json",
+  "src-tauri/src/extension_systems.rs",
+  "src-tauri/crates/vscode-legacy-core",
+  "src/features/vscode-legacy",
 ];
 
 const rules = [
@@ -37,20 +39,6 @@ const rules = [
     forbidden: [
       { pattern: /\bvscode\b|vscode-/iu, reason: "legacy product coupling" },
       { pattern: /\blegacy\b/iu, reason: "legacy-system coupling" },
-    ],
-  },
-  {
-    roots: legacyRoots,
-    forbidden: [
-      {
-        pattern: /sideral[-_]extension[-_](?:core|package|tool)/iu,
-        reason: "modern native dependency",
-      },
-      {
-        pattern: /features[/\\]sideral-extensions/iu,
-        reason: "modern frontend dependency",
-      },
-      { pattern: /@sideral\/extension-/iu, reason: "modern SDK dependency" },
     ],
   },
 ];
@@ -144,5 +132,5 @@ if (violations.length > 0) {
   process.stderr.write(`Extension boundary violations:\n${violations.join("\n")}\n`);
   process.exitCode = 1;
 } else {
-  process.stdout.write("Extension boundaries are isolated.\n");
+  process.stdout.write("The native extension boundary is isolated.\n");
 }

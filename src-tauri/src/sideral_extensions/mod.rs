@@ -165,9 +165,10 @@ pub fn dismiss_extension_preview(
     window: WebviewWindow,
     state: State<'_, SideralExtensionState>,
     resource_id: String,
+    expected_source_uri: Option<String>,
 ) -> ExtensionCommandResult<()> {
     state
-        .dismiss_preview(&window, &resource_id)
+        .dismiss_preview(&window, &resource_id, expected_source_uri.as_deref())
         .map_err(ExtensionCommandError::from)
 }
 
@@ -379,15 +380,18 @@ pub fn handle_window_event(window: &Window, event: &WindowEvent) {
     if !matches!(event, WindowEvent::Destroyed) {
         return;
     }
-    if let Some(state) = window.app_handle().try_state::<SideralExtensionState>() {
-        state.disconnect_host(window);
+    if let Some(state) = window.app_handle().try_state::<SideralExtensionState>()
+        && let Err(error) = state.disconnect_host(window)
+    {
+        eprintln!("Extension host disconnection failed: {error}");
     }
 }
 
-pub fn request_shutdown(app: &AppHandle) {
+pub fn request_shutdown(app: &AppHandle) -> Result<(), ExtensionError> {
     if let Some(state) = app.try_state::<SideralExtensionState>() {
-        state.send_shutdown();
+        state.send_shutdown()?;
     }
+    Ok(())
 }
 
 async fn spawn_extension_blocking<T, Operation>(operation: Operation) -> ExtensionCommandResult<T>

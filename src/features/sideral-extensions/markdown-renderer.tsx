@@ -242,7 +242,9 @@ function SafeLink({
         onClick={(event) => {
           event.preventDefault();
           if (isDesktopRuntime()) {
-            void openExternalUrl(href);
+            void openExternalUrl(href).catch((error: unknown) => {
+              console.error("The external link could not be opened.", error);
+            });
           }
         }}
       >

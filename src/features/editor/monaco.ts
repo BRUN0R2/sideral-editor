@@ -5,6 +5,8 @@ import HtmlWorker from "monaco-editor/language/html/html.worker.js?worker";
 import JsonWorker from "monaco-editor/language/json/json.worker.js?worker";
 import TypeScriptWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
 import type { ResolvedJsonSchema } from "../../lib/contracts";
+import type { ResolvedScrollbarTheme } from "../../theme/scrollbar";
+import { monacoScrollbarColors } from "./monaco-scrollbar";
 
 window.MonacoEnvironment = {
   getWorker(_moduleId: string, label: string): Worker {
@@ -37,12 +39,7 @@ export function applyResolvedJsonSchemas(schemas: readonly ResolvedJsonSchema[])
 
 applyResolvedJsonSchemas([]);
 
-let themeDefined = false;
-
-export function ensureSideralTheme(): void {
-  if (themeDefined) {
-    return;
-  }
+export function applySideralTheme(scrollbarTheme: ResolvedScrollbarTheme): void {
   monaco.editor.defineTheme("sideral-dark", {
     base: "vs-dark",
     inherit: true,
@@ -70,23 +67,11 @@ export function ensureSideralTheme(): void {
       "editorWidget.border": "#414750",
       "input.background": "#20242a",
       "input.border": "#414750",
-      "scrollbar.background": "#00000000",
-      "scrollbar.shadow": "#00000000",
-      "scrollbarSlider.background": requiredCssColor("--scrollbar-thumb"),
-      "scrollbarSlider.hoverBackground": requiredCssColor("--scrollbar-thumb-hover"),
-      "scrollbarSlider.activeBackground": requiredCssColor("--scrollbar-thumb-active"),
+      ...monacoScrollbarColors(scrollbarTheme),
       focusBorder: "#9298a1",
     },
   });
-  themeDefined = true;
-}
-
-function requiredCssColor(name: `--${string}`): string {
-  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  if (value === "") {
-    throw new Error(`Required CSS color token is missing: ${name}`);
-  }
-  return value;
+  monaco.editor.setTheme("sideral-dark");
 }
 
 export { monaco };

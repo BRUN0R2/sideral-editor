@@ -4,8 +4,8 @@ use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ExtensionSizeBudget, ManifestError, PermissionSet, WorkspaceAccess, budgets::MAX_MANIFEST_BYTES,
-    extension_size_budget,
+    ExtensionSizeBudget, ManifestError, PermissionSet, WorkspaceAccess,
+    budgets::MAX_MANIFEST_BYTES, extension_size_budget,
 };
 
 const SUPPORTED_MANIFEST_VERSION: u16 = 1;
@@ -474,7 +474,9 @@ fn normalize_key(value: &str) -> Result<String, ManifestError> {
     if let Some(named) = named {
         return Ok(named.to_owned());
     }
-    if let Some(number) = lower.strip_prefix('f').and_then(|value| value.parse::<u8>().ok())
+    if let Some(number) = lower
+        .strip_prefix('f')
+        .and_then(|value| value.parse::<u8>().ok())
         && (1..=24).contains(&number)
     {
         return Ok(format!("F{number}"));
@@ -718,7 +720,7 @@ mod tests {
     fn rejects_duplicate_process_grant_ids() {
         let source = VALID_MANIFEST.replace(
             "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }]",
-            "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }], \"processes\": [{ \"id\": \"sample.hello.tool\", \"executable\": \"tool\", \"arguments\": [\"one\"] }, { \"id\": \"sample.hello.tool\", \"executable\": \"tool\", \"arguments\": [\"two\"] }]",
+            "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }], \"processes\": [{ \"id\": \"sample.hello.tool\", \"executable\": \"tool\", \"workingDirectory\": \"extensionData\", \"arguments\": [\"one\"] }, { \"id\": \"sample.hello.tool\", \"executable\": \"tool\", \"workingDirectory\": \"extensionData\", \"arguments\": [\"two\"] }]",
         );
 
         assert!(matches!(
@@ -727,6 +729,34 @@ mod tests {
                 kind: "process permission id",
                 ..
             })
+        ));
+    }
+
+    #[test]
+    fn rejects_process_grants_without_an_explicit_working_directory() {
+        let source = VALID_MANIFEST.replace(
+            "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }]",
+            "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }], \"processes\": [{ \"id\": \"sample.hello.tool\", \"executable\": \"tool\" }]",
+        );
+
+        assert!(matches!(
+            validate_manifest_json(&source),
+            Err(ManifestError::InvalidJson(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_workspace_processes_without_workspace_access() {
+        let source = VALID_MANIFEST
+            .replace("\"workspace\": \"read\"", "\"workspace\": \"none\"")
+            .replace(
+                "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }]",
+                "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }], \"processes\": [{ \"id\": \"sample.hello.tool\", \"executable\": \"tool\", \"workingDirectory\": \"workspace\" }]",
+            );
+
+        assert!(matches!(
+            validate_manifest_json(&source),
+            Err(ManifestError::Inconsistent(_))
         ));
     }
 

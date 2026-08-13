@@ -289,7 +289,7 @@ pub enum ExtensionClientInstruction {
         resource_id: String,
     },
     PreviewChanged {
-        preview: PreviewDocumentView,
+        preview: Box<PreviewDocumentView>,
     },
     PreviewDisposed {
         resource_id: String,
@@ -320,6 +320,46 @@ pub enum PreviewFormat {
     Markdown,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PreviewScrollbarAppearance {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track_size: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thumb_size: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thumb_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thumb_hover_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thumb_active_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_buttons: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub button_size: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arrow_size: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arrow_height: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arrow_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arrow_hover_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arrow_active_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub corner_radius: Option<u16>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PreviewAppearance {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scrollbar: Option<PreviewScrollbarAppearance>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewDocumentView {
@@ -329,6 +369,7 @@ pub struct PreviewDocumentView {
     pub format: PreviewFormat,
     pub content: String,
     pub source_uri: Option<String>,
+    pub appearance: Option<PreviewAppearance>,
     pub visible: bool,
 }
 
@@ -467,7 +508,8 @@ mod tests {
 
     use super::{
         ActivationReason, EXTENSION_PROTOCOL_VERSION, ExtensionClientInstruction, HostEvent,
-        HostInstruction, PreviewDocumentView, PreviewFormat,
+        HostInstruction, PreviewAppearance, PreviewDocumentView, PreviewFormat,
+        PreviewScrollbarAppearance,
     };
 
     #[test]
@@ -549,15 +591,33 @@ mod tests {
     #[test]
     fn preview_instruction_serializes_a_safe_typed_document() {
         let instruction = ExtensionClientInstruction::PreviewChanged {
-            preview: PreviewDocumentView {
+            preview: Box::new(PreviewDocumentView {
                 resource_id: "preview:sample:1".to_owned(),
                 extension_id: "sample.extension".to_owned(),
                 title: "README preview".to_owned(),
                 format: PreviewFormat::Markdown,
                 content: "# README".to_owned(),
                 source_uri: Some("file:///D:/workspace/README.md".to_owned()),
+                appearance: Some(PreviewAppearance {
+                    scrollbar: Some(PreviewScrollbarAppearance {
+                        track_size: Some(16),
+                        thumb_size: Some(10),
+                        track_color: Some("transparent".to_owned()),
+                        thumb_color: Some("#8b5cf6".to_owned()),
+                        thumb_hover_color: None,
+                        thumb_active_color: None,
+                        show_buttons: Some(true),
+                        button_size: Some(16),
+                        arrow_size: Some(11),
+                        arrow_height: Some(6),
+                        arrow_color: Some("#69717d".to_owned()),
+                        arrow_hover_color: None,
+                        arrow_active_color: None,
+                        corner_radius: Some(12),
+                    }),
+                }),
                 visible: true,
-            },
+            }),
         };
 
         assert_eq!(
@@ -571,6 +631,20 @@ mod tests {
                     "format": "markdown",
                     "content": "# README",
                     "sourceUri": "file:///D:/workspace/README.md",
+                    "appearance": {
+                        "scrollbar": {
+                            "trackSize": 16,
+                            "thumbSize": 10,
+                            "trackColor": "transparent",
+                            "thumbColor": "#8b5cf6",
+                            "showButtons": true,
+                            "buttonSize": 16,
+                            "arrowSize": 11,
+                            "arrowHeight": 6,
+                            "arrowColor": "#69717d",
+                            "cornerRadius": 12,
+                        }
+                    },
                     "visible": true,
                 },
             })),

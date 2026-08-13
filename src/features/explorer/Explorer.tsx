@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
 import { FileTypeIcon } from "../../components/FileTypeIcon";
 import { Icon } from "../../components/Icon";
@@ -6,6 +7,7 @@ import { toApplicationError } from "../../lib/errors";
 import { useI18n } from "../i18n/I18nProvider";
 import type { WorkspaceNode, WorkspaceRoot } from "../workspace/types";
 import { validateNewFileName } from "./new-file-name";
+import { getTreeChildrenAnimationTiming } from "./tree-animation";
 
 interface ExplorerProps {
   readonly root: WorkspaceRoot | null;
@@ -21,6 +23,11 @@ interface ExplorerProps {
 const TREE_ROOT_INDENT_PIXELS = 16;
 const TREE_LEVEL_INDENT_PIXELS = 13;
 const TREE_LEADING_COLUMN_WITH_GAP_PIXELS = 21;
+
+interface TreeChildrenAnimationStyle extends CSSProperties {
+  readonly "--tree-children-duration": string;
+  readonly "--tree-children-fade-duration": string;
+}
 
 export function Explorer({
   root,
@@ -239,6 +246,10 @@ function TreeNode({
   const { t } = useI18n();
   const isDirectory = node.kind === "directory";
   const isSymbolicLink = node.kind === "symbolicLink";
+  const childrenVisible = isDirectory && node.expanded && node.children !== null;
+  const childrenAnimationStyle = isDirectory
+    ? getTreeChildrenAnimationStyle(node.children)
+    : undefined;
   const activate = () => {
     if (isDirectory) {
       onToggleDirectory(node.path);
@@ -264,37 +275,54 @@ function TreeNode({
           className={`tree-leading ${isDirectory && node.loading ? "tree-leading--loading" : ""}`}
         >
           {isDirectory ? (
-            <Icon name={node.expanded ? "chevronDown" : "chevronRight"} size={17} />
+            <Icon className="tree-chevron" name="chevronRight" size={17} />
           ) : (
             <FileTypeIcon name={node.name} />
           )}
         </span>
         <span className="tree-label">{node.name}</span>
       </button>
-      {isDirectory && node.expanded && node.children !== null ? (
-        <div>
-          {node.children.length === 0 ? (
-            <div
-              className="tree-empty tree-empty--nested"
-              style={{
-                paddingInlineStart: `${TREE_ROOT_INDENT_PIXELS + TREE_LEADING_COLUMN_WITH_GAP_PIXELS + depth * TREE_LEVEL_INDENT_PIXELS}px`,
-              }}
-            >
-              {t("explorer.empty")}
-            </div>
-          ) : (
-            node.children.map((child) => (
-              <TreeNode
-                key={child.path}
-                node={child}
-                depth={depth + 1}
-                onOpenFile={onOpenFile}
-                onToggleDirectory={onToggleDirectory}
-              />
-            ))
-          )}
+      {isDirectory ? (
+        <div
+          className={`tree-children ${childrenVisible ? "tree-children--expanded" : ""}`}
+          aria-hidden={!childrenVisible}
+          inert={!childrenVisible}
+          style={childrenAnimationStyle}
+        >
+          <div className="tree-children__content">
+            {node.children === null ? null : node.children.length === 0 ? (
+              <div
+                className="tree-empty tree-empty--nested"
+                style={{
+                  paddingInlineStart: `${TREE_ROOT_INDENT_PIXELS + TREE_LEADING_COLUMN_WITH_GAP_PIXELS + depth * TREE_LEVEL_INDENT_PIXELS}px`,
+                }}
+              >
+                {t("explorer.empty")}
+              </div>
+            ) : (
+              node.children.map((child) => (
+                <TreeNode
+                  key={child.path}
+                  node={child}
+                  depth={depth + 1}
+                  onOpenFile={onOpenFile}
+                  onToggleDirectory={onToggleDirectory}
+                />
+              ))
+            )}
+          </div>
         </div>
       ) : null}
     </div>
   );
+}
+
+function getTreeChildrenAnimationStyle(
+  children: readonly WorkspaceNode[] | null,
+): TreeChildrenAnimationStyle {
+  const timing = getTreeChildrenAnimationTiming(children);
+  return {
+    "--tree-children-duration": `${timing.durationMs}ms`,
+    "--tree-children-fade-duration": `${timing.fadeDurationMs}ms`,
+  };
 }

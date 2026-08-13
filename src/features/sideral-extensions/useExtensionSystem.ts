@@ -29,6 +29,7 @@ import type {
   PreviewDocumentView,
 } from "./contracts";
 import type { ExtensionHostConnection } from "./host/connection";
+import { applyPreviewChange, visiblePreviewMap } from "./preview-lifecycle";
 
 const EMPTY_SNAPSHOT: ExtensionSnapshot = {
   sequence: 0,
@@ -37,7 +38,7 @@ const EMPTY_SNAPSHOT: ExtensionSnapshot = {
   commands: [],
   keybindings: [],
 };
-const MAX_NOTICES = 20;
+const MAX_NOTICES: number = 20;
 
 export interface ExtensionNotice {
   readonly id: number;
@@ -55,7 +56,7 @@ export interface ExtensionSystem {
   readonly busyExtensionIds: ReadonlySet<string>;
   readonly error: string | null;
   executeCommand(commandId: string, arguments_?: readonly JsonValue[]): Promise<JsonValue | null>;
-  dismissPreview(resourceId: string): Promise<void>;
+  dismissPreview(resourceId: string, expectedSourceUri: string | null): Promise<void>;
   updateKeybinding(commandId: string, update: KeybindingUpdate): Promise<void>;
   inspectPackage(path: string): Promise<PackageInspectionResult>;
   installPackage(
@@ -68,6 +69,7 @@ export interface ExtensionSystem {
   rollback(extensionId: string): Promise<void>;
   uninstall(extensionId: string): Promise<void>;
   dismissNotice(id: number): void;
+  reportError(reason: unknown): void;
   clearError(): void;
 }
 
@@ -86,6 +88,9 @@ export function useExtensionSystem(
   const [previews, setPreviews] = useState<ReadonlyMap<string, PreviewDocumentView>>(new Map());
   const [busyCounts, setBusyCounts] = useState<ReadonlyMap<string, number>>(new Map());
   const [error, setError] = useState<string | null>(null);
+  const reportError = useCallback((reason: unknown): void => {
+    setError(errorMessage(reason));
+  }, []);
   const nextNoticeId = useRef(1);
   const latestSnapshotSequence = useRef(0);
   const workspaceRootRef = useRef(workspaceRootPath);
@@ -166,11 +171,7 @@ export function useExtensionSystem(
           });
           return;
         case "previewChanged":
-          setPreviews((current) => {
-            const next = new Map(current);
-            next.set(instruction.preview.resourceId, instruction.preview);
-            return next;
-          });
+          setPreviews((current) => applyPreviewChange(current, instruction.preview));
           return;
         case "previewDisposed":
           setPreviews((current) => {
@@ -205,9 +206,7 @@ export function useExtensionSystem(
       connection = connected;
       applySnapshot(connected.snapshot);
       setOutputs(new Map(connected.outputs.map((output) => [output.resourceId, output] as const)));
-      setPreviews(
-        new Map(connected.previews.map((preview) => [preview.resourceId, preview] as const)),
-      );
+      setPreviews(visiblePreviewMap(connected.previews));
       await setExtensionWorkspace(workspaceRootRef.current);
       setStatus("ready");
       void activateExtensionEvent({ kind: "workbenchReady" }).catch((reason: unknown) => {
@@ -224,7 +223,9 @@ export function useExtensionSystem(
     return () => {
       cancelled = true;
       if (connection !== null) {
-        void connection.dispose().catch(() => undefined);
+        void connection.dispose().catch((reason: unknown) => {
+          console.error("The extension client connection failed to close.", reason);
+        });
       }
     };
   }, [acceptInstruction, applySnapshot, desktop, hostConnection]);
@@ -266,6 +267,19 @@ export function useExtensionSystem(
     [applySnapshot, updateBusyCount],
   );
 
+  const dismissPreview = useCallback(
+    async (resourceId: string, expectedSourceUri: string | null): Promise<void> => {
+      setError(null);
+      try {
+        await dismissExtensionPreview(resourceId, expectedSourceUri);
+      } catch (reason: unknown) {
+        setError(errorMessage(reason));
+        throw reason;
+      }
+    },
+    [],
+  );
+
   return useMemo(
     () => ({
       status,
@@ -299,15 +313,7 @@ export function useExtensionSystem(
           }
         }
       },
-      async dismissPreview(resourceId) {
-        setError(null);
-        try {
-          await dismissExtensionPreview(resourceId);
-        } catch (reason: unknown) {
-          setError(errorMessage(reason));
-          throw reason;
-        }
-      },
+      dismissPreview,
       updateKeybinding(commandId, update) {
         const extensionId = snapshot.keybindings.find(
           (binding) => binding.commandId === commandId,
@@ -351,6 +357,7 @@ export function useExtensionSystem(
       dismissNotice(id) {
         setNotices((current) => current.filter((notice) => notice.id !== id));
       },
+      reportError,
       clearError() {
         setError(null);
       },
@@ -358,10 +365,12 @@ export function useExtensionSystem(
     [
       applySnapshot,
       busyExtensionIds,
+      dismissPreview,
       error,
       notices,
       outputs,
       previews,
+      reportError,
       runExtensionMutation,
       snapshot,
       status,

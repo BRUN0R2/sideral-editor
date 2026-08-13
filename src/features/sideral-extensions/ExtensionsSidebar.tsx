@@ -73,7 +73,7 @@ export function ExtensionsSidebar({
             label={t("action.installExtension")}
             icon="download"
             disabled={system.status !== "ready"}
-            onClick={() => void selectPackage().catch(() => undefined)}
+            onClick={() => void selectPackage().catch(system.reportError)}
           />
         </div>
       </header>
@@ -124,7 +124,7 @@ export function ExtensionsSidebar({
           pending={pendingPackage}
           installing={installing}
           onCancel={() => setPendingPackage(null)}
-          onInstall={() => void installPackage().catch(() => undefined)}
+          onInstall={() => void installPackage().catch(system.reportError)}
         />
       )}
     </aside>

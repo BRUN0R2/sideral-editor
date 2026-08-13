@@ -66,6 +66,63 @@ describe("Sideral extension test kit", () => {
     await harness.dispose();
   });
 
+  it("keeps preview scrollbar overrides scoped and cloned", async () => {
+    const appearance = {
+      scrollbar: {
+        trackSize: 16,
+        thumbSize: 10,
+        trackColor: "transparent",
+        thumbColor: "#8b5cf6",
+        thumbHoverColor: "#a78bfa",
+        thumbActiveColor: "#c4b5fd",
+        showButtons: true,
+        buttonSize: 18,
+        arrowSize: 10,
+        arrowHeight: 5,
+        arrowColor: "#ddd6fe",
+        arrowHoverColor: "#ede9fe",
+        arrowActiveColor: "#ffffff",
+        cornerRadius: 12,
+      },
+    };
+    const extension: ExtensionModule = {
+      async activate(context, api) {
+        const preview = api.window.createPreviewPanel({
+          title: "Custom preview",
+          format: "markdown",
+          content: "# Preview",
+          appearance,
+        });
+        context.subscriptions.add(preview);
+        await preview.show();
+      },
+    };
+    const harness = createExtensionHarness(extension);
+
+    await harness.activate();
+    appearance.scrollbar.thumbColor = "#000000";
+
+    expect(harness.previews[0]).toMatchObject({
+      title: "Custom preview",
+      visible: true,
+      appearance: {
+        scrollbar: {
+          trackSize: 16,
+          thumbSize: 10,
+          thumbColor: "#8b5cf6",
+          showButtons: true,
+          buttonSize: 18,
+          arrowSize: 10,
+          arrowHeight: 5,
+          arrowColor: "#ddd6fe",
+          cornerRadius: 12,
+        },
+      },
+    });
+    await harness.dispose();
+    expect(harness.previews[0]?.disposed).toBe(true);
+  });
+
   it("executes nested local commands without deadlocking the serial queue", async () => {
     const extension: ExtensionModule = {
       activate(context, api) {

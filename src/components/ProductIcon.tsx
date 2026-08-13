@@ -2,7 +2,10 @@ const PRODUCT_ICONS = {
   explorer: "files",
   extensions: "extensions",
   account: "account",
+  clearAll: "clear-all",
   settingsGear: "settings-gear",
+  terminal: "terminal",
+  trash: "trash",
 } as const;
 
 export type ProductIconName = keyof typeof PRODUCT_ICONS;

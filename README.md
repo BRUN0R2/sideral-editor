@@ -13,6 +13,9 @@ The first working foundation includes:
 - secure JSON schema validation with real file URIs, native resolution,
   bounded caching and revocable remote trust;
 - a lazy workspace explorer that does not crawl an entire project up front;
+- an on-demand integrated terminal backed by the native Windows PTY, with an
+  explicit PowerShell 7/Command Prompt selection rule, bounded transport and
+  deterministic process shutdown;
 - English as the primary language and automatic system-language detection;
 - drop-in JSON translations discovered from the app's locale directory;
 - manual language selection with persisted native settings;
@@ -29,14 +32,16 @@ research only and is never a build or runtime dependency.
 ## Toolchain
 
 - Rust 1.97.1, edition 2024
+- Node.js 24 and npm 11.18
 - Tauri 2.11
 - TypeScript 7.0
 - Vite 8.2
 - React 19.2
 - Monaco Editor 0.56
 
-Use a current Node.js release supported by Vite (22.12 or newer) and the current
-stable MSVC Rust toolchain.
+The package manifest accepts Node.js 22.12 or newer; CI uses Node.js 24 and the
+pinned npm version. Install scripts are denied unless explicitly allowlisted.
+Use the current stable MSVC Rust toolchain.
 
 ## Run
 
@@ -58,6 +63,10 @@ npm run check
 npm run build
 ```
 
+`npm run check` is the complete local and CI gate: architecture contracts,
+format/lint, strict type checking, SDK and examples, TypeScript and Rust tests,
+Clippy, production bundle budgets and deterministic dependency-advisory checks.
+
 `npm run dev` opens an explicit browser-only visual preview. Native file,
 translation-folder and updater operations intentionally remain unavailable in
 that preview.
@@ -69,5 +78,5 @@ that preview.
 - [Creating a translation](docs/TRANSLATING.md)
 - [Signed updates](docs/UPDATES.md)
 - [Extension authoring](docs/EXTENSIONS.md)
-- [Extension-system decisions](docs/decisions/0001-independent-extension-systems.md)
+- [Extension-system decisions](docs/decisions/0001-native-extension-system.md)
 - [Next work](docs/TODO.md)

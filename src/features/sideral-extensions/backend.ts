@@ -1,7 +1,15 @@
 import type { ActivationReason, JsonValue, TextDocument } from "@sideral/extension-sdk";
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { voidValue } from "../../lib/runtime-validation";
+import {
+  decodeClientHandshake,
+  decodeExtensionClientInstruction,
+  decodeExtensionCommandResult,
+  decodeExtensionSnapshot,
+  decodePackageInspection,
+  decodeSideralExtensionInspection,
+} from "./contract-validation";
 import type {
-  ClientHandshake,
   ExtensionClientInstruction,
   ExtensionSnapshot,
   KeybindingUpdate,
@@ -21,18 +29,28 @@ export interface ExtensionClientConnection {
 export function validateSideralExtensionManifest(
   source: string,
 ): Promise<SideralExtensionInspection> {
-  return invoke<SideralExtensionInspection>("validate_sideral_extension_manifest", { source });
+  return invokeDecoded(
+    "validate_sideral_extension_manifest",
+    { source },
+    decodeSideralExtensionInspection,
+  );
 }
 
 export function initializeExtensionSystem(): Promise<ExtensionSnapshot> {
-  return invoke<ExtensionSnapshot>("initialize_extension_system");
+  return invokeDecoded("initialize_extension_system", undefined, decodeExtensionSnapshot);
 }
 
 export async function connectExtensionClient(
   onInstruction: (instruction: ExtensionClientInstruction) => void,
 ): Promise<ExtensionClientConnection> {
-  const channel = new Channel<ExtensionClientInstruction>(onInstruction);
-  const handshake = await invoke<ClientHandshake>("connect_extension_client", { channel });
+  const channel = new Channel<unknown>((value) =>
+    onInstruction(decodeExtensionClientInstruction(value)),
+  );
+  const handshake = await invokeDecoded(
+    "connect_extension_client",
+    { channel },
+    decodeClientHandshake,
+  );
   let disposed = false;
   return {
     snapshot: handshake.snapshot,
@@ -44,17 +62,17 @@ export async function connectExtensionClient(
       }
       disposed = true;
       channel.onmessage = () => undefined;
-      await invoke("disconnect_extension_client", { connectionId: handshake.connectionId });
+      await invokeVoid("disconnect_extension_client", { connectionId: handshake.connectionId });
     },
   };
 }
 
 export function setExtensionWorkspace(root: string | null): Promise<void> {
-  return invoke("set_extension_workspace", { root });
+  return invokeVoid("set_extension_workspace", { root });
 }
 
 export function activateExtensionEvent(reason: ActivationReason): Promise<void> {
-  return invoke("activate_extension_event", { reason });
+  return invokeVoid("activate_extension_event", { reason });
 }
 
 export function executeExtensionCommand(
@@ -62,26 +80,33 @@ export function executeExtensionCommand(
   arguments_: readonly JsonValue[] = [],
   activeTextDocument: TextDocument | null = null,
 ): Promise<JsonValue | null> {
-  return invoke<JsonValue | null>("execute_extension_command", {
-    commandId,
-    arguments: arguments_,
-    activeTextDocument,
-  });
+  return invokeDecoded(
+    "execute_extension_command",
+    { commandId, arguments: arguments_, activeTextDocument },
+    decodeExtensionCommandResult,
+  );
 }
 
-export function dismissExtensionPreview(resourceId: string): Promise<void> {
-  return invoke("dismiss_extension_preview", { resourceId });
+export function dismissExtensionPreview(
+  resourceId: string,
+  expectedSourceUri: string | null,
+): Promise<void> {
+  return invokeVoid("dismiss_extension_preview", { resourceId, expectedSourceUri });
 }
 
 export function updateExtensionKeybinding(
   commandId: string,
   update: KeybindingUpdate,
 ): Promise<ExtensionSnapshot> {
-  return invoke<ExtensionSnapshot>("update_extension_keybinding", { commandId, update });
+  return invokeDecoded(
+    "update_extension_keybinding",
+    { commandId, update },
+    decodeExtensionSnapshot,
+  );
 }
 
 export function inspectExtensionPackage(path: string): Promise<PackageInspectionResult> {
-  return invoke<PackageInspectionResult>("inspect_extension_package", { path });
+  return invokeDecoded("inspect_extension_package", { path }, decodePackageInspection);
 }
 
 export function installExtensionPackage(
@@ -89,28 +114,40 @@ export function installExtensionPackage(
   expectedPackageSha256: string,
   approvePublisher: boolean,
 ): Promise<ExtensionSnapshot> {
-  return invoke<ExtensionSnapshot>("install_extension_package", {
-    path,
-    expectedPackageSha256,
-    approvePublisher,
-  });
+  return invokeDecoded(
+    "install_extension_package",
+    { path, expectedPackageSha256, approvePublisher },
+    decodeExtensionSnapshot,
+  );
 }
 
 export function setExtensionEnabled(
   extensionId: string,
   enabled: boolean,
 ): Promise<ExtensionSnapshot> {
-  return invoke<ExtensionSnapshot>("set_extension_enabled", { extensionId, enabled });
+  return invokeDecoded("set_extension_enabled", { extensionId, enabled }, decodeExtensionSnapshot);
 }
 
 export function restartExtension(extensionId: string): Promise<ExtensionSnapshot> {
-  return invoke<ExtensionSnapshot>("restart_extension", { extensionId });
+  return invokeDecoded("restart_extension", { extensionId }, decodeExtensionSnapshot);
 }
 
 export function rollbackExtension(extensionId: string): Promise<ExtensionSnapshot> {
-  return invoke<ExtensionSnapshot>("rollback_extension", { extensionId });
+  return invokeDecoded("rollback_extension", { extensionId }, decodeExtensionSnapshot);
 }
 
 export function uninstallExtension(extensionId: string): Promise<ExtensionSnapshot> {
-  return invoke<ExtensionSnapshot>("uninstall_extension", { extensionId });
+  return invokeDecoded("uninstall_extension", { extensionId }, decodeExtensionSnapshot);
+}
+
+async function invokeDecoded<Value>(
+  command: string,
+  arguments_: Record<string, unknown> | undefined,
+  decode: (value: unknown) => Value,
+): Promise<Value> {
+  return decode(await invoke<unknown>(command, arguments_));
+}
+
+async function invokeVoid(command: string, arguments_?: Record<string, unknown>): Promise<void> {
+  voidValue(await invoke<unknown>(command, arguments_), `${command} response`);
 }

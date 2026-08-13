@@ -1,85 +1,16 @@
-import type {
-  HostToWorkerMessage,
-  JsonValue,
-  ProtocolFailure,
-  WorkerToHostMessage,
-} from "@sideral/extension-sdk";
+import type { ProtocolFailure } from "@sideral/extension-sdk";
 import { invoke } from "@tauri-apps/api/core";
-import type {
-  BrokerRequest,
-  BrokerResponse,
-  HostEvent,
-  HostHandshake,
-  HostInstruction,
-} from "../contracts";
+import { arrayBuffer, voidValue } from "../../../lib/runtime-validation";
+import { decodeBrokerResponse } from "../contract-validation";
+import type { BrokerRequest, HostEvent, HostHandshake, HostInstruction } from "../contracts";
+import { HostFailure, throwIfAborted, toFailure, withDeadline } from "./host-errors";
+import { type BrokerWorkerMessage, ManagedWorker } from "./managed-worker";
+import { EXTENSION_PROTOCOL_VERSION as PROTOCOL_VERSION } from "./protocol-version";
 
-const PROTOCOL_VERSION = 1 as const;
-const MAX_BROKER_PAYLOAD_BYTES = 256 * 1024;
-const MAX_COMMAND_RESULT_BYTES = 1024 * 1024;
-const MAX_PROTOCOL_TEXT_BYTES = 4 * 1024;
-const BROKER_METHODS = new Set([
-  "commands.execute",
-  "configuration.get",
-  "configuration.update",
-  "network.request",
-  "processes.execute",
-  "storage.delete",
-  "storage.get",
-  "storage.keys",
-  "storage.update",
-  "window.output.append",
-  "window.output.clear",
-  "window.output.create",
-  "window.output.dispose",
-  "window.output.flush",
-  "window.output.show",
-  "window.preview.create",
-  "window.preview.dispose",
-  "window.preview.hide",
-  "window.preview.show",
-  "window.preview.toggle",
-  "window.preview.update",
-  "window.showErrorMessage",
-  "window.showInformationMessage",
-  "window.showWarningMessage",
-  "workspace.findFiles",
-  "workspace.readTextDocument",
-  "workspace.writeTextDocument",
-]);
-
-type WorkerReply = Extract<
-  WorkerToHostMessage,
-  { readonly kind: "activated" | "commandResult" | "deactivated" }
->;
-type BrokerWorkerMessage = Extract<
-  WorkerToHostMessage,
-  { readonly kind: "brokerRequest" | "cancelBrokerRequest" }
->;
 type RuntimeInstruction = Extract<
   HostInstruction,
   { readonly kind: "activateExtension" | "executeCommand" }
 >;
-type BrokerMessageHandler = (message: BrokerWorkerMessage) => Promise<void>;
-type WorkerFaultHandler = (failure: ProtocolFailure) => Promise<void>;
-
-interface PendingReply {
-  readonly kind: WorkerReply["kind"];
-  readonly resolve: (message: WorkerReply) => void;
-  readonly reject: (error: Error) => void;
-}
-
-interface WorkerBoundaryRecord extends Record<string, unknown> {
-  readonly code?: unknown;
-  readonly error?: unknown;
-  readonly generation?: unknown;
-  readonly kind?: unknown;
-  readonly message?: unknown;
-  readonly method?: unknown;
-  readonly payload?: unknown;
-  readonly protocolVersion?: unknown;
-  readonly requestId?: unknown;
-  readonly result?: unknown;
-}
 
 export class ExtensionHostSupervisor {
   readonly #workers = new Map<string, ManagedWorker>();
@@ -162,7 +93,7 @@ export class ExtensionHostSupervisor {
       return;
     }
     const workers = this.#takeWorkers();
-    await Promise.allSettled(
+    const outcomes = await Promise.allSettled(
       workers.map((worker) =>
         worker.deactivate(
           `shutdown-${worker.generation}`,
@@ -173,6 +104,12 @@ export class ExtensionHostSupervisor {
     );
     for (const worker of workers) {
       worker.terminate();
+    }
+    const failures = outcomes.flatMap((outcome) =>
+      outcome.status === "rejected" ? [outcome.reason] : [],
+    );
+    if (failures.length > 0) {
+      throw new AggregateError(failures, "One or more extension workers failed to deactivate.");
     }
   }
 
@@ -186,9 +123,14 @@ export class ExtensionHostSupervisor {
     }
     try {
       await this.#emitHostFault(toFailure(error, "extension_host_fault"));
-    } catch {
-      // The native transport is already unavailable, so there is no remaining
-      // recovery channel for a host-level failure.
+    } catch (transportError: unknown) {
+      console.error(
+        "The extension host fault could not be delivered to the native service.",
+        new AggregateError(
+          [error, transportError],
+          "Extension host failure and transport failure.",
+        ),
+      );
     }
   }
 
@@ -363,11 +305,14 @@ export class ExtensionHostSupervisor {
     cancellationSignal: AbortSignal,
   ): Promise<ManagedWorker> {
     throwIfAborted(cancellationSignal);
-    const bytes = await invoke<ArrayBuffer>("extension_host_bundle", {
-      sessionToken: this.#requireHandshake().sessionToken,
-      extensionId: instruction.extensionId,
-      generation: instruction.generation,
-    });
+    const bytes = arrayBuffer(
+      await invoke<unknown>("extension_host_bundle", {
+        sessionToken: this.#requireHandshake().sessionToken,
+        extensionId: instruction.extensionId,
+        generation: instruction.generation,
+      }),
+      "extension_host_bundle response",
+    );
     throwIfAborted(cancellationSignal);
     const actualSha256 = await sha256Hex(bytes);
     throwIfAborted(cancellationSignal);
@@ -409,25 +354,22 @@ export class ExtensionHostSupervisor {
     }
   }
 
-  async #handleWorkerMessage(
-    extensionId: string,
-    message: Extract<
-      WorkerToHostMessage,
-      { readonly kind: "brokerRequest" | "cancelBrokerRequest" }
-    >,
-  ): Promise<void> {
+  async #handleWorkerMessage(extensionId: string, message: BrokerWorkerMessage): Promise<void> {
     const runtime = this.#workers.get(extensionId);
     if (runtime === undefined || runtime.generation !== message.generation) {
       return;
     }
     if (message.kind === "cancelBrokerRequest") {
-      await invoke("cancel_extension_broker_request", {
-        sessionToken: this.#requireHandshake().sessionToken,
-        protocolVersion: PROTOCOL_VERSION,
-        extensionId,
-        generation: message.generation,
-        requestId: message.requestId,
-      });
+      voidValue(
+        await invoke<unknown>("cancel_extension_broker_request", {
+          sessionToken: this.#requireHandshake().sessionToken,
+          protocolVersion: PROTOCOL_VERSION,
+          extensionId,
+          generation: message.generation,
+          requestId: message.requestId,
+        }),
+        "cancel_extension_broker_request response",
+      );
       return;
     }
     const request: BrokerRequest = {
@@ -439,10 +381,12 @@ export class ExtensionHostSupervisor {
       payload: message.payload,
     };
     try {
-      const response = await invoke<BrokerResponse>("extension_broker_request", {
-        sessionToken: this.#requireHandshake().sessionToken,
-        request,
-      });
+      const response = decodeBrokerResponse(
+        await invoke<unknown>("extension_broker_request", {
+          sessionToken: this.#requireHandshake().sessionToken,
+          request,
+        }),
+      );
       runtime.respondToBroker(
         response.requestId,
         response.result === null ? undefined : response.result,
@@ -533,10 +477,13 @@ export class ExtensionHostSupervisor {
   }
 
   async #emit(event: HostEvent): Promise<void> {
-    await invoke("extension_host_event", {
-      sessionToken: this.#requireHandshake().sessionToken,
-      event,
-    });
+    voidValue(
+      await invoke<unknown>("extension_host_event", {
+        sessionToken: this.#requireHandshake().sessionToken,
+        event,
+      }),
+      "extension_host_event response",
+    );
   }
 
   #requireHandshake(): HostHandshake {
@@ -547,430 +494,7 @@ export class ExtensionHostSupervisor {
   }
 }
 
-class ManagedWorker {
-  readonly extensionId: string;
-  readonly generation: number;
-  readonly bundleSha256: string;
-  readonly #bundleUrl: string;
-  readonly #worker: Worker;
-  readonly #ready = new Deferred<void>();
-  readonly #pending = new Map<string, PendingReply>();
-  readonly #onBrokerMessage: BrokerMessageHandler;
-  readonly #onFault: WorkerFaultHandler;
-  #terminated = false;
-  #failed = false;
-  active = false;
-
-  constructor(
-    extensionId: string,
-    generation: number,
-    bundleSha256: string,
-    bundleUrl: string,
-    onBrokerMessage: BrokerMessageHandler,
-    onFault: WorkerFaultHandler,
-  ) {
-    this.extensionId = extensionId;
-    this.generation = generation;
-    this.bundleSha256 = bundleSha256;
-    this.#bundleUrl = bundleUrl;
-    this.#onBrokerMessage = onBrokerMessage;
-    this.#onFault = onFault;
-    this.#worker = new Worker(new URL("./worker-entry.ts", import.meta.url), {
-      type: "module",
-      name: `sideral:${extensionId}`,
-    });
-    this.#worker.addEventListener("message", (event: MessageEvent<unknown>) => {
-      try {
-        this.#acceptWorkerMessage(event.data);
-      } catch (error: unknown) {
-        this.#fail(toFailure(error, "extension_worker_protocol"));
-      }
-    });
-    this.#worker.addEventListener("error", (event) => {
-      event.preventDefault();
-      this.#fail({
-        code: "extension_worker_error",
-        message: event.message || `Extension worker ${extensionId} failed.`,
-      });
-    });
-    this.#worker.addEventListener("messageerror", () => {
-      this.#fail({
-        code: "extension_worker_message_error",
-        message: `Extension worker ${extensionId} sent an invalid message.`,
-      });
-    });
-  }
-
-  async initialize(message: Extract<HostToWorkerMessage, { readonly kind: "initialize" }>) {
-    this.#post(message);
-    await this.#ready.promise;
-  }
-
-  async activate(
-    requestId: string,
-    reason: Extract<HostToWorkerMessage, { kind: "activate" }>["reason"],
-  ) {
-    const reply = this.#request("activated", requestId, {
-      kind: "activate",
-      protocolVersion: PROTOCOL_VERSION,
-      generation: this.generation,
-      requestId,
-      reason,
-    });
-    await reply;
-    this.active = true;
-  }
-
-  execute(
-    requestId: string,
-    commandId: string,
-    arguments_: readonly JsonValue[],
-    activeTextDocument: import("@sideral/extension-sdk").TextDocument | undefined,
-  ) {
-    return this.#request("commandResult", requestId, {
-      kind: "executeCommand",
-      protocolVersion: PROTOCOL_VERSION,
-      generation: this.generation,
-      requestId,
-      commandId,
-      arguments: arguments_,
-      ...(activeTextDocument === undefined ? {} : { activeTextDocument }),
-    }) as Promise<Extract<WorkerReply, { kind: "commandResult" }>>;
-  }
-
-  async deactivate(
-    requestId: string,
-    reason: "applicationShutdown" | "disabled" | "reload",
-    graceMilliseconds: number,
-  ): Promise<void> {
-    if (this.#terminated) {
-      return;
-    }
-    const operation = this.#request("deactivated", requestId, {
-      kind: "deactivate",
-      protocolVersion: PROTOCOL_VERSION,
-      generation: this.generation,
-      requestId,
-      reason,
-    });
-    await withDeadline(
-      operation,
-      graceMilliseconds,
-      "extension_deactivation_deadline",
-      `Extension ${this.extensionId} did not deactivate in time.`,
-    );
-  }
-
-  cancel(requestId: string): void {
-    if (!this.#terminated) {
-      this.#post({
-        kind: "cancel",
-        protocolVersion: PROTOCOL_VERSION,
-        generation: this.generation,
-        requestId,
-      });
-    }
-  }
-
-  respondToBroker(
-    requestId: string,
-    result: JsonValue | undefined,
-    error: ProtocolFailure | undefined,
-  ): void {
-    if (this.#terminated) {
-      return;
-    }
-    this.#post({
-      kind: "brokerResponse",
-      protocolVersion: PROTOCOL_VERSION,
-      generation: this.generation,
-      requestId,
-      ...(result === undefined ? {} : { result }),
-      ...(error === undefined ? {} : { error }),
-    });
-  }
-
-  terminate(): void {
-    if (this.#terminated) {
-      return;
-    }
-    this.#terminated = true;
-    this.#worker.terminate();
-    URL.revokeObjectURL(this.#bundleUrl);
-    const error = new Error(`Extension worker ${this.extensionId} was terminated.`);
-    this.#ready.reject(error);
-    for (const pending of this.#pending.values()) {
-      pending.reject(error);
-    }
-    this.#pending.clear();
-  }
-
-  #request(kind: PendingReply["kind"], requestId: string, message: HostToWorkerMessage) {
-    if (this.#pending.has(requestId)) {
-      return Promise.reject(new Error(`Duplicate worker request ${requestId}.`));
-    }
-    const promise = new Promise<WorkerReply>((resolve, reject) => {
-      this.#pending.set(requestId, { kind, resolve, reject });
-    });
-    this.#post(message);
-    return promise;
-  }
-
-  #acceptWorkerMessage(value: unknown): void {
-    const message = parseWorkerMessage(value);
-    if (message.protocolVersion !== PROTOCOL_VERSION || message.generation !== this.generation) {
-      return;
-    }
-    switch (message.kind) {
-      case "ready":
-        this.#ready.resolve(undefined);
-        return;
-      case "activated":
-      case "commandResult":
-      case "deactivated": {
-        const pending = this.#pending.get(message.requestId);
-        if (pending === undefined || pending.kind !== message.kind) {
-          this.#fail({
-            code: "extension_worker_protocol",
-            message: `Unexpected ${message.kind} response for ${message.requestId}.`,
-          });
-          return;
-        }
-        this.#pending.delete(message.requestId);
-        pending.resolve(message);
-        return;
-      }
-      case "brokerRequest":
-      case "cancelBrokerRequest":
-        void this.#onBrokerMessage(message).catch((error: unknown) => {
-          this.#fail(toFailure(error, "extension_broker_transport"));
-        });
-        return;
-      case "fault":
-        this.#fail(message.error);
-        return;
-    }
-  }
-
-  #fail(failure: ProtocolFailure): void {
-    if (this.#failed || this.#terminated) {
-      return;
-    }
-    this.#failed = true;
-    const error = new HostFailure(failure.code, failure.message);
-    this.#ready.reject(error);
-    for (const pending of this.#pending.values()) {
-      pending.reject(error);
-    }
-    this.#pending.clear();
-    void this.#onFault(failure).catch(() => undefined);
-  }
-
-  #post(message: HostToWorkerMessage): void {
-    if (this.#terminated) {
-      throw new Error(`Extension worker ${this.extensionId} is terminated.`);
-    }
-    this.#worker.postMessage(message);
-  }
-}
-
-class Deferred<T> {
-  readonly promise: Promise<T>;
-  #resolve!: (value: T) => void;
-  #reject!: (error: Error) => void;
-  #settled = false;
-
-  constructor() {
-    this.promise = new Promise<T>((resolve, reject) => {
-      this.#resolve = resolve;
-      this.#reject = reject;
-    });
-  }
-
-  resolve(value: T): void {
-    if (!this.#settled) {
-      this.#settled = true;
-      this.#resolve(value);
-    }
-  }
-
-  reject(error: Error): void {
-    if (!this.#settled) {
-      this.#settled = true;
-      this.#reject(error);
-    }
-  }
-}
-
-class HostFailure extends Error {
-  readonly code: string;
-
-  constructor(code: string, message: string) {
-    super(message);
-    this.name = "HostFailure";
-    this.code = code;
-  }
-}
-
-function parseWorkerMessage(value: unknown): WorkerToHostMessage {
-  if (
-    !isRecord(value) ||
-    typeof value.kind !== "string" ||
-    typeof value.protocolVersion !== "number" ||
-    !Number.isSafeInteger(value.protocolVersion) ||
-    typeof value.generation !== "number" ||
-    !Number.isSafeInteger(value.generation) ||
-    value.generation < 0
-  ) {
-    throw new Error("The extension worker sent an invalid message.");
-  }
-  switch (value.kind) {
-    case "ready":
-      break;
-    case "activated":
-    case "cancelBrokerRequest":
-      assertRequestId(value.requestId);
-      break;
-    case "commandResult":
-    case "deactivated":
-      assertRequestId(value.requestId);
-      assertOptionalFailure(value.error);
-      if (value.result !== undefined) {
-        assertJsonTransport(value.result, "worker command result", MAX_COMMAND_RESULT_BYTES);
-      }
-      if (value.error !== undefined && value.result !== undefined) {
-        throw new Error("A worker response cannot contain both a result and an error.");
-      }
-      break;
-    case "brokerRequest":
-      assertRequestId(value.requestId);
-      if (typeof value.method !== "string" || !BROKER_METHODS.has(value.method)) {
-        throw new Error("The extension worker requested an unknown broker method.");
-      }
-      if (!isRecord(value.payload)) {
-        throw new Error("The extension worker sent an invalid broker payload.");
-      }
-      assertJsonTransport(value.payload, "worker broker payload", MAX_BROKER_PAYLOAD_BYTES);
-      break;
-    case "fault":
-      assertFailure(value.error);
-      break;
-    default:
-      throw new Error(`The extension worker sent an unknown message kind: ${value.kind}.`);
-  }
-  return value as WorkerToHostMessage;
-}
-
-function assertRequestId(value: unknown): asserts value is string {
-  if (
-    typeof value !== "string" ||
-    value.length === 0 ||
-    value.length > 128 ||
-    !/^[a-zA-Z0-9_.:-]+$/u.test(value)
-  ) {
-    throw new Error("The extension worker sent an invalid request id.");
-  }
-}
-
-function assertOptionalFailure(value: unknown): void {
-  if (value !== undefined) {
-    assertFailure(value);
-  }
-}
-
-function assertFailure(value: unknown): void {
-  if (
-    !isRecord(value) ||
-    typeof value.code !== "string" ||
-    value.code.length === 0 ||
-    value.code.length > 128 ||
-    typeof value.message !== "string" ||
-    value.message.length === 0 ||
-    new TextEncoder().encode(value.message).byteLength > MAX_PROTOCOL_TEXT_BYTES
-  ) {
-    throw new Error("The extension worker sent an invalid failure description.");
-  }
-}
-
-function assertJsonTransport(value: unknown, label: string, maximumBytes: number): void {
-  let serialized: string | undefined;
-  try {
-    serialized = JSON.stringify(value);
-  } catch (error: unknown) {
-    throw new Error(`${label} is not JSON: ${error instanceof Error ? error.message : "unknown"}`);
-  }
-  if (serialized === undefined || new TextEncoder().encode(serialized).byteLength > maximumBytes) {
-    throw new Error(`${label} exceeds its transport boundary.`);
-  }
-}
-
-function isRecord(value: unknown): value is WorkerBoundaryRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function withDeadline<T>(
-  operation: Promise<T>,
-  milliseconds: number,
-  code: string,
-  message: string,
-  onDeadline?: () => void,
-): Promise<T> {
-  if (!Number.isSafeInteger(milliseconds) || milliseconds <= 0) {
-    return Promise.reject(
-      new HostFailure("invalid_extension_deadline", "Invalid native deadline."),
-    );
-  }
-  return new Promise<T>((resolve, reject) => {
-    const timer = globalThis.setTimeout(() => {
-      onDeadline?.();
-      reject(new HostFailure(code, message));
-    }, milliseconds);
-    void operation.then(
-      (value) => {
-        globalThis.clearTimeout(timer);
-        resolve(value);
-      },
-      (error: unknown) => {
-        globalThis.clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
-}
-
-function throwIfAborted(signal: AbortSignal): void {
-  if (signal.aborted) {
-    throw new HostFailure("extension_runtime_cancelled", "Extension startup was cancelled.");
-  }
-}
-
-function toFailure(error: unknown, fallbackCode: string): ProtocolFailure {
-  if (error instanceof HostFailure) {
-    return { code: error.code, message: error.message };
-  }
-  if (isCommandError(error)) {
-    return { code: error.code, message: error.message };
-  }
-  if (error instanceof Error) {
-    return { code: fallbackCode, message: error.message || "Extension host operation failed." };
-  }
-  return { code: fallbackCode, message: "Extension host operation failed." };
-}
-
-function isCommandError(
-  value: unknown,
-): value is { readonly code: string; readonly message: string } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "code" in value &&
-    typeof value.code === "string" &&
-    "message" in value &&
-    typeof value.message === "string"
-  );
 }

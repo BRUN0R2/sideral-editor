@@ -68,7 +68,9 @@ export function UpdateProvider({
       const resource = updateResource.current;
       updateResource.current = null;
       if (resource !== null) {
-        void resource.close();
+        void resource.close().catch((error: unknown) => {
+          console.error("The update resource failed to close.", error);
+        });
       }
     };
   }, []);

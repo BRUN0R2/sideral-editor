@@ -82,14 +82,6 @@ historico.
 * TypeScript estrito no frontend.
 * Vite como empacotador frontend.
 * Windows e o alvo operacional inicial.
-* O `NativeEngine` deste projeto e o dono da composicao do agente.
-* OAuth ChatGPT, provider, ferramentas, configuracao e persistencia pertencem ao
-  backend Rust nativo deste projeto.
-* O Codex CLI aberto pode ser consultado somente como referencia de protocolo;
-  nunca pode ser dependencia de build, runtime, armazenamento ou configuracao.
-* Credenciais pertencem ao diretorio e ao cofre privados deste aplicativo;
-  nunca devem ser importadas da CLI, copiadas, expostas ou reinterpretadas pela
-  interface.
 * Nao criar adaptadores, aliases, migracoes ou caminhos de retrocompatibilidade.
 
 Qualquer tecnologia nova deve ter motivo claro, escopo isolado e custo de

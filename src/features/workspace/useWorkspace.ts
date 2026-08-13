@@ -21,6 +21,14 @@ import {
   type WorkspaceNode,
   type WorkspaceRoot,
 } from "./types";
+import {
+  findWorkspaceNode,
+  insertWorkspaceFile,
+  toWorkspaceNodes,
+  updateWorkspaceNode,
+  workspaceFileName,
+  workspacePathKey,
+} from "./workspace-tree";
 
 const INITIAL_CURSOR: CursorPosition = { line: 1, column: 1 };
 
@@ -122,7 +130,7 @@ export function useWorkspace(autoSave: AutoSaveMode) {
 
     const payload = await createTextFile(root.path, name);
     const document: EditorDocument = {
-      id: `file:${pathKey(payload.path)}`,
+      id: `file:${workspacePathKey(payload.path)}`,
       path: payload.path,
       name: payload.name,
       content: payload.content,
@@ -137,7 +145,7 @@ export function useWorkspace(autoSave: AutoSaveMode) {
     setActiveDocumentId(document.id);
     setCursor(INITIAL_CURSOR);
 
-    if (pathKey(workspaceRootRef.current?.path ?? "") === pathKey(root.path)) {
+    if (workspacePathKey(workspaceRootRef.current?.path ?? "") === workspacePathKey(root.path)) {
       setEntries((current) => insertWorkspaceFile(current, payload.path, payload.name));
     }
   }, []);
@@ -159,9 +167,9 @@ export function useWorkspace(autoSave: AutoSaveMode) {
           return;
         }
 
-        const key = pathKey(selectedPath);
+        const key = workspacePathKey(selectedPath);
         const existing = documentsRef.current.find(
-          (document) => document.path !== null && pathKey(document.path) === key,
+          (document) => document.path !== null && workspacePathKey(document.path) === key,
         );
         if (existing !== undefined) {
           setActiveDocumentId(existing.id);
@@ -175,7 +183,7 @@ export function useWorkspace(autoSave: AutoSaveMode) {
         const request = readTextFile(selectedPath)
           .then((payload) => {
             const document: EditorDocument = {
-              id: `file:${pathKey(payload.path)}`,
+              id: `file:${workspacePathKey(payload.path)}`,
               path: payload.path,
               name: payload.name,
               content: payload.content,
@@ -244,13 +252,16 @@ export function useWorkspace(autoSave: AutoSaveMode) {
 
   const toggleDirectory = useCallback(
     async (path: string) => {
-      const node = findNode(entries, path);
+      const node = findWorkspaceNode(entries, path);
       if (node === undefined || node.kind !== "directory") {
         return;
       }
       if (node.children !== null) {
         setEntries((current) =>
-          updateNode(current, path, (item) => ({ ...item, expanded: !item.expanded })),
+          updateWorkspaceNode(current, path, (item) => ({
+            ...item,
+            expanded: !item.expanded,
+          })),
         );
         return;
       }
@@ -259,12 +270,16 @@ export function useWorkspace(autoSave: AutoSaveMode) {
       }
 
       setEntries((current) =>
-        updateNode(current, path, (item) => ({ ...item, expanded: true, loading: true })),
+        updateWorkspaceNode(current, path, (item) => ({
+          ...item,
+          expanded: true,
+          loading: true,
+        })),
       );
       try {
         const children = await loadDirectory(path, directoryRequests.current);
         setEntries((current) =>
-          updateNode(current, path, (item) => ({
+          updateWorkspaceNode(current, path, (item) => ({
             ...item,
             expanded: true,
             loading: false,
@@ -273,7 +288,11 @@ export function useWorkspace(autoSave: AutoSaveMode) {
         );
       } catch (caught) {
         setEntries((current) =>
-          updateNode(current, path, (item) => ({ ...item, loading: false, expanded: false })),
+          updateWorkspaceNode(current, path, (item) => ({
+            ...item,
+            loading: false,
+            expanded: false,
+          })),
         );
         reportError(caught);
       }
@@ -332,7 +351,7 @@ export function useWorkspace(autoSave: AutoSaveMode) {
                 ? {
                     ...item,
                     path: result.path,
-                    name: fileName(result.path),
+                    name: workspaceFileName(result.path),
                     savedContent: contentSnapshot,
                     languageId: languageForFile(result.path),
                   }
@@ -470,7 +489,7 @@ function applyWorkspaceSnapshot(
   setWorkspaceRoot: React.Dispatch<React.SetStateAction<WorkspaceRoot | null>>,
   setEntries: React.Dispatch<React.SetStateAction<readonly WorkspaceNode[]>>,
 ): void {
-  setWorkspaceRoot({ path: snapshot.root, name: fileName(snapshot.root) });
+  setWorkspaceRoot({ path: snapshot.root, name: workspaceFileName(snapshot.root) });
   setEntries(toWorkspaceNodes(snapshot.entries));
 }
 
@@ -487,94 +506,6 @@ async function loadDirectory(
   });
   requests.set(path, request);
   return request;
-}
-
-function toWorkspaceNodes(entries: readonly DirectoryEntry[]): readonly WorkspaceNode[] {
-  return entries.map((entry) => ({
-    ...entry,
-    expanded: false,
-    loading: false,
-    children: null,
-  }));
-}
-
-function insertWorkspaceFile(
-  nodes: readonly WorkspaceNode[],
-  path: string,
-  name: string,
-): readonly WorkspaceNode[] {
-  if (nodes.some((node) => pathKey(node.path) === pathKey(path))) {
-    return nodes;
-  }
-
-  return [
-    ...nodes,
-    {
-      path,
-      name,
-      kind: "file" as const,
-      expanded: false,
-      loading: false,
-      children: null,
-    },
-  ].sort(compareWorkspaceNodes);
-}
-
-function compareWorkspaceNodes(left: WorkspaceNode, right: WorkspaceNode): number {
-  const rankDifference = workspaceNodeRank(left) - workspaceNodeRank(right);
-  if (rankDifference !== 0) {
-    return rankDifference;
-  }
-
-  const foldedDifference = compareText(left.name.toLowerCase(), right.name.toLowerCase());
-  return foldedDifference !== 0 ? foldedDifference : compareText(left.name, right.name);
-}
-
-function workspaceNodeRank(node: WorkspaceNode): number {
-  switch (node.kind) {
-    case "directory":
-      return 0;
-    case "file":
-      return 1;
-    case "symbolicLink":
-      return 2;
-  }
-}
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : Number(left > right);
-}
-
-function findNode(nodes: readonly WorkspaceNode[], path: string): WorkspaceNode | undefined {
-  for (const node of nodes) {
-    if (node.path === path) {
-      return node;
-    }
-    if (node.children !== null) {
-      const child = findNode(node.children, path);
-      if (child !== undefined) {
-        return child;
-      }
-    }
-  }
-  return undefined;
-}
-
-function updateNode(
-  nodes: readonly WorkspaceNode[],
-  path: string,
-  update: (node: WorkspaceNode) => WorkspaceNode,
-): readonly WorkspaceNode[] {
-  return nodes.map((node) => {
-    if (node.path === path) {
-      return update(node);
-    }
-    if (node.children === null) {
-      return node;
-    }
-    const children = updateNode(node.children, path, update);
-    return children === node.children ? node : { ...node, children };
-  });
 }
 
 function closeDocument(
@@ -596,12 +527,4 @@ function closeDocument(
     });
     return next;
   });
-}
-
-function pathKey(path: string): string {
-  return path.replaceAll("/", "\\").toLowerCase();
-}
-
-function fileName(path: string): string {
-  return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
 }

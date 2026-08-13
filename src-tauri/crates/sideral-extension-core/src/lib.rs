@@ -15,5 +15,6 @@ pub use manifest::{
 };
 pub use package::{BundleSizeAssessment, assess_worker_bundle_size, validate_package_size};
 pub use permissions::{
-    NetworkMethod, NetworkPermission, PermissionSet, ProcessPermission, WorkspaceAccess,
+    NetworkMethod, NetworkPermission, PermissionSet, ProcessPermission, ProcessWorkingDirectory,
+    WorkspaceAccess,
 };

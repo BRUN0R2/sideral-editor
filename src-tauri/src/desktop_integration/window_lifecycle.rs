@@ -1,4 +1,4 @@
-use tauri::{Manager, WebviewWindow, Window, WindowEvent};
+use tauri::{AppHandle, Manager, WebviewWindow, Window, WindowEvent};
 
 use crate::{
     desktop_integration::{DesktopPreferencesState, startup},
@@ -44,20 +44,30 @@ pub fn handle_main_window_event(window: &Window, event: &WindowEvent) {
             api.prevent_close();
             if let Err(error) = window.hide() {
                 eprintln!("Main window could not move to tray: {error}");
-                crate::sideral_extensions::request_shutdown(window.app_handle());
                 window.app_handle().exit(1);
             }
         }
         Ok(_) => {
-            crate::sideral_extensions::request_shutdown(window.app_handle());
             window.app_handle().exit(0);
         }
         Err(error) => {
             eprintln!("Main window close policy is unavailable: {error}");
-            crate::sideral_extensions::request_shutdown(window.app_handle());
             window.app_handle().exit(1);
         }
     }
+}
+
+pub(crate) fn request_runtime_shutdown(app: &AppHandle) -> bool {
+    let mut clean = true;
+    if let Err(error) = crate::integrated_terminal::request_shutdown(app) {
+        eprintln!("Integrated terminal shutdown request failed: {error}");
+        clean = false;
+    }
+    if let Err(error) = crate::sideral_extensions::request_shutdown(app) {
+        eprintln!("Extension host shutdown request failed: {error}");
+        clean = false;
+    }
+    clean
 }
 
 fn runtime_error(error: tauri::Error) -> AppError {

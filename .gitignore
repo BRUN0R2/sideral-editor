@@ -11,6 +11,7 @@ src-tauri/target/
 .env
 .env.*
 !.env.example
+src-tauri/tauri.release.conf.json
 
 # Editors and operating systems
 .idea/

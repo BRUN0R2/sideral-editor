@@ -1,5 +1,8 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { voidValue } from "../../../lib/runtime-validation";
+import { decodeHostHandshake } from "../contract-validation";
 import type { HostHandshake, HostInstruction } from "../contracts";
+import { decodeHostInstruction } from "./protocol-validation";
 import { ExtensionHostSupervisor } from "./supervisor";
 
 export interface ExtensionHostConnection {
@@ -8,11 +11,24 @@ export interface ExtensionHostConnection {
 
 export async function connectExtensionHost(): Promise<ExtensionHostConnection> {
   const supervisor = new ExtensionHostSupervisor();
-  const channel = new Channel<HostInstruction>();
+  const channel = new Channel<unknown>();
   const pendingInstructions: HostInstruction[] = [];
   let connected = false;
+  let boundaryFailure: unknown | null = null;
 
-  channel.onmessage = (instruction) => {
+  channel.onmessage = (value) => {
+    let instruction: HostInstruction;
+    try {
+      instruction = decodeHostInstruction(value);
+    } catch (error: unknown) {
+      if (connected) {
+        void supervisor.reportFatal(error);
+      } else {
+        boundaryFailure ??= error;
+        pendingInstructions.length = 0;
+      }
+      return;
+    }
     if (connected) {
       supervisor.accept(instruction);
     } else {
@@ -20,14 +36,19 @@ export async function connectExtensionHost(): Promise<ExtensionHostConnection> {
     }
   };
 
-  const handshake = await invoke<HostHandshake>("connect_extension_host", { channel });
+  const handshake = decodeHostHandshake(
+    await invoke<unknown>("connect_extension_host", { channel }),
+  );
   try {
+    if (boundaryFailure !== null) {
+      throw boundaryFailure;
+    }
     supervisor.connect(handshake);
   } catch (connectionError: unknown) {
     channel.onmessage = () => undefined;
     pendingInstructions.length = 0;
     try {
-      await invoke("disconnect_extension_host", { sessionId: handshake.sessionId });
+      await invokeVoid("disconnect_extension_host", { sessionId: handshake.sessionId });
     } catch (cleanupError: unknown) {
       throw new AggregateError(
         [connectionError, cleanupError],
@@ -53,7 +74,7 @@ export async function connectExtensionHost(): Promise<ExtensionHostConnection> {
 
 async function disposeConnection(
   supervisor: ExtensionHostSupervisor,
-  channel: Channel<HostInstruction>,
+  channel: Channel<unknown>,
   handshake: HostHandshake,
   pendingInstructions: HostInstruction[],
 ): Promise<void> {
@@ -62,6 +83,10 @@ async function disposeConnection(
   try {
     await supervisor.dispose(handshake.shutdownGraceMilliseconds);
   } finally {
-    await invoke("disconnect_extension_host", { sessionId: handshake.sessionId });
+    await invokeVoid("disconnect_extension_host", { sessionId: handshake.sessionId });
   }
+}
+
+async function invokeVoid(command: string, arguments_: Record<string, unknown>): Promise<void> {
+  voidValue(await invoke<unknown>(command, arguments_), `${command} response`);
 }

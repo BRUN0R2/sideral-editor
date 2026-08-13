@@ -1,0 +1,1 @@
+export const EXTENSION_PROTOCOL_VERSION: 1 = 1;

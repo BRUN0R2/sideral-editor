@@ -1,0 +1,52 @@
+/*
+ * Monaco has no public thumb-radius or arrow-glyph styling options. Keep this
+ * version-pinned cosmetic adapter isolated here; geometry and arrow presence
+ * still use Monaco's public API.
+ */
+.editor-pane .monaco-scrollable-element > .scrollbar > .slider {
+  border-radius: var(--sideral-scrollbar-corner-radius);
+  transition: background-color var(--sideral-scrollbar-transition-duration) ease;
+}
+
+.editor-pane .monaco-scrollable-element > .scrollbar.vertical > .arrow-background {
+  color: var(--sideral-scrollbar-arrow-color);
+  background-color: transparent;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: var(--sideral-scrollbar-arrow-size) var(--sideral-scrollbar-arrow-height);
+  transition: color var(--sideral-scrollbar-transition-duration) ease;
+}
+
+.editor-pane .monaco-scrollable-element > .scrollbar.vertical > .arrow-background:first-child {
+  background-image: var(--sideral-scrollbar-arrow-up-shape);
+}
+
+.editor-pane .monaco-scrollable-element > .scrollbar.vertical > .arrow-background:nth-child(3) {
+  background-image: var(--sideral-scrollbar-arrow-down-shape);
+}
+
+.editor-pane .monaco-scrollable-element > .scrollbar.vertical > .arrow-background:hover {
+  color: var(--sideral-scrollbar-arrow-hover-color);
+}
+
+.editor-pane .monaco-scrollable-element > .scrollbar.vertical > .arrow-background:active {
+  color: var(--sideral-scrollbar-arrow-active-color);
+}
+
+.editor-pane .monaco-scrollable-element > .scrollbar.vertical > .scra {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (forced-colors: active) {
+  .editor-pane .monaco-scrollable-element > .scrollbar.vertical > .arrow-background {
+    color: ButtonText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-pane .monaco-scrollable-element > .scrollbar > .slider,
+  .editor-pane .monaco-scrollable-element > .scrollbar.vertical > .arrow-background {
+    transition-duration: 0.01ms;
+  }
+}

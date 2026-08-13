@@ -41,7 +41,7 @@ export function ExtensionCommandPalette({
       return;
     }
     onClose();
-    void system.executeCommand(command.id).catch(() => undefined);
+    void system.executeCommand(command.id).catch(system.reportError);
   };
 
   return (

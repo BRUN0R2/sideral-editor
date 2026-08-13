@@ -15,11 +15,7 @@ pub fn is_minimized_launch() -> bool {
 
 pub fn synchronize(app: &AppHandle, enabled: bool) -> AppResult<()> {
     let manager = app.autolaunch();
-    let is_enabled = manager.is_enabled().map_err(|error| {
-        AppError::Runtime(format!(
-            "could not inspect Windows startup registration: {error}"
-        ))
-    })?;
+    let is_enabled = registration_enabled(app)?;
 
     if enabled == is_enabled {
         return Ok(());
@@ -34,4 +30,12 @@ pub fn synchronize(app: &AppHandle, enabled: bool) -> AppResult<()> {
             AppError::Runtime(format!("could not disable Windows startup: {error}"))
         })
     }
+}
+
+pub fn registration_enabled(app: &AppHandle) -> AppResult<bool> {
+    app.autolaunch().is_enabled().map_err(|error| {
+        AppError::Runtime(format!(
+            "could not inspect Windows startup registration: {error}"
+        ))
+    })
 }

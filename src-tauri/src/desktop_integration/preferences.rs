@@ -2,7 +2,7 @@ use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{Mutex, MutexGuard},
 };
 
 use serde::{Deserialize, Serialize};
@@ -33,7 +33,6 @@ pub struct DesktopPreferences {
     pub start_with_windows: bool,
     pub start_minimized: bool,
     pub close_to_tray: bool,
-    #[serde(default)]
     pub auto_save: AutoSaveMode,
 }
 
@@ -89,13 +88,10 @@ impl DesktopPreferencesState {
             .map_err(|_| AppError::Runtime("desktop preferences are unavailable".to_owned()))
     }
 
-    fn replace(&self, preferences: DesktopPreferences) -> AppResult<()> {
-        let mut current = self
-            .preferences
+    fn lock(&self) -> AppResult<MutexGuard<'_, DesktopPreferences>> {
+        self.preferences
             .lock()
-            .map_err(|_| AppError::Runtime("desktop preferences are unavailable".to_owned()))?;
-        *current = preferences;
-        Ok(())
+            .map_err(|_| AppError::Runtime("desktop preferences are unavailable".to_owned()))
     }
 }
 
@@ -106,9 +102,23 @@ pub fn save_desktop_preferences(
     preferences: DesktopPreferences,
 ) -> CommandResult<DesktopPreferences> {
     let preferences = preferences.validate()?;
+    let path = desktop_preferences_path(&app)?;
+    let mut current = state.lock()?;
+    let prepared_write = PreparedPreferencesWrite::prepare(path, &preferences)?;
+    let previous_startup_registration = startup::registration_enabled(&app)?;
+
     startup::synchronize(&app, preferences.start_with_windows)?;
-    write(&desktop_preferences_path(&app)?, &preferences)?;
-    state.replace(preferences)?;
+    if let Err(persist_error) = prepared_write.commit() {
+        if let Err(rollback_error) = startup::synchronize(&app, previous_startup_registration) {
+            return Err(AppError::Runtime(format!(
+                "could not persist desktop preferences ({persist_error}); Windows startup rollback also failed ({rollback_error})"
+            ))
+            .into());
+        }
+        return Err(persist_error.into());
+    }
+
+    *current = preferences;
     Ok(preferences)
 }
 
@@ -136,54 +146,65 @@ fn read(path: &Path) -> AppResult<DesktopPreferences> {
         .validate()
 }
 
-fn write(path: &Path, preferences: &DesktopPreferences) -> AppResult<()> {
-    let parent = path.parent().ok_or_else(|| {
-        AppError::InvalidPath(format!("{} has no parent directory", path.display()))
-    })?;
-    fs::create_dir_all(parent).map_err(|error| {
-        AppError::io(
-            format!(
-                "could not create desktop preferences directory {}",
-                parent.display()
-            ),
-            error,
-        )
-    })?;
+struct PreparedPreferencesWrite {
+    target: PathBuf,
+    temporary: NamedTempFile,
+}
 
-    let serialized = serde_json::to_vec_pretty(preferences).map_err(|error| {
-        AppError::InvalidSettings(format!("could not serialize desktop preferences: {error}"))
-    })?;
-    if serialized.len() as u64 > MAX_DESKTOP_PREFERENCES_BYTES {
-        return Err(AppError::InvalidSettings(
-            "desktop preferences exceed the 16 KiB safety limit".to_owned(),
-        ));
+impl PreparedPreferencesWrite {
+    fn prepare(target: PathBuf, preferences: &DesktopPreferences) -> AppResult<Self> {
+        let parent = target.parent().ok_or_else(|| {
+            AppError::InvalidPath(format!("{} has no parent directory", target.display()))
+        })?;
+        fs::create_dir_all(parent).map_err(|error| {
+            AppError::io(
+                format!(
+                    "could not create desktop preferences directory {}",
+                    parent.display()
+                ),
+                error,
+            )
+        })?;
+
+        let serialized = serde_json::to_vec_pretty(preferences).map_err(|error| {
+            AppError::InvalidSettings(format!("could not serialize desktop preferences: {error}"))
+        })?;
+        if serialized.len() as u64 > MAX_DESKTOP_PREFERENCES_BYTES {
+            return Err(AppError::InvalidSettings(
+                "desktop preferences exceed the 16 KiB safety limit".to_owned(),
+            ));
+        }
+
+        let mut temporary = NamedTempFile::new_in(parent).map_err(|error| {
+            AppError::io(
+                format!(
+                    "could not create a temporary desktop preferences file in {}",
+                    parent.display()
+                ),
+                error,
+            )
+        })?;
+        temporary
+            .write_all(&serialized)
+            .and_then(|()| temporary.write_all(b"\n"))
+            .map_err(|error| AppError::io("could not write desktop preferences", error))?;
+        temporary
+            .as_file_mut()
+            .sync_all()
+            .map_err(|error| AppError::io("could not flush desktop preferences", error))?;
+
+        Ok(Self { target, temporary })
     }
 
-    let mut temporary = NamedTempFile::new_in(parent).map_err(|error| {
-        AppError::io(
-            format!(
-                "could not create a temporary desktop preferences file in {}",
-                parent.display()
-            ),
-            error,
-        )
-    })?;
-    temporary
-        .write_all(&serialized)
-        .and_then(|()| temporary.write_all(b"\n"))
-        .map_err(|error| AppError::io("could not write desktop preferences", error))?;
-    temporary
-        .as_file_mut()
-        .sync_all()
-        .map_err(|error| AppError::io("could not flush desktop preferences", error))?;
-    temporary.persist(path).map_err(|error| {
-        AppError::io(
-            format!("could not atomically replace {}", path.display()),
-            error.error,
-        )
-    })?;
-
-    Ok(())
+    fn commit(self) -> AppResult<()> {
+        self.temporary.persist(&self.target).map_err(|error| {
+            AppError::io(
+                format!("could not atomically replace {}", self.target.display()),
+                error.error,
+            )
+        })?;
+        Ok(())
+    }
 }
 
 fn desktop_preferences_path(app: &AppHandle) -> AppResult<PathBuf> {
@@ -225,7 +246,7 @@ mod tests {
     }
 
     #[test]
-    fn defaults_auto_save_to_off_when_omitted() {
+    fn rejects_desktop_preferences_without_auto_save() {
         let source = r#"{
             "schemaVersion": 1,
             "startWithWindows": false,
@@ -233,14 +254,6 @@ mod tests {
             "closeToTray": false
         }"#;
 
-        let preferences = serde_json::from_str::<DesktopPreferences>(source);
-
-        assert!(matches!(
-            preferences,
-            Ok(DesktopPreferences {
-                auto_save: AutoSaveMode::Off,
-                ..
-            })
-        ));
+        assert!(serde_json::from_str::<DesktopPreferences>(source).is_err());
     }
 }

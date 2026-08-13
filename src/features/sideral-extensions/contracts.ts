@@ -7,6 +7,7 @@ import type {
   JsonValue,
   NetworkPermission,
   PermissionSet,
+  PreviewAppearance,
   ProcessPermission,
   ProtocolFailure,
   TextDocument,
@@ -70,6 +71,7 @@ export interface RuntimeDiagnostic {
 
 export interface ExtensionCommandView extends CommandContribution {
   readonly extensionId: string;
+  readonly category: string | null;
   readonly invocation: CommandInvocation;
 }
 
@@ -261,6 +263,7 @@ export interface PreviewDocumentView {
   readonly format: "markdown";
   readonly content: string;
   readonly sourceUri: string | null;
+  readonly appearance: PreviewAppearance | null;
   readonly visible: boolean;
 }
 

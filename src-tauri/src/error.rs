@@ -26,10 +26,12 @@ pub enum AppError {
     InvalidSettings(String),
     #[error("invalid Sideral extension: {0}")]
     InvalidSideralExtension(String),
-    #[error("invalid legacy extension: {0}")]
-    InvalidLegacyExtension(String),
     #[error("JSON schema error: {0}")]
     JsonSchema(String),
+    #[error("integrated terminal error: {0}")]
+    Terminal(String),
+    #[error("terminal session not found: {0}")]
+    TerminalSessionNotFound(String),
     #[error("file exceeds the {limit_megabytes} MiB safety limit")]
     FileTooLarge { limit_megabytes: u64 },
     #[error("binary files are not supported")]
@@ -58,8 +60,9 @@ impl AppError {
             Self::InvalidLocale(_) => "invalid_locale",
             Self::InvalidSettings(_) => "invalid_settings",
             Self::InvalidSideralExtension(_) => "invalid_sideral_extension",
-            Self::InvalidLegacyExtension(_) => "invalid_legacy_extension",
             Self::JsonSchema(_) => "json_schema_error",
+            Self::Terminal(_) => "terminal_error",
+            Self::TerminalSessionNotFound(_) => "terminal_session_not_found",
             Self::FileTooLarge { .. } => "file_too_large",
             Self::BinaryFile => "binary_file",
             Self::InvalidUtf8 => "invalid_utf8",

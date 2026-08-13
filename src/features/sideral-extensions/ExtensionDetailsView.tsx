@@ -96,7 +96,7 @@ export function ExtensionDetailsView({
                             }),
                           });
                         })
-                        .catch(() => undefined);
+                        .catch(system.reportError);
                     }}
                   >
                     {t("action.run")} {command.category ? `${command.category}: ` : ""}
@@ -141,10 +141,7 @@ export function ExtensionDetailsView({
           onConfirm={() => {
             const candidateId = uninstallCandidate.id;
             setUninstallCandidate(null);
-            void system
-              .uninstall(candidateId)
-              .then(onUninstalled)
-              .catch(() => undefined);
+            void system.uninstall(candidateId).then(onUninstalled).catch(system.reportError);
           }}
         />
       )}
@@ -170,7 +167,7 @@ function ExtensionActions({
         className="button button--primary"
         disabled={busy}
         onClick={() =>
-          void system.setEnabled(extension.id, !extension.enabled).catch(() => undefined)
+          void system.setEnabled(extension.id, !extension.enabled).catch(system.reportError)
         }
       >
         {extension.enabled ? t("action.disable") : t("action.enable")}
@@ -179,7 +176,7 @@ function ExtensionActions({
         type="button"
         className="button"
         disabled={busy || !extension.enabled}
-        onClick={() => void system.restart(extension.id).catch(() => undefined)}
+        onClick={() => void system.restart(extension.id).catch(system.reportError)}
       >
         {t("action.restart")}
       </button>
@@ -188,7 +185,7 @@ function ExtensionActions({
           type="button"
           className="button"
           disabled={busy}
-          onClick={() => void system.rollback(extension.id).catch(() => undefined)}
+          onClick={() => void system.rollback(extension.id).catch(system.reportError)}
         >
           {t("action.rollback")} {extension.rollbackVersion}
         </button>

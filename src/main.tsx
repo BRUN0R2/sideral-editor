@@ -8,6 +8,7 @@ import { connectExtensionHost } from "./features/sideral-extensions/host/connect
 import { isDesktopRuntime } from "./lib/backend";
 import "@vscode/codicons/dist/codicon.css";
 import "./styles/base.css";
+import "./styles/scrollbars.css";
 import "./styles/workbench.css";
 import "./styles/settings.css";
 import "./styles/dialogs.css";

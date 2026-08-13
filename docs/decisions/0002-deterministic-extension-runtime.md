@@ -58,7 +58,8 @@ signed manifest and enforces payload, response, concurrency and storage limits.
 Workspace paths are canonical and contained, text writes use optimistic
 versions and atomic replacement, file search has deterministic traversal,
 network destinations are DNS-validated and pinned, and processes use fixed
-grants resolved outside the workspace.
+grants resolved outside the workspace with an explicit workspace or isolated
+extension-data working directory.
 
 A Web Worker is not an OS security sandbox. It protects the workbench from a
 crashed or blocked extension and removes direct native authority. Installation
@@ -83,4 +84,4 @@ retry.
 - Serial command execution favors predictable state over intra-extension
   throughput; independent extensions remain parallel.
 - Supporting another API version requires an explicit protocol negotiation and
-  compatibility decision rather than an implicit fallback.
+  versioned contract decision rather than an implicit fallback.

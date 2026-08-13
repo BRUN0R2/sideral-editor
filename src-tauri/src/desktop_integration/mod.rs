@@ -6,4 +6,5 @@ mod window_lifecycle;
 pub use preferences::{DesktopPreferences, DesktopPreferencesState};
 pub use startup::MINIMIZED_STARTUP_ARGUMENT;
 pub use tray::setup_tray_icon;
+pub(crate) use window_lifecycle::request_runtime_shutdown;
 pub use window_lifecycle::{apply_initial_window_state, handle_main_window_event};

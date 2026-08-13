@@ -6,29 +6,39 @@
   "workspaces": [
     "packages/sideral-extension-sdk",
     "packages/sideral-extension-testkit",
+    "examples/hello-sideral",
     "examples/markdown-preview"
   ],
-  "packageManager": "npm@11.17.0",
+  "packageManager": "npm@11.18.0",
   "engines": {
     "node": ">=22.12.0"
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && npm run sdk:build && vite build && node scripts/check-bundle-budgets.mjs",
+    "build": "npm run sdk:build && npm run typecheck && npm run extension:examples:check && npm run frontend:bundle",
+    "frontend:bundle": "vite build && node scripts/check-bundle-budgets.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "biome check .",
     "format": "biome check --write .",
-    "architecture": "node scripts/check-extension-boundaries.mjs",
+    "architecture": "node scripts/check-extension-boundaries.mjs && node scripts/check-scrollbar-contract.mjs",
     "sdk:build": "tsc --project packages/sideral-extension-sdk/tsconfig.json && tsc --project packages/sideral-extension-testkit/tsconfig.json",
     "extension:tool": "cargo run --quiet --manifest-path src-tauri/Cargo.toml -p sideral-extension-tool --",
+    "extension:hello:build": "npm run build --workspace sideral.hello",
+    "extension:hello:check": "npm run typecheck --workspace sideral.hello && npm run build --workspace sideral.hello",
     "extension:markdown:build": "npm run build --workspace sideral.markdown-preview",
     "extension:markdown:check": "npm run typecheck --workspace sideral.markdown-preview && npm run build --workspace sideral.markdown-preview",
+    "extension:examples:check": "npm run extension:hello:check && npm run extension:markdown:check",
     "rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
     "rust:check": "cargo check --manifest-path src-tauri/Cargo.toml --workspace",
     "rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings",
     "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml --workspace",
-    "check": "npm run architecture && npm run lint && npm run typecheck && npm run sdk:build && npm run extension:markdown:check && npm run test && npm run rust:fmt && npm run rust:clippy && npm run rust:test",
+    "security:npm": "npm audit --audit-level=high",
+    "security:rust": "node scripts/check-rust-advisories.mjs",
+    "security": "npm run security:npm && npm run security:rust",
+    "runtime:observe": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/observe-runtime-resources.ps1",
+    "release:config": "node scripts/create-release-config.mjs",
+    "check": "npm run architecture && npm run lint && npm run typecheck && npm run sdk:build && npm run extension:examples:check && npm run test && npm run rust:fmt && npm run rust:clippy && npm run rust:test && npm run frontend:bundle && npm run security",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -37,6 +47,8 @@
     "@tauri-apps/plugin-process": "2.3.1",
     "@tauri-apps/plugin-updater": "2.10.1",
     "@vscode/codicons": "0.0.46-24",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
     "jsonc-parser": "3.3.1",
     "marked": "18.0.9",
     "monaco-editor": "0.56.0",
@@ -44,7 +56,7 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.7",
+    "@biomejs/biome": "2.5.8",
     "@tauri-apps/cli": "2.11.4",
     "@types/node": "26.2.0",
     "@types/react": "19.2.18",
@@ -56,5 +68,8 @@
   },
   "overrides": {
     "dompurify": "3.4.13"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
   }
 }

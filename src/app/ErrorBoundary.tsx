@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { SideralLogo } from "../components/SideralLogo";
 
 interface ErrorBoundaryState {
   readonly error: Error | null;
@@ -19,7 +20,9 @@ export class ErrorBoundary extends Component<{ readonly children: ReactNode }, E
     if (this.state.error !== null) {
       return (
         <main className="startup-state" role="alert">
-          <div className="startup-mark">A</div>
+          <div className="startup-mark" aria-hidden="true">
+            <SideralLogo className="startup-mark__logo" />
+          </div>
           <h1>Sideral Editor encountered an interface error</h1>
           <p>{this.state.error.message}</p>
           <button type="button" className="primary-button" onClick={() => window.location.reload()}>

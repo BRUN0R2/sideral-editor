@@ -5,10 +5,11 @@
 mod desktop_integration;
 mod documents;
 mod error;
-mod extension_systems;
 mod external_links;
 mod i18n;
+mod integrated_terminal;
 mod json_schemas;
+mod network_security;
 mod settings;
 mod sideral_extensions;
 mod updater;
@@ -162,14 +163,11 @@ fn workspace_session_path(app: &AppHandle) -> error::AppResult<PathBuf> {
 async fn validate_sideral_extension_manifest(
     source: String,
 ) -> CommandResult<sideral_extension_core::ExtensionInspection> {
-    run_blocking(move || extension_systems::validate_sideral_manifest(&source)).await
-}
-
-#[tauri::command(rename_all = "camelCase")]
-async fn inspect_vscode_legacy_manifest(
-    source: String,
-) -> CommandResult<vscode_legacy_core::LegacyInspection> {
-    run_blocking(move || extension_systems::inspect_legacy_manifest(&source)).await
+    run_blocking(move || {
+        sideral_extension_core::validate_manifest_json(&source)
+            .map_err(|error| AppError::InvalidSideralExtension(error.to_string()))
+    })
+    .await
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -214,7 +212,7 @@ fn revoke_json_schema_trust(
         .map_err(CommandError::from)
 }
 
-async fn run_blocking<T, Operation>(operation: Operation) -> CommandResult<T>
+pub(crate) async fn run_blocking<T, Operation>(operation: Operation) -> CommandResult<T>
 where
     T: Send + 'static,
     Operation: FnOnce() -> Result<T, AppError> + Send + 'static,
@@ -258,6 +256,13 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
 
+            if !app.manage(integrated_terminal::IntegratedTerminalState::new()) {
+                return Err(AppError::Runtime(
+                    "integrated terminal state is already managed".to_owned(),
+                )
+                .into());
+            }
+
             let sideral_extensions = SideralExtensionState::load(app.handle())?;
             if !app.manage(sideral_extensions) {
                 return Err(AppError::Runtime(
@@ -287,11 +292,14 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             restore_workspace,
             open_workspace,
             validate_sideral_extension_manifest,
-            inspect_vscode_legacy_manifest,
             resolve_json_schema,
             json_schema_trust_settings,
             trust_json_schema_location,
             revoke_json_schema_trust,
+            integrated_terminal::commands::create_integrated_terminal,
+            integrated_terminal::commands::write_integrated_terminal,
+            integrated_terminal::commands::resize_integrated_terminal,
+            integrated_terminal::commands::close_integrated_terminal,
             sideral_extensions::initialize_extension_system,
             sideral_extensions::connect_extension_client,
             sideral_extensions::disconnect_extension_client,
@@ -317,7 +325,14 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             sideral_extensions::handle_window_event(window, event);
             desktop_integration::handle_main_window_event(window, event);
         })
-        .run(context)?;
+        .build(context)?
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::ExitRequested { .. })
+                && !desktop_integration::request_runtime_shutdown(app)
+            {
+                eprintln!("Runtime resources did not shut down cleanly before application exit.");
+            }
+        });
 
     Ok(())
 }

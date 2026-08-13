@@ -53,5 +53,36 @@ export const activate: ExtensionModule["activate"] = (context, api) => {
 };
 ```
 
+Preview panels inherit the host scrollbar theme by default. A panel can safely
+override it within its own surface without injecting CSS into the workbench:
+
+```ts
+appearance: {
+  scrollbar: {
+    trackSize: 16,
+    thumbSize: 10,
+    trackColor: "transparent",
+    thumbColor: "#8b5cf6",
+    thumbHoverColor: "#a78bfa",
+    thumbActiveColor: "#c4b5fd",
+    showButtons: true,
+    buttonSize: 18,
+    arrowSize: 10,
+    arrowHeight: 5,
+    arrowColor: "#ddd6fe",
+    arrowHoverColor: "#ede9fe",
+    arrowActiveColor: "#ffffff",
+    cornerRadius: 12
+  }
+}
+```
+
+Sizes are bounded integer pixels. `showButtons: false` removes the top and
+bottom arrow buttons for a deliberately minimal variant. `arrowSize` controls
+width, `arrowHeight` controls the vertical silhouette and `buttonSize` controls
+the click target and breathing room. Colors accept `transparent` or
+hexadecimal CSS colors, including alpha. The override is scoped to that preview
+panel.
+
 See `docs/EXTENSIONS.md` in the Sideral repository for the complete authoring,
 capability, packaging, testing and trust model.

@@ -18,11 +18,19 @@ pub enum WorkspaceAccess {
     ReadWrite,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ProcessWorkingDirectory {
+    Workspace,
+    ExtensionData,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProcessPermission {
     pub id: String,
     pub executable: String,
+    pub working_directory: ProcessWorkingDirectory,
     #[serde(default)]
     pub arguments: Vec<String>,
 }
@@ -58,7 +66,7 @@ pub struct PermissionSet {
 impl PermissionSet {
     pub(crate) fn validate(&self, extension_id: &str) -> Result<(), ManifestError> {
         validate_network_origins(&self.network)?;
-        validate_process_permissions(extension_id, &self.processes)
+        validate_process_permissions(extension_id, self.workspace, &self.processes)
     }
 
     pub(crate) fn is_empty(&self) -> bool {
@@ -151,6 +159,7 @@ fn validate_network_origins(permissions: &[NetworkPermission]) -> Result<(), Man
 
 fn validate_process_permissions(
     extension_id: &str,
+    workspace_access: WorkspaceAccess,
     permissions: &[ProcessPermission],
 ) -> Result<(), ManifestError> {
     if permissions.len() > MAX_PROCESS_PERMISSIONS {
@@ -177,6 +186,14 @@ fn validate_process_permissions(
         }
         for argument in &permission.arguments {
             validate_process_argument(argument)?;
+        }
+        if permission.working_directory == ProcessWorkingDirectory::Workspace
+            && workspace_access == WorkspaceAccess::None
+        {
+            return Err(ManifestError::Inconsistent(format!(
+                "process grant {} uses the workspace working directory without workspace access",
+                permission.id
+            )));
         }
         if !unique_permission_ids.insert(permission.id.as_str()) {
             return Err(ManifestError::Duplicate {

@@ -13,8 +13,10 @@ import type {
   NetworkRequest,
   NetworkResponse,
   OutputChannel,
+  PreviewAppearance,
   PreviewDocument,
   PreviewPanel,
+  PreviewScrollbarAppearance,
   ProcessRequest,
   ProcessResult,
   ProtocolFailure,
@@ -22,13 +24,19 @@ import type {
   TextEditorCommandHandler,
   WorkerToHostMessage,
 } from "@sideral/extension-sdk";
+import {
+  jsonValue as decodeJsonValue,
+  safeInteger,
+  stringRecord,
+} from "../../../lib/runtime-validation";
+import { decodeHostToWorkerMessage } from "./protocol-validation";
+import { EXTENSION_PROTOCOL_VERSION as PROTOCOL_VERSION } from "./protocol-version";
 
-const PROTOCOL_VERSION = 1 as const;
-const OUTPUT_CHUNK_CODE_UNITS = 20 * 1024;
-const MAX_PENDING_OUTPUT_CODE_UNITS = 256 * 1024;
-const MAX_BROKER_PAYLOAD_BYTES = 240 * 1024;
-const MAX_COMMAND_RESULT_BYTES = 1024 * 1024;
-const MAX_JSON_DEPTH = 64;
+const OUTPUT_CHUNK_CODE_UNITS: number = 20 * 1024;
+const MAX_PENDING_OUTPUT_CODE_UNITS: number = 256 * 1024;
+const MAX_BROKER_PAYLOAD_BYTES: number = 240 * 1024;
+const MAX_COMMAND_RESULT_BYTES: number = 1024 * 1024;
+const MAX_JSON_DEPTH: number = 64;
 
 interface WorkerScope {
   postMessage(message: WorkerToHostMessage): void;
@@ -67,7 +75,7 @@ interface BoundaryRecord extends Record<string, unknown> {
   readonly version?: unknown;
 }
 
-const scope = globalThis as unknown as WorkerScope;
+const scope: WorkerScope = decodeWorkerScope(globalThis);
 type RegisteredCommand =
   | { readonly kind: "command"; readonly handler: CommandHandler }
   | { readonly kind: "textEditor"; readonly handler: TextEditorCommandHandler };
@@ -103,7 +111,7 @@ scope.addEventListener("message", (event) => {
 });
 
 async function handleMessage(value: unknown): Promise<void> {
-  const message = parseMessage(value);
+  const message = decodeHostToWorkerMessage(value);
   if (message.protocolVersion !== PROTOCOL_VERSION) {
     throw new Error(`Unsupported extension protocol ${message.protocolVersion}.`);
   }
@@ -130,7 +138,7 @@ async function handleMessage(value: unknown): Promise<void> {
           cancellation.signal,
         ),
       );
-      commandQueue = operation.catch(() => undefined);
+      commandQueue = settleForSequence(operation);
       await operation;
       return;
     }
@@ -495,7 +503,7 @@ function createOutputChannel(name: string): OutputChannel {
     }
     return value;
   });
-  void resource.catch(() => undefined);
+  reportDeferredFailure(resource, "output_channel_initialization_failed");
   let pending = "";
   let disposed = false;
   let queue = Promise.resolve();
@@ -587,7 +595,7 @@ function createPreviewPanel(document: PreviewDocument): PreviewPanel {
       return value;
     },
   );
-  void resource.catch(() => undefined);
+  reportDeferredFailure(resource, "preview_initialization_failed");
   let disposed = false;
   let tail = Promise.resolve();
   let disposal: Promise<void> | null = null;
@@ -597,10 +605,7 @@ function createPreviewPanel(document: PreviewDocument): PreviewPanel {
       return Promise.reject(new Error("The preview panel is disposed."));
     }
     const result = tail.then(async () => operation(await resource));
-    tail = result.then(
-      () => undefined,
-      () => undefined,
-    );
+    tail = settleForSequence(result);
     return result;
   };
 
@@ -640,7 +645,7 @@ function createPreviewPanel(document: PreviewDocument): PreviewPanel {
           : tail.then(async () => {
               await brokerRequest("window.preview.dispose", { resourceId: await resource });
             });
-        tail = disposal.catch(() => undefined);
+        tail = settleForSequence(disposal);
       }
       return disposal;
     },
@@ -653,6 +658,42 @@ function previewPayload(document: PreviewDocument): JsonObject {
     format: document.format,
     content: document.content,
     ...(document.sourceUri === undefined ? {} : { sourceUri: document.sourceUri }),
+    ...(document.appearance === undefined
+      ? {}
+      : { appearance: previewAppearancePayload(document.appearance) }),
+  };
+}
+
+function previewAppearancePayload(appearance: PreviewAppearance): JsonObject {
+  return appearance.scrollbar === undefined
+    ? {}
+    : { scrollbar: previewScrollbarAppearancePayload(appearance.scrollbar) };
+}
+
+function previewScrollbarAppearancePayload(appearance: PreviewScrollbarAppearance): JsonObject {
+  return {
+    ...(appearance.trackSize === undefined ? {} : { trackSize: appearance.trackSize }),
+    ...(appearance.thumbSize === undefined ? {} : { thumbSize: appearance.thumbSize }),
+    ...(appearance.trackColor === undefined ? {} : { trackColor: appearance.trackColor }),
+    ...(appearance.thumbColor === undefined ? {} : { thumbColor: appearance.thumbColor }),
+    ...(appearance.thumbHoverColor === undefined
+      ? {}
+      : { thumbHoverColor: appearance.thumbHoverColor }),
+    ...(appearance.thumbActiveColor === undefined
+      ? {}
+      : { thumbActiveColor: appearance.thumbActiveColor }),
+    ...(appearance.showButtons === undefined ? {} : { showButtons: appearance.showButtons }),
+    ...(appearance.buttonSize === undefined ? {} : { buttonSize: appearance.buttonSize }),
+    ...(appearance.arrowSize === undefined ? {} : { arrowSize: appearance.arrowSize }),
+    ...(appearance.arrowHeight === undefined ? {} : { arrowHeight: appearance.arrowHeight }),
+    ...(appearance.arrowColor === undefined ? {} : { arrowColor: appearance.arrowColor }),
+    ...(appearance.arrowHoverColor === undefined
+      ? {}
+      : { arrowHoverColor: appearance.arrowHoverColor }),
+    ...(appearance.arrowActiveColor === undefined
+      ? {}
+      : { arrowActiveColor: appearance.arrowActiveColor }),
+    ...(appearance.cornerRadius === undefined ? {} : { cornerRadius: appearance.cornerRadius }),
   };
 }
 
@@ -719,32 +760,25 @@ function settleBrokerRequest(
 }
 
 function validateExtensionModule(value: unknown): ExtensionModule {
-  if (!isRecord(value) || typeof value.activate !== "function") {
+  if (!isRecord(value) || !isActivateFunction(value.activate)) {
     throw new Error("The extension bundle must export an activate function.");
   }
-  if (value.deactivate !== undefined && typeof value.deactivate !== "function") {
+  const activate = value.activate;
+  const deactivate = value.deactivate;
+  if (deactivate !== undefined && !isDeactivateFunction(deactivate)) {
     throw new Error("The extension deactivate export must be a function.");
   }
-  return value as unknown as ExtensionModule;
-}
-
-function parseMessage(value: unknown): HostToWorkerMessage {
-  if (
-    !isRecord(value) ||
-    typeof value.kind !== "string" ||
-    typeof value.protocolVersion !== "number" ||
-    typeof value.generation !== "number"
-  ) {
-    throw new Error("The extension host sent an invalid message.");
-  }
-  return value as unknown as HostToWorkerMessage;
+  return deactivate === undefined ? { activate } : { activate, deactivate };
 }
 
 function asStoredValue(value: JsonValue | undefined): StoredValueResult {
   if (!isRecord(value) || typeof value.found !== "boolean" || !("value" in value)) {
     throw new Error("The storage broker returned an invalid response.");
   }
-  return { found: value.found, value: value.value as JsonValue };
+  return {
+    found: value.found,
+    value: decodeJsonValue(value.value, "storage broker response.value"),
+  };
 }
 
 function asTextDocument(value: JsonValue | undefined): TextDocument {
@@ -760,7 +794,7 @@ function asTextDocument(value: JsonValue | undefined): TextDocument {
   return {
     uri: value.uri,
     languageId: value.languageId,
-    version: value.version,
+    version: safeInteger(value.version, "workspace broker response.version"),
     content: value.content,
   };
 }
@@ -773,10 +807,7 @@ function asStringArray(value: JsonValue | undefined): readonly string[] {
 }
 
 function asStringRecord(value: unknown): Readonly<Record<string, string>> {
-  if (!isRecord(value) || !Object.values(value).every((item) => typeof item === "string")) {
-    throw new Error("The broker returned invalid headers.");
-  }
-  return value as Record<string, string>;
+  return stringRecord(value, "network broker response.headers");
 }
 
 function assertJsonValue(value: unknown, label: string, maximumBytes: number): void {
@@ -821,7 +852,7 @@ function validateJsonNode(
       validateJsonNode(item, label, depth + 1, ancestors);
     }
   } else {
-    const prototype = Object.getPrototypeOf(value) as unknown;
+    const prototype: unknown = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) {
       throw new Error(`${label} can contain only plain JSON objects.`);
     }
@@ -836,8 +867,59 @@ function errorMessage(error: unknown): string {
   return error instanceof Error && error.message ? error.message : "unknown serialization error";
 }
 
+function decodeWorkerScope(value: unknown): WorkerScope {
+  if ((typeof value !== "object" && typeof value !== "function") || value === null) {
+    throw new Error("The extension host worker scope is unavailable.");
+  }
+
+  const owner: object = value;
+  const postMessage = workerMethod(owner, "postMessage");
+  const addEventListener = workerMethod(owner, "addEventListener");
+  const close = workerMethod(owner, "close");
+  return {
+    postMessage(message) {
+      postMessage(message);
+    },
+    addEventListener(type, listener) {
+      addEventListener(type, listener);
+    },
+    close() {
+      close();
+    },
+  };
+}
+
+function workerMethod(owner: object, name: string): (...arguments_: unknown[]) => unknown {
+  const method: unknown = Reflect.get(owner, name);
+  if (typeof method !== "function") {
+    throw new Error(`The extension host worker scope does not expose ${name}.`);
+  }
+  return (...arguments_) => Reflect.apply(method, owner, arguments_);
+}
+
+function settleForSequence(operation: Promise<unknown>): Promise<void> {
+  return operation.then(
+    () => undefined,
+    () => undefined,
+  );
+}
+
+function reportDeferredFailure(operation: Promise<unknown>, code: string): void {
+  void operation.catch((error: unknown) => {
+    postFault(toFailure(error, code));
+  });
+}
+
 function isRecord(value: unknown): value is BoundaryRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isActivateFunction(value: unknown): value is ExtensionModule["activate"] {
+  return typeof value === "function";
+}
+
+function isDeactivateFunction(value: unknown): value is NonNullable<ExtensionModule["deactivate"]> {
+  return typeof value === "function";
 }
 
 function post(message: WorkerToHostMessage): void {

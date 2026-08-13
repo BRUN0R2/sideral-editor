@@ -64,11 +64,48 @@ export interface OutputChannel extends Disposable {
 
 export type PreviewFormat = "markdown";
 
+export interface PreviewScrollbarAppearance {
+  /** Track width/height in integer pixels, from 8 through 32. Defaults to 14. */
+  readonly trackSize?: number;
+  /** Thumb width/height in integer pixels, from 4 through trackSize. Defaults to 10. */
+  readonly thumbSize?: number;
+  /** `transparent` or a 3, 4, 6 or 8-digit hexadecimal CSS color. */
+  readonly trackColor?: string;
+  /** `transparent` or a 3, 4, 6 or 8-digit hexadecimal CSS color. */
+  readonly thumbColor?: string;
+  /** `transparent` or a 3, 4, 6 or 8-digit hexadecimal CSS color. */
+  readonly thumbHoverColor?: string;
+  /** `transparent` or a 3, 4, 6 or 8-digit hexadecimal CSS color. */
+  readonly thumbActiveColor?: string;
+  /** Shows the solid top and bottom buttons. Defaults to `true`. */
+  readonly showButtons?: boolean;
+  /** Vertical button hit-area and arrow breathing room, from 8 through 32 pixels. Defaults to 22. */
+  readonly buttonSize?: number;
+  /** Solid arrow size in integer pixels, from 4 through the smaller track or button size. */
+  readonly arrowSize?: number;
+  /** Solid arrow height in integer pixels, from 3 through the smaller arrow or button size. */
+  readonly arrowHeight?: number;
+  /** `transparent` or a 3, 4, 6 or 8-digit hexadecimal CSS color. */
+  readonly arrowColor?: string;
+  /** `transparent` or a 3, 4, 6 or 8-digit hexadecimal CSS color. */
+  readonly arrowHoverColor?: string;
+  /** `transparent` or a 3, 4, 6 or 8-digit hexadecimal CSS color. */
+  readonly arrowActiveColor?: string;
+  /** Corner radius in integer pixels, from 0 through 999. */
+  readonly cornerRadius?: number;
+}
+
+export interface PreviewAppearance {
+  readonly scrollbar?: PreviewScrollbarAppearance;
+}
+
 export interface PreviewDocument {
   readonly title: string;
   readonly format: PreviewFormat;
   readonly content: string;
   readonly sourceUri?: string;
+  /** Scoped visual overrides. Omit this to inherit the Sideral host theme. */
+  readonly appearance?: PreviewAppearance;
 }
 
 export interface PreviewPanel extends Disposable {

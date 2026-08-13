@@ -2,6 +2,8 @@ export type WorkspaceAccess = "none" | "read" | "readWrite";
 
 export type NetworkMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
+export type ProcessWorkingDirectory = "workspace" | "extensionData";
+
 export interface NetworkPermission {
   readonly origin: string;
   readonly methods?: readonly NetworkMethod[];
@@ -10,6 +12,7 @@ export interface NetworkPermission {
 export interface ProcessPermission {
   readonly id: string;
   readonly executable: string;
+  readonly workingDirectory: ProcessWorkingDirectory;
   readonly arguments?: readonly string[];
 }
 
@@ -33,14 +36,14 @@ export type CommandInvocation = "workbench" | "activeTextDocument";
 export interface CommandContribution {
   readonly id: string;
   readonly title: string;
-  readonly category?: string;
+  readonly category?: string | null;
   readonly invocation?: CommandInvocation;
 }
 
 export interface KeybindingContribution {
   readonly command: string;
   readonly key: string;
-  readonly mac?: string;
+  readonly mac?: string | null;
   readonly languages?: readonly string[];
 }
 

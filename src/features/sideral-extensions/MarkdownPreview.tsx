@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { IconButton } from "../../components/IconButton";
+import { scrollbarCustomProperties } from "../../theme/scrollbar";
 import { useI18n } from "../i18n/I18nProvider";
 import type { PreviewDocumentView } from "./contracts";
 import { renderMarkdown } from "./markdown-renderer";
@@ -26,7 +27,11 @@ export function MarkdownPreview({
   );
 
   return (
-    <aside className="markdown-preview" aria-label={preview.title}>
+    <aside
+      className="markdown-preview"
+      aria-label={preview.title}
+      style={scrollbarCustomProperties(preview.appearance?.scrollbar)}
+    >
       <header className="markdown-preview__header">
         <div>
           <span>{preview.title}</span>

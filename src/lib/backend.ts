@@ -1,6 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 import english from "../../locales/en.json";
 import portugueseBrazil from "../../locales/pt-BR.json";
+import {
+  decodeApplicationBootstrap,
+  decodeDesktopPreferencesResponse,
+  decodeDirectoryEntriesResponse,
+  decodeJsonSchemaResolutionResponse,
+  decodeJsonSchemaTrustSettingsResponse,
+  decodeLocaleSelectionResponse,
+  decodeNullableWorkspaceResponse,
+  decodeSavedDocumentResponse,
+  decodeTextDocumentResponse,
+  decodeWorkspaceResponse,
+} from "./contract-validation";
 import type {
   ApplicationBootstrap,
   DesktopPreferences,
@@ -15,6 +27,7 @@ import type {
   WorkspaceSnapshot,
 } from "./contracts";
 import { ApplicationError } from "./errors";
+import { voidValue } from "./runtime-validation";
 
 let bootstrapRequest: Promise<ApplicationBootstrap> | null = null;
 let workspaceRestoreRequest: Promise<WorkspaceSnapshot | null> | null = null;
@@ -31,9 +44,11 @@ export function preferredLocales(): readonly string[] {
 export function bootstrapApplication(): Promise<ApplicationBootstrap> {
   if (bootstrapRequest === null) {
     bootstrapRequest = isDesktopRuntime()
-      ? invoke<ApplicationBootstrap>("bootstrap_application", {
-          preferredLocales: preferredLocales(),
-        })
+      ? invokeDecoded(
+          "bootstrap_application",
+          { preferredLocales: preferredLocales() },
+          decodeApplicationBootstrap,
+        )
       : createBrowserPreviewBootstrap();
     bootstrapRequest = bootstrapRequest.catch((error: unknown) => {
       bootstrapRequest = null;
@@ -45,60 +60,67 @@ export function bootstrapApplication(): Promise<ApplicationBootstrap> {
 
 export function refreshLocales(): Promise<LocaleSelection> {
   assertDesktopRuntime();
-  return invoke<LocaleSelection>("refresh_locales", {
-    preferredLocales: preferredLocales(),
-  });
+  return invokeDecoded(
+    "refresh_locales",
+    { preferredLocales: preferredLocales() },
+    decodeLocaleSelectionResponse,
+  );
 }
 
 export function setLanguagePreference(preference: string): Promise<LocaleSelection> {
   assertDesktopRuntime();
-  return invoke<LocaleSelection>("set_language_preference", {
-    preference,
-    preferredLocales: preferredLocales(),
-  });
+  return invokeDecoded(
+    "set_language_preference",
+    { preference, preferredLocales: preferredLocales() },
+    decodeLocaleSelectionResponse,
+  );
 }
 
 export function openLocaleDirectory(): Promise<void> {
   assertDesktopRuntime();
-  return invoke<void>("open_locale_directory");
+  return invokeVoid("open_locale_directory");
 }
 
 export function openExternalUrl(url: string): Promise<void> {
   assertDesktopRuntime();
-  return invoke<void>("open_external_url", { url });
+  return invokeVoid("open_external_url", { url });
 }
 
 export function saveDesktopPreferences(
   preferences: DesktopPreferences,
 ): Promise<DesktopPreferences> {
   assertDesktopRuntime();
-  return invoke<DesktopPreferences>("save_desktop_preferences", { preferences });
+  return invokeDecoded(
+    "save_desktop_preferences",
+    { preferences },
+    decodeDesktopPreferencesResponse,
+  );
 }
 
 export function readTextFile(path: string): Promise<TextDocumentPayload> {
   assertDesktopRuntime();
-  return invoke<TextDocumentPayload>("read_text_file", { path });
+  return invokeDecoded("read_text_file", { path }, decodeTextDocumentResponse);
 }
 
 export function createTextFile(directory: string, name: string): Promise<TextDocumentPayload> {
   assertDesktopRuntime();
-  return invoke<TextDocumentPayload>("create_text_file", { directory, name });
+  return invokeDecoded("create_text_file", { directory, name }, decodeTextDocumentResponse);
 }
 
 export function writeTextFile(path: string, content: string): Promise<SavedDocumentPayload> {
   assertDesktopRuntime();
-  return invoke<SavedDocumentPayload>("write_text_file", { path, content });
+  return invokeDecoded("write_text_file", { path, content }, decodeSavedDocumentResponse);
 }
 
 export function listDirectory(path: string): Promise<readonly DirectoryEntry[]> {
   assertDesktopRuntime();
-  return invoke<readonly DirectoryEntry[]>("list_directory", { path });
+  return invokeDecoded("list_directory", { path }, decodeDirectoryEntriesResponse);
 }
 
 export function restoreWorkspace(): Promise<WorkspaceSnapshot | null> {
   assertDesktopRuntime();
   if (workspaceRestoreRequest === null) {
-    const request = invoke<WorkspaceSnapshot | null>("restore_workspace");
+    const request = invokeDecoded("restore_workspace", undefined, decodeNullableWorkspaceResponse);
     workspaceRestoreRequest = request;
     const releaseRequest = () => {
       if (workspaceRestoreRequest === request) {
@@ -112,7 +134,7 @@ export function restoreWorkspace(): Promise<WorkspaceSnapshot | null> {
 
 export function openWorkspace(root: string): Promise<WorkspaceSnapshot> {
   assertDesktopRuntime();
-  return invoke<WorkspaceSnapshot>("open_workspace", { root });
+  return invokeDecoded("open_workspace", { root }, decodeWorkspaceResponse);
 }
 
 export function resolveJsonSchema(
@@ -121,16 +143,20 @@ export function resolveJsonSchema(
   workspaceRoot: string | null,
 ): Promise<JsonSchemaResolution> {
   assertDesktopRuntime();
-  return invoke<JsonSchemaResolution>("resolve_json_schema", {
-    schemaUri,
-    documentPath,
-    workspaceRoot,
-  });
+  return invokeDecoded(
+    "resolve_json_schema",
+    { schemaUri, documentPath, workspaceRoot },
+    decodeJsonSchemaResolutionResponse,
+  );
 }
 
 export function getJsonSchemaTrustSettings(): Promise<JsonSchemaTrustSettings> {
   assertDesktopRuntime();
-  return invoke<JsonSchemaTrustSettings>("json_schema_trust_settings");
+  return invokeDecoded(
+    "json_schema_trust_settings",
+    undefined,
+    decodeJsonSchemaTrustSettingsResponse,
+  );
 }
 
 export function trustJsonSchemaLocation(
@@ -138,7 +164,11 @@ export function trustJsonSchemaLocation(
   scope: JsonSchemaTrustScope,
 ): Promise<JsonSchemaTrustSettings> {
   assertDesktopRuntime();
-  return invoke<JsonSchemaTrustSettings>("trust_json_schema_location", { uri, scope });
+  return invokeDecoded(
+    "trust_json_schema_location",
+    { uri, scope },
+    decodeJsonSchemaTrustSettingsResponse,
+  );
 }
 
 export function revokeJsonSchemaTrust(
@@ -146,7 +176,23 @@ export function revokeJsonSchemaTrust(
   scope: JsonSchemaTrustScope,
 ): Promise<JsonSchemaTrustSettings> {
   assertDesktopRuntime();
-  return invoke<JsonSchemaTrustSettings>("revoke_json_schema_trust", { value, scope });
+  return invokeDecoded(
+    "revoke_json_schema_trust",
+    { value, scope },
+    decodeJsonSchemaTrustSettingsResponse,
+  );
+}
+
+async function invokeDecoded<Value>(
+  command: string,
+  arguments_: Record<string, unknown> | undefined,
+  decode: (value: unknown) => Value,
+): Promise<Value> {
+  return decode(await invoke<unknown>(command, arguments_));
+}
+
+async function invokeVoid(command: string, arguments_?: Record<string, unknown>): Promise<void> {
+  voidValue(await invoke<unknown>(command, arguments_), `${command} response`);
 }
 
 function assertDesktopRuntime(): void {

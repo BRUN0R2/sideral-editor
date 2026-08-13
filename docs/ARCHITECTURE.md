@@ -21,6 +21,7 @@ React workbench
   ├─ workspace feature ── explicit Tauri commands ── Rust filesystem modules
   ├─ i18n provider ────── one bootstrap command ─── locale/settings modules
   ├─ Monaco pane ──────── owned models + native JSON schema resolver
+  ├─ terminal panel ───── ordered channels + commands ── owned native PTY
   ├─ extension client ─── monotonic Channel snapshots ── native extension service
   ├─ extension supervisor ── one generation-scoped Web Worker per active extension
   └─ update provider ──── official Tauri updater ── signed release endpoint
@@ -36,14 +37,13 @@ preferences cross one explicit save command; Rust owns autostart registration,
 the tray icon and the main-window close policy, while the workspace owns the
 auto-save timer. Each Tauri command is small and describes one effect.
 
-## Extension systems
+## Extension system
 
-The modern Sideral extension system and the VS Code compatibility system are
-separate products inside the repository. The modern native core, frontend
-contracts and type-only SDK cannot reference compatibility code. The
-compatibility core and frontend contracts cannot reference modern extension
-code. `src-tauri/src/extension_systems.rs` is the only native composition point
-allowed to know both public APIs.
+Sideral has one native extension system. Its strict manifest, frontend
+contracts, type-only SDK, signed package format and capability protocol form one
+versioned product boundary. The repository contains no tolerant third-party
+manifest reader, alternate host or compatibility composition path. The
+architecture check prevents retired compatibility artifacts from returning.
 
 The modern manifest is strict, capability-based and limited to a bundled ESM
 worker entry. `.sideralx` packages use Ed25519 signatures that cover every
@@ -62,13 +62,12 @@ terminate invalid work and never act as startup coordination. A generation
 invalidated by disable, reload or host failure cannot publish late state.
 
 The native broker is the sole authority for workspace, storage, configuration,
-network, process and window requests. The compatibility manifest reader is
-intentionally tolerant of unrelated package fields, classifies the required
-host, and treats any Node entry as a trusted-process requirement. Manifest
-inspection never authorizes execution.
+network, process and window requests. Every process grant also declares its
+working directory as the canonical workspace or its isolated extension-data
+directory; there is no inherited application directory.
 
 The product boundary and package contract are recorded in
-`docs/decisions/0001-independent-extension-systems.md`; deterministic runtime
+`docs/decisions/0001-native-extension-system.md`; deterministic runtime
 semantics are recorded in
 `docs/decisions/0002-deterministic-extension-runtime.md`. Both are protected by
 `npm run architecture`.
@@ -85,20 +84,32 @@ semantics are recorded in
 - `src/features/i18n`: typed message keys, interpolation and active locale.
 - `src/features/settings`: dedicated workbench view for desktop, language,
   translation and update preferences.
-- `src/features/sideral-extensions`: modern manifest boundary; it never imports
-  compatibility modules.
+- `src/features/terminal`: lazy xterm.js surface, exact native contracts and a
+  serialized connection lifecycle.
+- `src/features/sideral-extensions`: manifest, client, runtime supervisor and
+  exact dynamic-boundary validation.
 - `src/features/updates`: updater resource ownership and progress state machine.
-- `src/features/vscode-legacy`: compatibility inspection boundary; it never
-  imports modern extension modules.
 - `src/features/workspace`: workspace restoration, documents, saves, tabs and
   lazy directory requests.
 - `src/lib`: typed native boundary and error normalization.
+- `src/theme`: semantic visual tokens, scoped overrides and cross-renderer theme resolution.
+
+Scrollbar defaults live only in `src/styles/scrollbars.css`. Native scroll
+surfaces inherit those namespaced custom properties, while the Monaco adapter
+resolves the same properties into public editor options and theme colors. The
+version-sensitive vendor selectors required for rounded Monaco thumbs and its
+arrow elements are isolated in `src/features/editor/monaco-scrollbar.css` and
+protected by the architecture check. Both renderers consume the same canonical
+solid-triangle shape tokens. Preview extensions can override the tokens only
+within their own panel through the validated `appearance.scrollbar` contract.
 
 ### Native backend
 
 - `documents.rs`: bounded UTF-8 reads, lazy directory lists and atomic writes.
 - `json_schemas.rs`: trusted HTTPS and workspace-local schema resolution,
   bounded dependency graphs, memory caching and atomic trust persistence.
+- `integrated_terminal`: bounded native PTY sessions, explicit working
+  directories, ordered control queues and deterministic process reaping.
 - `desktop_integration`: versioned desktop preferences, official autostart,
   system tray and main-window lifecycle policy.
 - `i18n.rs`: strict locale schema, discovery, matching and validation.
@@ -107,10 +118,9 @@ semantics are recorded in
   active workspace root.
 - `updater.rs`: official updater registration and configuration detection.
 - `error.rs`: structured operational failures exposed to TypeScript.
-- `extension_systems.rs`: sole composition point for the two independent
-  extension cores.
 - `sideral_extensions`: signed registry, trust, monotonic runtime snapshots,
-  lifecycle coordination and the native capability broker.
+  lifecycle coordination and a capability broker split into network, process,
+  storage, workspace and window domains.
 - `lib.rs`: command boundary and blocking-work isolation.
 
 ### Extension crates and SDK
@@ -121,8 +131,6 @@ semantics are recorded in
   canonical Ed25519 signatures and deterministic package construction.
 - `src-tauri/crates/sideral-extension-tool`: non-overwriting scaffold, key,
   pack and inspect commands.
-- `src-tauri/crates/vscode-legacy-core`: isolated third-party manifest
-  inspection and host classification.
 - `packages/sideral-extension-sdk`: declaration-only authoring contract that
   contributes zero runtime bytes to extension bundles.
 - `packages/sideral-extension-testkit`: deterministic in-memory lifecycle and
@@ -147,6 +155,9 @@ semantics are recorded in
 | Updater `Resource` | `UpdateProvider` | Close on replacement or provider cleanup |
 | In-flight reads/saves | `useWorkspace` maps | Deduplicated and removed in `finally` |
 | Workspace restoration | `useWorkspace` request generation | Shared only while in flight; stale or unmounted results are ignored |
+| xterm.js instance and resize observer | `IntegratedTerminal` | Disposed on panel owner cleanup |
+| Terminal connection and IPC channels | `IntegratedTerminal` lifecycle queue | Closed before replacement or owner cleanup |
+| Native PTY, shell and worker threads | `IntegratedTerminalState` session registry | Killed, reaped and joined on stop, workspace replacement, window exit, updater restart or application exit |
 | Temporary files | Rust RAII | Closed automatically; persisted atomically |
 | Extension client channels | Native extension service | Removed by connection ID; failed channels are pruned |
 | Extension supervisor session | Main document | Session-scoped disconnect on document teardown; native invalidation on main-window destruction |
@@ -168,12 +179,43 @@ focus after a user copies a file. Desktop preference changes remain interactive
 while complete snapshots are persisted in order. Update checks run
 once per application session plus explicit user requests.
 
+The terminal is created only after an explicit user action. Its working
+directory is the canonical active workspace, or the canonical user home when no
+workspace is open. On Windows, the fixed selection rule chooses the first
+`pwsh.exe` in `PATH`, with `-NoLogo -NoProfile`; when PowerShell 7 is not
+installed, it chooses only the canonical executable declared by `ComSpec`, with
+`/D`. The selected profile is returned in the session snapshot and shown in the
+panel; a launched shell failure is surfaced and never triggers runtime recovery.
+A workspace replacement serially disposes the previous PTY before creating
+another. Input and resize requests share one bounded native control queue,
+output uses a raw ordered Tauri channel, the xterm scrollback is bounded, and
+every close path kills and reaps the shell before joining its workers. The Tauri
+exit event owns the same shutdown path, including updater-triggered restarts. No
+shell command string, inherited application directory, polling loop or detached
+process exists.
+
+Tauri and the Rust standard library do not expose a safe PTY abstraction, while
+calling the Windows ConPTY FFI directly would require application-owned `unsafe`
+code. `portable-pty` is therefore isolated to
+`integrated_terminal::session` and used only to reach the official native PTY;
+the application crate remains `unsafe_code = "forbid"`. The official xterm.js
+packages are isolated to the lazy terminal frontend and are not part of any
+domain contract. These two dependencies replace protocol emulation and direct
+platform FFI that would be larger and harder to audit.
+
 Extension startup also has no delay or polling path. The main document connects
 the supervisor first, and native initialization then validates the established
 session synchronously. Native instructions and Worker acknowledgements advance
 the state machine immediately. Finite deadlines exist only to terminate a
 failed owner. Cancellation, deactivation and host replacement invalidate the
 affected generation before any recovery starts.
+
+Worker disposal has a repeated regression test. For interactive long-session
+validation on Windows, `npm run runtime:observe -- -ProcessId <pid>` samples the
+editor and its complete WebView process tree for 30 minutes and fails when the
+explicit private-memory, working-set, handle or thread growth budgets are
+exceeded. Threshold flags can be changed only when a measured workload justifies
+the new budget.
 
 ## JSON schema boundary
 
@@ -224,6 +266,17 @@ selector; their exact diagnostic is visible in Settings.
 System matching tries exact locale identifiers first, then the language tag,
 then English. A missing saved locale is surfaced to the user instead of being a
 silent fallback.
+
+## Dependency security
+
+The quality gate accepts no npm or Rust vulnerability. RustSec informational
+advisories are parsed from the live JSON report and compared with an exact,
+versioned policy in `scripts/check-rust-advisories.mjs`; a new, changed or
+resolved advisory fails the gate and requires an explicit review. The current
+reviewed set is inherited from official Tauri dependencies: GTK entries exist
+only in the Linux graph, while the Unicode entries come from
+`tauri-utils -> urlpattern` and have no patched release. None is silently
+ignored.
 
 ## Update security
 

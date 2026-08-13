@@ -4,6 +4,8 @@
     "lib": ["ES2024", "WebWorker"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "isolatedModules": true,
+    "moduleDetection": "force",
     "declaration": true,
     "emitDeclarationOnly": true,
     "outDir": "dist",
@@ -15,7 +17,7 @@
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": true,
     "verbatimModuleSyntax": true,
-    "skipLibCheck": true
+    "forceConsistentCasingInFileNames": true
   },
   "include": ["src"]
 }

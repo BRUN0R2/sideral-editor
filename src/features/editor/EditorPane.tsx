@@ -1,9 +1,12 @@
 import { useEffect, useRef } from "react";
 import { isDesktopRuntime, openExternalUrl } from "../../lib/backend";
+import { resolveScrollbarTheme, SIDERAL_THEME_CHANGE_EVENT } from "../../theme/scrollbar";
 import type { CursorPosition, EditorDocument } from "../workspace/types";
 import { JsonSchemaTrustDialog } from "./JsonSchemaTrustDialog";
-import { ensureSideralTheme, monaco } from "./monaco";
+import { applySideralTheme, monaco } from "./monaco";
+import { monacoScrollbarOptions } from "./monaco-scrollbar";
 import { useJsonSchemaSupport } from "./useJsonSchemaSupport";
+import "./monaco-scrollbar.css";
 
 interface EditorPaneProps {
   readonly documents: readonly EditorDocument[];
@@ -40,7 +43,8 @@ export function EditorPane({
     if (container === null) {
       return;
     }
-    ensureSideralTheme();
+    const scrollbarTheme = resolveScrollbarTheme(container);
+    applySideralTheme(scrollbarTheme);
     const editor = monaco.editor.create(container, {
       theme: "sideral-dark",
       automaticLayout: false,
@@ -55,13 +59,7 @@ export function EditorPane({
       renderWhitespace: "selection",
       smoothScrolling: true,
       scrollBeyondLastLine: false,
-      scrollbar: {
-        arrowSize: 16,
-        useShadows: false,
-        verticalHasArrows: true,
-        verticalScrollbarSize: 14,
-        verticalSliderSize: 10,
-      },
+      scrollbar: monacoScrollbarOptions(scrollbarTheme),
       cursorBlinking: "smooth",
       cursorSmoothCaretAnimation: "on",
       bracketPairColorization: { enabled: true },
@@ -89,8 +87,15 @@ export function EditorPane({
     });
     const resizeObserver = new ResizeObserver(() => editor.layout());
     resizeObserver.observe(container);
+    const refreshTheme = (): void => {
+      const nextScrollbarTheme = resolveScrollbarTheme(container);
+      applySideralTheme(nextScrollbarTheme);
+      editor.updateOptions({ scrollbar: monacoScrollbarOptions(nextScrollbarTheme) });
+    };
+    window.addEventListener(SIDERAL_THEME_CHANGE_EVENT, refreshTheme);
 
     return () => {
+      window.removeEventListener(SIDERAL_THEME_CHANGE_EVENT, refreshTheme);
       resizeObserver.disconnect();
       linkOpener.dispose();
       cursorListener.dispose();

@@ -6,7 +6,7 @@ export interface LocaleBundle {
   readonly locale: string;
   readonly name: string;
   readonly direction: TextDirection;
-  readonly messages: Record<MessageKey, string>;
+  readonly messages: Readonly<Partial<Record<MessageKey, string>>>;
   readonly builtIn: boolean;
 }
 

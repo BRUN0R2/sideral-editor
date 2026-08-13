@@ -39,7 +39,9 @@ pub fn setup_tray_icon(app: &AppHandle) -> AppResult<()> {
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
             SHOW_MENU_ITEM_ID => restore_main_window(app),
-            QUIT_MENU_ITEM_ID => app.exit(0),
+            QUIT_MENU_ITEM_ID => {
+                app.exit(0);
+            }
             _ => {}
         })
         .build(app)

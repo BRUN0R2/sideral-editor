@@ -53,7 +53,8 @@ document-aware reference extension.
       {
         "id": "acme.sample.formatter",
         "executable": "formatter",
-        "arguments": ["--check"]
+        "arguments": ["--check"],
+        "workingDirectory": "workspace"
       }
     ]
   },
@@ -142,9 +143,19 @@ HTML is displayed as text and remote images are not fetched. HTTP(S) links use
 the native external-link boundary. Relative document links are resolved only
 from a local `file:` source URI and open through the editor's native file
 boundary; unsupported schemes remain inert. Fenced blocks identified as
-`powershell` (or the compatible `pwsh` and `ps1` aliases) receive a compact
+`powershell` receive a compact
 PowerShell code-block presentation, but their contents remain inert, selectable
 text and are never executed.
+
+A panel with `sourceUri` is rendered only beside that active editor document.
+Switching to another open tab removes the preview surface without destroying
+the extension-owned panel, so returning to the source restores the explicit
+panel state. Closing the source hides the panel with an expected-URI guard, so
+a delayed close cannot hide the same resource after an extension has reused it
+for another document. Hidden preview payloads are omitted from client
+handshakes and client-side state until the extension explicitly shows the panel
+again. The native resource remains bounded and extension-owned until
+`dispose()`, reload, disable or shutdown.
 
 ```ts
 api.commands.registerTextEditorCommand("acme.sample.preview", async (document) => {
@@ -159,6 +170,42 @@ api.commands.registerTextEditorCommand("acme.sample.preview", async (document) =
 });
 ```
 
+Preview scrollbars inherit the workbench theme. Extensions that need a distinct
+appearance can use the bounded, panel-scoped contract below; arbitrary CSS is
+never injected into the host document:
+
+```ts
+appearance: {
+  scrollbar: {
+    trackSize: 16,
+    thumbSize: 10,
+    trackColor: "transparent",
+    thumbColor: "#8b5cf6",
+    thumbHoverColor: "#a78bfa",
+    thumbActiveColor: "#c4b5fd",
+    showButtons: true,
+    buttonSize: 18,
+    arrowSize: 10,
+    arrowHeight: 5,
+    arrowColor: "#ddd6fe",
+    arrowHoverColor: "#ede9fe",
+    arrowActiveColor: "#ffffff",
+    cornerRadius: 12
+  }
+}
+```
+
+Sizes are integer pixels (`trackSize` and `buttonSize` 8–32, `thumbSize`
+4–`trackSize`, `arrowSize` 4–the smaller track or button size, `arrowHeight`
+3–the smaller arrow width or button size, radius 0–999).
+`showButtons` controls the solid vertical arrow buttons. Colors accept
+`transparent` or 3, 4, 6 or 8-digit hexadecimal CSS colors. Omitting any field
+preserves the corresponding host default; omitted thumb and arrow sizes are
+clamped automatically when a narrower track or button is requested.
+`arrowSize` controls width, `arrowHeight` controls the vertical silhouette and
+`buttonSize` controls both the click target and the breathing room around the
+arrow shape.
+
 ## Available capabilities
 
 | API | Manifest authority | Important behavior |
@@ -170,7 +217,7 @@ api.commands.registerTextEditorCommand("acme.sample.preview", async (document) =
 | `storage` | Always isolated to the extension | Atomic JSON, bounded keys, values and document |
 | `configuration` | Always isolated to the extension | Atomic extension-specific JSON |
 | `network.request` | Exact origin and method | No proxy/cookies, redirects revalidated, DNS pinned, bounded UTF-8 body |
-| `processes.execute` | Exact process grant | Fixed arguments, no stdin/shell, clean environment, bounded output |
+| `processes.execute` | Exact process grant | Fixed arguments and working directory, no stdin/shell, clean environment, bounded output and deterministic reap |
 | `window` | No extra grant | Bounded messages, output channels and typed preview panels owned by the extension |
 
 Cancellation is cooperative. A canceled network request or process is stopped

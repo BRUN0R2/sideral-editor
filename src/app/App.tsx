@@ -3,13 +3,16 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useMemo,
   useReducer,
+  useRef,
   useState,
 } from "react";
 import { DiscardChangesDialog } from "../components/DiscardChangesDialog";
 import { ErrorToast } from "../components/ErrorToast";
 import { Icon } from "../components/Icon";
 import { IconButton } from "../components/IconButton";
+import { SideralLogo } from "../components/SideralLogo";
 import { StatusBar } from "../features/editor/StatusBar";
 import { Explorer } from "../features/explorer/Explorer";
 import { useI18n } from "../features/i18n/I18nProvider";
@@ -21,6 +24,10 @@ import { ExtensionNotices } from "../features/sideral-extensions/ExtensionNotice
 import { ExtensionsSidebar } from "../features/sideral-extensions/ExtensionsSidebar";
 import type { ExtensionHostConnection } from "../features/sideral-extensions/host/connection";
 import { matchingExtensionCommand } from "../features/sideral-extensions/keybindings";
+import {
+  closedDocumentPreviews,
+  previewForActiveDocument,
+} from "../features/sideral-extensions/preview-lifecycle";
 import { useExtensionSystem } from "../features/sideral-extensions/useExtensionSystem";
 import { UpdateModal } from "../features/updates/UpdateModal";
 import { UpdateProvider, useUpdates } from "../features/updates/UpdateProvider";
@@ -43,6 +50,10 @@ const EditorPane = lazy(loadEditorPane);
 const MarkdownPreview = lazy(async () => {
   const module = await import("../features/sideral-extensions/MarkdownPreview");
   return { default: module.MarkdownPreview };
+});
+const IntegratedTerminal = lazy(async () => {
+  const module = await import("../features/terminal/IntegratedTerminal");
+  return { default: module.IntegratedTerminal };
 });
 
 interface AppProps {
@@ -81,6 +92,16 @@ function Workbench({ extensionHostConnection }: AppProps) {
   const [updateOpen, setUpdateOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [jsonSchemaTrustRevision, setJsonSchemaTrustRevision] = useState(0);
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [terminalStarted, setTerminalStarted] = useState(false);
+  const terminalAvailable = bootstrap.runtime === "desktop";
+  const toggleTerminal = useCallback(() => {
+    if (!terminalAvailable) {
+      return;
+    }
+    setTerminalStarted(true);
+    setTerminalOpen((current) => !current);
+  }, [terminalAvailable]);
   const notifyJsonSchemaTrustChange = useCallback(
     () => setJsonSchemaTrustRevision((current) => current + 1),
     [],
@@ -98,6 +119,14 @@ function Workbench({ extensionHostConnection }: AppProps) {
         return;
       }
       if (!event.ctrlKey && !event.metaKey) {
+        return;
+      }
+      if (event.code === "Backquote" && !event.shiftKey) {
+        if (event.repeat || event.isComposing) {
+          return;
+        }
+        event.preventDefault();
+        toggleTerminal();
         return;
       }
       const key = event.key.toLowerCase();
@@ -135,6 +164,7 @@ function Workbench({ extensionHostConnection }: AppProps) {
     workspace.openFile,
     workspace.openFolder,
     workspace.saveActiveDocument,
+    toggleTerminal,
   ]);
 
   useEffect(() => {
@@ -156,13 +186,31 @@ function Workbench({ extensionHostConnection }: AppProps) {
       if (command?.invocation === "activeTextDocument") {
         navigate({ kind: "showEditor" });
       }
-      void extensions.executeCommand(commandId).catch(() => undefined);
+      void extensions.executeCommand(commandId).catch(extensions.reportError);
     };
     window.addEventListener("keydown", handleExtensionShortcut);
     return () => window.removeEventListener("keydown", handleExtensionShortcut);
   }, [extensions, workspace.activeDocument?.languageId]);
 
-  const visiblePreview = extensions.previews.find((preview) => preview.visible) ?? null;
+  const visiblePreview = previewForActiveDocument(extensions.previews, workspace.activeDocument);
+  const previewsWithClosedSources = useMemo(
+    () => closedDocumentPreviews(extensions.previews, workspace.documents),
+    [extensions.previews, workspace.documents],
+  );
+  const dismissingPreviewIds = useRef(new Set<string>());
+  useEffect(() => {
+    for (const preview of previewsWithClosedSources) {
+      const { resourceId } = preview;
+      if (dismissingPreviewIds.current.has(resourceId)) {
+        continue;
+      }
+      dismissingPreviewIds.current.add(resourceId);
+      void extensions
+        .dismissPreview(resourceId, preview.sourceUri)
+        .catch(extensions.reportError)
+        .finally(() => dismissingPreviewIds.current.delete(resourceId));
+    }
+  }, [extensions.dismissPreview, extensions.reportError, previewsWithClosedSources]);
   const previewSource =
     visiblePreview?.sourceUri === null || visiblePreview === null
       ? null
@@ -294,7 +342,7 @@ function Workbench({ extensionHostConnection }: AppProps) {
           />
         </div>
 
-        <div className="workspace-content">
+        <div className="workspace-content" data-terminal-open={terminalOpen || undefined}>
           <WorkbenchTabs
             documents={workspace.documents}
             resourceTabs={resourceTabs}
@@ -340,15 +388,19 @@ function Workbench({ extensionHostConnection }: AppProps) {
                           onOpenDocument={openPreviewDocument}
                           onClose={() => {
                             void extensions
-                              .dismissPreview(visiblePreview.resourceId)
-                              .catch(() => undefined);
+                              .dismissPreview(visiblePreview.resourceId, visiblePreview.sourceUri)
+                              .catch(extensions.reportError);
                           }}
                         />
                       </Suspense>
                     )}
                   </div>
                 </Suspense>
-              ) : null}
+              ) : (
+                <div className="editor-empty-state" aria-hidden="true">
+                  <SideralLogo className="editor-empty-state__logo" />
+                </div>
+              )}
             </main>
             <SettingsView
               active={navigation.surface.kind === "settings"}
@@ -375,10 +427,25 @@ function Workbench({ extensionHostConnection }: AppProps) {
               }}
             />
           </div>
+          {terminalStarted ? (
+            <Suspense fallback={<section className="terminal-panel" aria-busy="true" />}>
+              <IntegratedTerminal
+                active={terminalOpen}
+                workspaceRoot={workspace.workspaceRoot?.path ?? null}
+                onClose={() => setTerminalOpen(false)}
+              />
+            </Suspense>
+          ) : null}
         </div>
       </div>
 
-      <StatusBar document={workspace.activeDocument} cursor={workspace.cursor} />
+      <StatusBar
+        document={workspace.activeDocument}
+        cursor={workspace.cursor}
+        terminalAvailable={terminalAvailable}
+        terminalOpen={terminalOpen}
+        onToggleTerminal={toggleTerminal}
+      />
 
       <UpdateModal open={updateOpen} onClose={() => setUpdateOpen(false)} />
       <ExtensionNotices system={extensions} />
