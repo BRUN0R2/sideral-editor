@@ -91,8 +91,9 @@ semantics are recorded in
 - `src/features/i18n`: typed message keys, interpolation and active locale.
 - `src/features/settings`: dedicated workbench view for desktop, language,
   translation, declared extension configuration and update preferences.
-- `src/features/terminal`: lazy xterm.js surface, exact native contracts and a
-  serialized connection lifecycle.
+- `src/features/terminal`: bottom-panel state machine, extension output views,
+  lazy xterm.js shell surface, exact native contracts and a serialized
+  connection lifecycle.
 - `src/features/sideral-extensions`: manifest, client, runtime supervisor and
   exact dynamic-boundary validation.
 - `src/features/updates`: updater resource ownership and progress state machine.
@@ -187,7 +188,10 @@ focus after a user copies a file. Desktop preference changes remain interactive
 while complete snapshots are persisted in order. Update checks run
 once per application session plus explicit user requests.
 
-The terminal is created only after an explicit user action. Its working
+The bottom terminal panel mounts after an explicit shell selection or an
+extension output channel requests revelation. Extension output is rendered in
+an isolated tab and never written into the interactive PTY. The native terminal
+itself is created lazily only after the shell tab is selected. Its working
 directory is the canonical active workspace, or the canonical user home when no
 workspace is open. On Windows, the fixed selection rule chooses the first
 `pwsh.exe` in `PATH`, with `-NoLogo -NoProfile`; when PowerShell 7 is not

@@ -786,13 +786,19 @@ function decodeKeybindingContribution(value: unknown, path: string): KeybindingC
 }
 
 function decodeOutputChannel(value: unknown, path: string): OutputChannelView {
-  const source = record(value, path, ["resourceId", "extensionId", "name", "content", "visible"]);
+  const source = record(value, path, [
+    "resourceId",
+    "extensionId",
+    "name",
+    "content",
+    "revealSequence",
+  ]);
   return {
     resourceId: stringValue(required(source, "resourceId", path), `${path}.resourceId`),
     extensionId: stringValue(required(source, "extensionId", path), `${path}.extensionId`),
     name: stringValue(required(source, "name", path), `${path}.name`),
     content: stringValue(required(source, "content", path), `${path}.content`),
-    visible: booleanValue(required(source, "visible", path), `${path}.visible`),
+    revealSequence: safeInteger(required(source, "revealSequence", path), `${path}.revealSequence`),
   };
 }
 

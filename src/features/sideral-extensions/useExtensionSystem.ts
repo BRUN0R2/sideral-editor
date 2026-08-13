@@ -29,6 +29,7 @@ import type {
   PreviewDocumentView,
 } from "./contracts";
 import type { ExtensionHostConnection } from "./host/connection";
+import { observeOutputChannel } from "./output-lifecycle";
 import { applyPreviewChange, visiblePreviewMap } from "./preview-lifecycle";
 
 const EMPTY_SNAPSHOT: ExtensionSnapshot = {
@@ -48,11 +49,17 @@ export interface ExtensionNotice {
   readonly message: string;
 }
 
+export interface ExtensionOutputReveal {
+  readonly resourceId: string;
+  readonly revealSequence: number;
+}
+
 export interface ExtensionSystem {
   readonly status: "unavailable" | "initializing" | "ready" | "failed";
   readonly snapshot: ExtensionSnapshot;
   readonly notices: readonly ExtensionNotice[];
   readonly outputs: readonly OutputChannelView[];
+  readonly outputReveal: ExtensionOutputReveal | null;
   readonly previews: readonly PreviewDocumentView[];
   readonly busyExtensionIds: ReadonlySet<string>;
   readonly error: string | null;
@@ -87,6 +94,7 @@ export function useExtensionSystem(
   const [snapshot, setSnapshot] = useState<ExtensionSnapshot>(EMPTY_SNAPSHOT);
   const [notices, setNotices] = useState<readonly ExtensionNotice[]>([]);
   const [outputs, setOutputs] = useState<ReadonlyMap<string, OutputChannelView>>(new Map());
+  const [outputReveal, setOutputReveal] = useState<ExtensionOutputReveal | null>(null);
   const [previews, setPreviews] = useState<ReadonlyMap<string, PreviewDocumentView>>(new Map());
   const [busyCounts, setBusyCounts] = useState<ReadonlyMap<string, number>>(new Map());
   const [error, setError] = useState<string | null>(null);
@@ -95,6 +103,7 @@ export function useExtensionSystem(
   }, []);
   const nextNoticeId = useRef(1);
   const latestSnapshotSequence = useRef(0);
+  const outputRevealSequences = useRef<ReadonlyMap<string, number>>(new Map());
   const workspaceRootRef = useRef(workspaceRootPath);
   workspaceRootRef.current = workspaceRootPath;
   const activeDocumentRef = useRef(activeDocument);
@@ -160,20 +169,42 @@ export function useExtensionSystem(
             },
           ]);
           return;
-        case "outputChanged":
+        case "outputChanged": {
+          const observation = observeOutputChannel(
+            outputRevealSequences.current,
+            instruction.channel,
+          );
+          if (observation.kind === "stale") {
+            return;
+          }
+          outputRevealSequences.current = observation.sequences;
           setOutputs((current) => {
             const next = new Map(current);
             next.set(instruction.channel.resourceId, instruction.channel);
             return next;
           });
+          if (observation.revealRequested) {
+            setOutputReveal({
+              resourceId: instruction.channel.resourceId,
+              revealSequence: instruction.channel.revealSequence,
+            });
+          }
           return;
-        case "outputDisposed":
+        }
+        case "outputDisposed": {
+          const nextRevealSequences = new Map(outputRevealSequences.current);
+          nextRevealSequences.delete(instruction.resourceId);
+          outputRevealSequences.current = nextRevealSequences;
           setOutputs((current) => {
             const next = new Map(current);
             next.delete(instruction.resourceId);
             return next;
           });
+          setOutputReveal((current) =>
+            current?.resourceId === instruction.resourceId ? null : current,
+          );
           return;
+        }
         case "previewChanged":
           setPreviews((current) => applyPreviewChange(current, instruction.preview));
           return;
@@ -209,7 +240,13 @@ export function useExtensionSystem(
       }
       connection = connected;
       applySnapshot(connected.snapshot);
-      setOutputs(new Map(connected.outputs.map((output) => [output.resourceId, output] as const)));
+      const connectedOutputs = new Map(
+        connected.outputs.map((output) => [output.resourceId, output] as const),
+      );
+      outputRevealSequences.current = new Map(
+        connected.outputs.map((output) => [output.resourceId, output.revealSequence] as const),
+      );
+      setOutputs(connectedOutputs);
       setPreviews(visiblePreviewMap(connected.previews));
       await setExtensionWorkspace(workspaceRootRef.current);
       setStatus("ready");
@@ -233,6 +270,14 @@ export function useExtensionSystem(
       }
     };
   }, [acceptInstruction, applySnapshot, desktop, hostConnection]);
+
+  useEffect(() => {
+    const liveOutputIds = new Set(outputs.keys());
+    const nextRevealSequences = new Map(
+      [...outputRevealSequences.current].filter(([resourceId]) => liveOutputIds.has(resourceId)),
+    );
+    outputRevealSequences.current = nextRevealSequences;
+  }, [outputs]);
 
   useEffect(() => {
     if (status !== "ready") {
@@ -290,6 +335,7 @@ export function useExtensionSystem(
       snapshot,
       notices,
       outputs: [...outputs.values()],
+      outputReveal,
       previews: [...previews.values()],
       busyExtensionIds,
       error,
@@ -386,6 +432,7 @@ export function useExtensionSystem(
       error,
       notices,
       outputs,
+      outputReveal,
       previews,
       reportError,
       runExtensionMutation,

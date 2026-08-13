@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Icon } from "../../components/Icon";
 import { ProductIcon } from "../../components/ProductIcon";
 import { useI18n } from "../i18n/I18nProvider";
 import type { InstalledExtensionView } from "./contracts";
@@ -17,11 +16,6 @@ interface ExtensionDetailsViewProps {
   readonly onUninstalled: () => void;
 }
 
-interface CommandResult {
-  readonly extensionId: string;
-  readonly value: string;
-}
-
 export function ExtensionDetailsView({
   active,
   extensionId,
@@ -30,15 +24,10 @@ export function ExtensionDetailsView({
 }: ExtensionDetailsViewProps) {
   const { t } = useI18n();
   const [uninstallCandidate, setUninstallCandidate] = useState<InstalledExtensionView | null>(null);
-  const [commandResult, setCommandResult] = useState<CommandResult | null>(null);
   const extension =
     extensionId === null
       ? null
       : (system.snapshot.extensions.find((candidate) => candidate.id === extensionId) ?? null);
-  const outputs =
-    extensionId === null
-      ? []
-      : system.outputs.filter((output) => output.extensionId === extensionId);
 
   return (
     <main className="extension-details" aria-label={t("extensions.detailsTitle")} hidden={!active}>
@@ -74,59 +63,6 @@ export function ExtensionDetailsView({
 
           <RuntimeDiagnostics extension={extension} />
           <ExtensionCapabilityList package_={extension} />
-
-          {extension.commands.length === 0 ? null : (
-            <section className="extension-details__section">
-              <h2>{t("extensions.commands")}</h2>
-              <div className="extension-details__commands">
-                {extension.commands.map((command) => (
-                  <button
-                    type="button"
-                    className="button"
-                    key={command.id}
-                    disabled={!extension.enabled || system.busyExtensionIds.has(extension.id)}
-                    onClick={() => {
-                      void system
-                        .executeCommand(command.id)
-                        .then((result) => {
-                          setCommandResult({
-                            extensionId: extension.id,
-                            value: t("extensions.commandResult", {
-                              value: result === null ? "null" : JSON.stringify(result),
-                            }),
-                          });
-                        })
-                        .catch(system.reportError);
-                    }}
-                  >
-                    {t("action.run")} {command.category ? `${command.category}: ` : ""}
-                    {command.title}
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {commandResult?.extensionId !== extension.id ? null : (
-            <div className="extensions-command-result" role="status">
-              <span>{commandResult.value}</span>
-              <button type="button" onClick={() => setCommandResult(null)}>
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-          )}
-
-          {outputs.length === 0 ? null : (
-            <section className="extensions-output">
-              <h2>{t("extensions.output")}</h2>
-              {outputs.map((output) => (
-                <details key={output.resourceId} open={output.visible}>
-                  <summary>{output.name}</summary>
-                  <pre>{output.content}</pre>
-                </details>
-              ))}
-            </section>
-          )}
         </div>
       )}
 

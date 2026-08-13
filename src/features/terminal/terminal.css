@@ -49,35 +49,68 @@
   min-width: 0;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 7px;
   padding: 0 7px 0 13px;
   border-bottom: 1px solid var(--border);
   color: var(--text-muted);
   user-select: none;
 }
 
-.terminal-panel__identity,
+.terminal-panel__tabs,
 .terminal-panel__actions {
   display: flex;
   min-width: 0;
   align-items: center;
 }
 
-.terminal-panel__identity {
-  gap: 7px;
-  overflow: hidden;
+.terminal-panel__tabs {
+  height: 100%;
+  flex: 1;
+  align-items: stretch;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.terminal-panel__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.terminal-panel__tab {
+  display: flex;
+  min-width: 0;
+  max-width: 240px;
+  height: 100%;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: var(--text-muted);
+  background: transparent;
   font-size: 12px;
 }
 
-.terminal-panel__identity > span:last-child {
-  overflow: hidden;
+.terminal-panel__tab:hover {
   color: var(--text);
+  background: rgb(255 255 255 / 4%);
+}
+
+.terminal-panel__tab[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+  background: rgb(255 255 255 / 3%);
+}
+
+.terminal-panel__tab > span:last-child {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .terminal-panel__heading {
-  margin-right: 5px;
+  flex: 0 0 auto;
+  margin-right: 3px;
   color: var(--text);
   font-size: 11px;
   font-weight: 600;
@@ -136,12 +169,36 @@
   padding: 7px 9px 5px 11px;
 }
 
+.terminal-panel__viewport[hidden] {
+  display: none;
+}
+
 .terminal-panel__viewport .xterm {
   height: 100%;
 }
 
 .terminal-panel__viewport .xterm-viewport {
   background: transparent;
+}
+
+.terminal-panel__output {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  padding: 9px 11px;
+  color: var(--text);
+  background: var(--bg-panel);
+}
+
+.terminal-panel__output pre {
+  margin: 0;
+  font:
+    12px / 1.45 "Cascadia Mono",
+    "Cascadia Code",
+    Consolas,
+    monospace;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .terminal-panel__overlay {

@@ -210,6 +210,11 @@ Command handlers are serial within one extension. Calling another command from
 the same extension executes locally; cyclic calls are rejected. Commands from
 different extensions remain independent.
 
+Output channels appear as extension-owned tabs in the Sideral terminal panel.
+`show()` reveals and selects the channel; `append` and `appendLine` buffer
+bounded content, while `flush` updates the tab without repeatedly stealing
+focus. Output channels never inject text into the interactive shell PTY.
+
 Visual extensions create typed preview resources rather than sending HTML to
 the workbench. A Markdown panel receives Markdown text plus an optional source
 URI. When that URI belongs to an open editor document, the workbench renders
@@ -294,7 +299,7 @@ arrow shape.
 | `configuration.get` | Declared extension configuration key | Read-only effective value; user overrides are validated and atomically persisted by the native Settings flow |
 | `network.request` | Exact origin and method | No proxy/cookies, redirects revalidated, DNS pinned, bounded UTF-8 body |
 | `processes.execute` | Exact process grant | Signed literal/typed workspace-path arguments, explicit working directory, no stdin/shell, clean environment, bounded output and deterministic reap |
-| `window` | No extra grant | Bounded messages, output channels and typed preview panels owned by the extension |
+| `window` | No extra grant | Bounded terminal-panel output channels and typed preview panels owned by the extension |
 
 Cancellation is cooperative. A canceled network request or process is stopped
 and a canceled process is reaped. A remote server may still have observed a

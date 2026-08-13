@@ -132,7 +132,7 @@ struct OutputResource {
     extension_id: String,
     name: String,
     content: String,
-    visible: bool,
+    reveal_sequence: u32,
 }
 
 #[derive(Clone)]

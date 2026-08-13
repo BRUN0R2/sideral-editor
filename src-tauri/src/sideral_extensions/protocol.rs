@@ -337,7 +337,7 @@ pub struct OutputChannelView {
     pub extension_id: String,
     pub name: String,
     pub content: String,
-    pub visible: bool,
+    pub reveal_sequence: u32,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -571,7 +571,7 @@ mod tests {
 
     use super::{
         ActivationReason, EXTENSION_PROTOCOL_VERSION, ExtensionClientInstruction, HostEvent,
-        HostInstruction, PreviewAppearance, PreviewDocumentView, PreviewFormat,
+        HostInstruction, OutputChannelView, PreviewAppearance, PreviewDocumentView, PreviewFormat,
         PreviewScrollbarAppearance,
     };
 
@@ -647,6 +647,33 @@ mod tests {
             Some(json!({
                 "kind": "outputDisposed",
                 "resourceId": "output-1",
+            })),
+        );
+    }
+
+    #[test]
+    fn output_instruction_serializes_reveal_sequence() {
+        let instruction = ExtensionClientInstruction::OutputChanged {
+            channel: OutputChannelView {
+                resource_id: "acme.compiler:1".to_owned(),
+                extension_id: "acme.compiler".to_owned(),
+                name: "Compiler".to_owned(),
+                content: "Compiling...\n".to_owned(),
+                reveal_sequence: 2,
+            },
+        };
+
+        assert_eq!(
+            serde_json::to_value(instruction).ok(),
+            Some(json!({
+                "kind": "outputChanged",
+                "channel": {
+                    "resourceId": "acme.compiler:1",
+                    "extensionId": "acme.compiler",
+                    "name": "Compiler",
+                    "content": "Compiling...\n",
+                    "revealSequence": 2,
+                },
             })),
         );
     }

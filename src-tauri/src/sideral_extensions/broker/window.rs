@@ -99,7 +99,7 @@ impl CapabilityBroker {
                 extension_id: manifest.id.clone(),
                 name,
                 content: String::new(),
-                visible: false,
+                reveal_sequence: 0,
             },
         );
         Ok(Value::String(resource_id))
@@ -148,7 +148,7 @@ impl CapabilityBroker {
         let view = {
             let mut outputs = lock(&self.shared.outputs, "extension output channels")?;
             let output = owned_output_mut(&mut outputs, &manifest.id, resource_id)?;
-            output.visible = true;
+            advance_output_reveal(output)?;
             output_view(resource_id, output)
         };
         state
@@ -343,8 +343,15 @@ fn output_view(resource_id: &str, output: &OutputResource) -> OutputChannelView 
         extension_id: output.extension_id.clone(),
         name: output.name.clone(),
         content: output.content.clone(),
-        visible: output.visible,
+        reveal_sequence: output.reveal_sequence,
     }
+}
+
+fn advance_output_reveal(output: &mut OutputResource) -> Result<(), ExtensionError> {
+    output.reveal_sequence = output.reveal_sequence.checked_add(1).ok_or_else(|| {
+        ExtensionError::Conflict("output channel reveal sequence was exhausted".to_owned())
+    })?;
+    Ok(())
 }
 
 fn owned_output<'a>(
@@ -566,4 +573,30 @@ fn validate_text(kind: &str, value: &str, maximum_bytes: usize) -> Result<(), Ex
         )));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn output_reveal_sequence_is_monotonic_and_checked() {
+        let mut output = OutputResource {
+            extension_id: "acme.compiler".to_owned(),
+            name: "Compiler".to_owned(),
+            content: String::new(),
+            reveal_sequence: 0,
+        };
+
+        assert!(advance_output_reveal(&mut output).is_ok());
+        assert_eq!(output.reveal_sequence, 1);
+        assert!(advance_output_reveal(&mut output).is_ok());
+        assert_eq!(output.reveal_sequence, 2);
+
+        output.reveal_sequence = u32::MAX;
+        assert!(matches!(
+            advance_output_reveal(&mut output),
+            Err(ExtensionError::Conflict(_))
+        ));
+    }
 }

@@ -1,0 +1,117 @@
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import { ProductIcon } from "../../components/ProductIcon";
+import { useI18n } from "../i18n/I18nProvider";
+import type { OutputChannelView } from "../sideral-extensions/contracts";
+import {
+  SHELL_TERMINAL_VIEW,
+  type TerminalPanelView,
+  type TerminalShellStatus,
+} from "./panel-state";
+
+export const TERMINAL_SHELL_PANEL_ID = "terminal-shell-panel";
+export const TERMINAL_SHELL_TAB_ID = "terminal-shell-tab";
+
+interface TerminalPanelTabsProps {
+  readonly outputs: readonly OutputChannelView[];
+  readonly shellName: string | null;
+  readonly shellStatus: TerminalShellStatus;
+  readonly shellWorkingDirectory: string | null;
+  readonly view: TerminalPanelView;
+  readonly onSelectView: (view: TerminalPanelView) => void;
+}
+
+export function TerminalPanelTabs({
+  outputs,
+  shellName,
+  shellStatus,
+  shellWorkingDirectory,
+  view,
+  onSelectView,
+}: TerminalPanelTabsProps) {
+  const { t } = useI18n();
+  const shellSelected = view.kind === "shell";
+  return (
+    <>
+      <span className="terminal-panel__heading">{t("terminal.title")}</span>
+      <div className="terminal-panel__tabs" role="tablist" aria-label={t("terminal.views")}>
+        <button
+          id={TERMINAL_SHELL_TAB_ID}
+          type="button"
+          className="terminal-panel__tab"
+          role="tab"
+          aria-controls={TERMINAL_SHELL_PANEL_ID}
+          aria-selected={shellSelected}
+          tabIndex={shellSelected ? 0 : -1}
+          title={shellWorkingDirectory ?? undefined}
+          onClick={() => onSelectView(SHELL_TERMINAL_VIEW)}
+          onKeyDown={handleTerminalTabKeyDown}
+        >
+          <span className={`terminal-panel__state terminal-panel__state--${shellStatus}`} />
+          <ProductIcon name="terminal" />
+          <span>{shellName ?? t("terminal.shell")}</span>
+        </button>
+        {outputs.map((output) => {
+          const selected = view.kind === "extensionOutput" && view.resourceId === output.resourceId;
+          return (
+            <button
+              id={terminalOutputTabId(output.resourceId)}
+              type="button"
+              className="terminal-panel__tab"
+              role="tab"
+              aria-controls={terminalOutputPanelId(output.resourceId)}
+              aria-selected={selected}
+              tabIndex={selected ? 0 : -1}
+              title={`${output.extensionId} · ${output.name}`}
+              key={output.resourceId}
+              onClick={() =>
+                onSelectView({ kind: "extensionOutput", resourceId: output.resourceId })
+              }
+              onKeyDown={handleTerminalTabKeyDown}
+            >
+              <ProductIcon name="extensions" />
+              <span>{output.name}</span>
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+export function terminalOutputTabId(resourceId: string): string {
+  return `terminal-output-tab-${resourceId}`;
+}
+
+export function terminalOutputPanelId(resourceId: string): string {
+  return `terminal-output-panel-${resourceId}`;
+}
+
+function handleTerminalTabKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>): void {
+  switch (event.key) {
+    case "ArrowLeft":
+    case "ArrowRight":
+    case "Home":
+    case "End":
+      break;
+    default:
+      return;
+  }
+  const tabList = event.currentTarget.parentElement;
+  if (tabList === null) {
+    return;
+  }
+  const tabs = [...tabList.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+  const currentIndex = tabs.indexOf(event.currentTarget);
+  if (currentIndex < 0 || tabs.length === 0) {
+    return;
+  }
+  event.preventDefault();
+  const nextIndex =
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? tabs.length - 1
+        : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+  tabs[nextIndex]?.focus();
+  tabs[nextIndex]?.click();
+}

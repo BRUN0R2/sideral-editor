@@ -8,11 +8,18 @@ import type {
 } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { IconButton } from "../../components/IconButton";
-import { ProductIcon } from "../../components/ProductIcon";
 import { toApplicationError } from "../../lib/errors";
 import { useI18n } from "../i18n/I18nProvider";
+import type { OutputChannelView } from "../sideral-extensions/contracts";
 import { connectIntegratedTerminal, type IntegratedTerminalConnection } from "./backend";
 import type { TerminalEvent, TerminalSessionSnapshot } from "./contracts";
+import { ExtensionOutputView } from "./ExtensionOutputView";
+import type { TerminalPanelView, TerminalShellStatus } from "./panel-state";
+import {
+  TERMINAL_SHELL_PANEL_ID,
+  TERMINAL_SHELL_TAB_ID,
+  TerminalPanelTabs,
+} from "./TerminalPanelTabs";
 import "@xterm/xterm/css/xterm.css";
 import "./terminal.css";
 
@@ -23,12 +30,13 @@ const MIN_PANEL_HEIGHT = 160;
 const PANEL_HEIGHT_STEP = 24;
 const WORKSPACE_PANEL_RATIO = 0.7;
 
-type TerminalStatus = "exited" | "failed" | "running" | "starting" | "stopped";
-
 interface IntegratedTerminalProps {
   readonly active: boolean;
+  readonly outputs: readonly OutputChannelView[];
+  readonly view: TerminalPanelView;
   readonly workspaceRoot: string | null;
   readonly onClose: () => void;
+  readonly onSelectView: (view: TerminalPanelView) => void;
 }
 
 interface TerminalRuntime {
@@ -47,7 +55,14 @@ interface TerminalSessionRequest {
   readonly running: boolean;
 }
 
-export function IntegratedTerminal({ active, workspaceRoot, onClose }: IntegratedTerminalProps) {
+export function IntegratedTerminal({
+  active,
+  outputs,
+  view,
+  workspaceRoot,
+  onClose,
+  onSelectView,
+}: IntegratedTerminalProps) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const connectionRef = useRef<IntegratedTerminalConnection | null>(null);
@@ -59,11 +74,17 @@ export function IntegratedTerminal({ active, workspaceRoot, onClose }: Integrate
   const [panelHeight, setPanelHeight] = useState(DEFAULT_PANEL_HEIGHT);
   const [runtime, setRuntime] = useState<TerminalRuntime | null>(null);
   const [session, setSession] = useState<TerminalSessionSnapshot | null>(null);
+  const [shellStarted, setShellStarted] = useState(view.kind === "shell");
   const [sessionRequest, setSessionRequest] = useState<TerminalSessionRequest>({
     generation: 0,
     running: true,
   });
-  const [status, setStatus] = useState<TerminalStatus>("starting");
+  const [status, setStatus] = useState<TerminalShellStatus>("starting");
+  const selectedOutput =
+    view.kind === "extensionOutput"
+      ? (outputs.find((output) => output.resourceId === view.resourceId) ?? null)
+      : null;
+  const shellSelected = view.kind === "shell";
   translateRef.current = t;
 
   const reportFailure = useCallback((error: unknown) => {
@@ -73,6 +94,15 @@ export function IntegratedTerminal({ active, workspaceRoot, onClose }: Integrate
   }, []);
 
   useEffect(() => {
+    if (active && shellSelected) {
+      setShellStarted(true);
+    }
+  }, [active, shellSelected]);
+
+  useEffect(() => {
+    if (!shellStarted) {
+      return;
+    }
     const container = containerRef.current;
     if (container === null) {
       return;
@@ -118,7 +148,7 @@ export function IntegratedTerminal({ active, workspaceRoot, onClose }: Integrate
       setRuntime((current) => (current === ownedRuntime ? null : current));
       terminal.dispose();
     };
-  }, [reportFailure]);
+  }, [reportFailure, shellStarted]);
 
   useEffect(() => {
     if (runtime === null || !sessionRequest.running) {
@@ -275,7 +305,7 @@ export function IntegratedTerminal({ active, workspaceRoot, onClose }: Integrate
   }, [reportFailure, runtime, sessionRequest, workspaceRoot]);
 
   useEffect(() => {
-    if (!active || !connected || runtime === null) {
+    if (!active || !shellSelected || !connected || runtime === null) {
       return;
     }
     const animationFrame = requestAnimationFrame(() => {
@@ -290,7 +320,7 @@ export function IntegratedTerminal({ active, workspaceRoot, onClose }: Integrate
       }
     });
     return () => cancelAnimationFrame(animationFrame);
-  }, [active, connected, reportFailure, runtime]);
+  }, [active, connected, reportFailure, runtime, shellSelected]);
 
   const restart = () => {
     setSessionRequest((current) => ({
@@ -335,34 +365,40 @@ export function IntegratedTerminal({ active, workspaceRoot, onClose }: Integrate
         onPointerCancel={(event) => endPanelResize(event, panelResizeRef)}
       />
       <header className="terminal-panel__header">
-        <div className="terminal-panel__identity">
-          <span className="terminal-panel__heading">{t("terminal.title")}</span>
-          <span className={`terminal-panel__state terminal-panel__state--${status}`} />
-          <ProductIcon name="terminal" />
-          <span title={session?.workingDirectory}>{session?.shellName ?? t("terminal.shell")}</span>
-        </div>
+        <TerminalPanelTabs
+          outputs={outputs}
+          shellName={session?.shellName ?? null}
+          shellStatus={status}
+          shellWorkingDirectory={session?.workingDirectory ?? null}
+          view={view}
+          onSelectView={onSelectView}
+        />
         <div className="terminal-panel__actions">
-          <IconButton
-            className="terminal-panel__action"
-            label={t("terminal.clear")}
-            icon="clearAll"
-            disabled={runtime === null}
-            onClick={() => runtime?.terminal.clear()}
-          />
-          <IconButton
-            className="terminal-panel__action"
-            label={t("terminal.restart")}
-            icon="refresh"
-            disabled={runtime === null}
-            onClick={restart}
-          />
-          <IconButton
-            className="terminal-panel__action"
-            label={t("terminal.kill")}
-            icon="trash"
-            disabled={!connected}
-            onClick={stop}
-          />
+          {shellSelected ? (
+            <>
+              <IconButton
+                className="terminal-panel__action"
+                label={t("terminal.clear")}
+                icon="clearAll"
+                disabled={runtime === null}
+                onClick={() => runtime?.terminal.clear()}
+              />
+              <IconButton
+                className="terminal-panel__action"
+                label={t("terminal.restart")}
+                icon="refresh"
+                disabled={runtime === null}
+                onClick={restart}
+              />
+              <IconButton
+                className="terminal-panel__action"
+                label={t("terminal.kill")}
+                icon="trash"
+                disabled={!connected}
+                onClick={stop}
+              />
+            </>
+          ) : null}
           <IconButton
             className="terminal-panel__action"
             label={t("terminal.closePanel")}
@@ -372,20 +408,32 @@ export function IntegratedTerminal({ active, workspaceRoot, onClose }: Integrate
         </div>
       </header>
       <div className="terminal-panel__body">
-        <div ref={containerRef} className="terminal-panel__viewport" />
-        {status === "starting" ? (
+        <div
+          id={TERMINAL_SHELL_PANEL_ID}
+          ref={containerRef}
+          className="terminal-panel__viewport"
+          role="tabpanel"
+          aria-labelledby={TERMINAL_SHELL_TAB_ID}
+          hidden={!shellSelected}
+        />
+        {shellSelected && status === "starting" ? (
           <div className="terminal-panel__overlay" role="status">
             {t("terminal.starting")}
           </div>
         ) : null}
-        {failure !== null ? (
+        {shellSelected && failure !== null ? (
           <div className="terminal-panel__failure" role="alert">
             {failure}
           </div>
         ) : null}
-        <span className="terminal-panel__live-region" aria-live="polite">
-          {statusMessage}
-        </span>
+        {shellSelected ? (
+          <span className="terminal-panel__live-region" aria-live="polite">
+            {statusMessage}
+          </span>
+        ) : null}
+        {selectedOutput === null ? null : (
+          <ExtensionOutputView active={active} output={selectedOutput} />
+        )}
       </div>
     </section>
   );
@@ -403,7 +451,7 @@ function cssColor(styles: CSSStyleDeclaration, variable: string, fallback: strin
 }
 
 function terminalStatusMessage(
-  status: TerminalStatus,
+  status: TerminalShellStatus,
   failure: string | null,
   translate: ReturnType<typeof useI18n>["t"],
 ): string {

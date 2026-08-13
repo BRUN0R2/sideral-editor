@@ -29,6 +29,10 @@ import {
   previewForActiveDocument,
 } from "../features/sideral-extensions/preview-lifecycle";
 import { useExtensionSystem } from "../features/sideral-extensions/useExtensionSystem";
+import {
+  INITIAL_TERMINAL_PANEL_STATE,
+  reduceTerminalPanel,
+} from "../features/terminal/panel-state";
 import { UpdateModal } from "../features/updates/UpdateModal";
 import { UpdateProvider, useUpdates } from "../features/updates/UpdateProvider";
 import { type WorkbenchResourceTab, WorkbenchTabs } from "../features/workbench/WorkbenchTabs";
@@ -96,15 +100,16 @@ function Workbench({ extensionHostConnection }: AppProps) {
   const [updateOpen, setUpdateOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [jsonSchemaTrustRevision, setJsonSchemaTrustRevision] = useState(0);
-  const [terminalOpen, setTerminalOpen] = useState(false);
-  const [terminalStarted, setTerminalStarted] = useState(false);
+  const [terminalPanel, updateTerminalPanel] = useReducer(
+    reduceTerminalPanel,
+    INITIAL_TERMINAL_PANEL_STATE,
+  );
   const terminalAvailable = bootstrap.runtime === "desktop";
   const toggleTerminal = useCallback(() => {
     if (!terminalAvailable) {
       return;
     }
-    setTerminalStarted(true);
-    setTerminalOpen((current) => !current);
+    updateTerminalPanel({ kind: "toggle" });
   }, [terminalAvailable]);
   const notifyJsonSchemaTrustChange = useCallback(
     () => setJsonSchemaTrustRevision((current) => current + 1),
@@ -114,6 +119,29 @@ function Workbench({ extensionHostConnection }: AppProps) {
   useEffect(() => {
     void loadEditorPane();
   }, []);
+
+  useEffect(() => {
+    if (!terminalAvailable || extensions.outputReveal === null) {
+      return;
+    }
+    updateTerminalPanel({
+      kind: "revealOutput",
+      resourceId: extensions.outputReveal.resourceId,
+    });
+  }, [extensions.outputReveal, terminalAvailable]);
+
+  useEffect(() => {
+    const selectedView = terminalPanel.view;
+    if (
+      selectedView.kind === "extensionOutput" &&
+      !extensions.outputs.some((output) => output.resourceId === selectedView.resourceId)
+    ) {
+      updateTerminalPanel({
+        kind: "outputUnavailable",
+        resourceId: selectedView.resourceId,
+      });
+    }
+  }, [extensions.outputs, terminalPanel.view]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -346,7 +374,7 @@ function Workbench({ extensionHostConnection }: AppProps) {
           />
         </div>
 
-        <div className="workspace-content" data-terminal-open={terminalOpen || undefined}>
+        <div className="workspace-content" data-terminal-open={terminalPanel.open || undefined}>
           <WorkbenchTabs
             documents={workspace.documents}
             resourceTabs={resourceTabs}
@@ -431,12 +459,15 @@ function Workbench({ extensionHostConnection }: AppProps) {
               }}
             />
           </div>
-          {terminalStarted ? (
+          {terminalPanel.mounted ? (
             <Suspense fallback={<section className="terminal-panel" aria-busy="true" />}>
               <IntegratedTerminal
-                active={terminalOpen}
+                active={terminalPanel.open}
+                outputs={extensions.outputs}
+                view={terminalPanel.view}
                 workspaceRoot={workspace.workspaceRoot?.path ?? null}
-                onClose={() => setTerminalOpen(false)}
+                onClose={() => updateTerminalPanel({ kind: "close" })}
+                onSelectView={(view) => updateTerminalPanel({ kind: "selectView", view })}
               />
             </Suspense>
           ) : null}
@@ -447,7 +478,7 @@ function Workbench({ extensionHostConnection }: AppProps) {
         document={workspace.activeDocument}
         cursor={workspace.cursor}
         terminalAvailable={terminalAvailable}
-        terminalOpen={terminalOpen}
+        terminalOpen={terminalPanel.open}
         onToggleTerminal={toggleTerminal}
       />
 

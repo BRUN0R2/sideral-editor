@@ -272,7 +272,7 @@ export interface OutputChannelView {
   readonly extensionId: string;
   readonly name: string;
   readonly content: string;
-  readonly visible: boolean;
+  readonly revealSequence: number;
 }
 
 export interface PreviewDocumentView {

@@ -83,8 +83,7 @@
   background: #48272d;
 }
 
-.extensions-alert,
-.extensions-command-result {
+.extensions-alert {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -105,15 +104,13 @@
   background: #29191c;
 }
 
-.extensions-alert > span,
-.extensions-command-result > span {
+.extensions-alert > span {
   min-width: 0;
   flex: 1;
   overflow-wrap: anywhere;
 }
 
 .extensions-alert button,
-.extensions-command-result button,
 .extension-notice > button {
   display: grid;
   width: 26px;
@@ -126,7 +123,6 @@
 }
 
 .extensions-alert button:hover,
-.extensions-command-result button:hover,
 .extension-notice > button:hover {
   background: rgb(255 255 255 / 7%);
 }
@@ -384,8 +380,7 @@
 }
 
 .extension-details__title-line,
-.extension-details__actions,
-.extension-details__commands {
+.extension-details__actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -451,16 +446,14 @@
 }
 
 .extension-details__section,
-.extension-capabilities,
-.extensions-output {
+.extension-capabilities {
   border-top: 1px solid var(--border);
   margin-top: 24px;
   padding-top: 20px;
 }
 
 .extension-details__section h2,
-.extension-capabilities h2,
-.extensions-output h2 {
+.extension-capabilities h2 {
   margin: 0 0 12px;
   color: #d4d7dc;
   font-size: 13px;
@@ -528,50 +521,6 @@
 
 .extension-diagnostics > .extension-details__error {
   color: var(--danger);
-}
-
-.extensions-command-result {
-  position: sticky;
-  z-index: 3;
-  bottom: 12px;
-  margin-top: 16px;
-  box-shadow: 0 10px 30px rgb(0 0 0 / 25%);
-}
-
-.extensions-output {
-  display: grid;
-  gap: 8px;
-}
-
-.extensions-output h2 {
-  margin-bottom: 4px;
-}
-
-.extensions-output details {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: #20242a;
-}
-
-.extensions-output summary {
-  padding: 10px 12px;
-  cursor: pointer;
-  color: var(--text-muted);
-  font-size: 10px;
-}
-
-.extensions-output pre {
-  max-height: 260px;
-  overflow: auto;
-  border-top: 1px solid var(--border);
-  margin: 0;
-  padding: 12px;
-  color: #d3d6da;
-  font:
-    10px / 1.55 "Cascadia Code",
-    Consolas,
-    monospace;
-  white-space: pre-wrap;
 }
 
 .dialog-backdrop {
