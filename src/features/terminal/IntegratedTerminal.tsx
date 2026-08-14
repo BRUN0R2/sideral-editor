@@ -23,7 +23,7 @@ import {
 import "@xterm/xterm/css/xterm.css";
 import "./terminal.css";
 
-const DEFAULT_PANEL_HEIGHT = 280;
+const DEFAULT_PANEL_HEIGHT = 360;
 const MAX_PENDING_INPUT_CODE_UNITS = 65_536;
 const MAX_PANEL_HEIGHT = 620;
 const MIN_PANEL_HEIGHT = 160;
@@ -33,9 +33,11 @@ const WORKSPACE_PANEL_RATIO = 0.7;
 interface IntegratedTerminalProps {
   readonly active: boolean;
   readonly outputs: readonly OutputChannelView[];
+  readonly shellVisible: boolean;
   readonly view: TerminalPanelView;
   readonly workspaceRoot: string | null;
   readonly onClose: () => void;
+  readonly onCloseView: (view: TerminalPanelView) => void;
   readonly onSelectView: (view: TerminalPanelView) => void;
 }
 
@@ -58,9 +60,11 @@ interface TerminalSessionRequest {
 export function IntegratedTerminal({
   active,
   outputs,
+  shellVisible,
   view,
   workspaceRoot,
   onClose,
+  onCloseView,
   onSelectView,
 }: IntegratedTerminalProps) {
   const { t } = useI18n();
@@ -96,6 +100,9 @@ export function IntegratedTerminal({
   useEffect(() => {
     if (active && shellSelected) {
       setShellStarted(true);
+      setSessionRequest((current) =>
+        current.running ? current : { generation: current.generation + 1, running: true },
+      );
     }
   }, [active, shellSelected]);
 
@@ -333,6 +340,12 @@ export function IntegratedTerminal({
     setConnected(false);
     setStatus("stopped");
   };
+  const closeView = (closedView: TerminalPanelView) => {
+    if (closedView.kind === "shell") {
+      stop();
+    }
+    onCloseView(closedView);
+  };
   const statusMessage = terminalStatusMessage(status, failure, t);
 
   return (
@@ -369,8 +382,10 @@ export function IntegratedTerminal({
           outputs={outputs}
           shellName={session?.shellName ?? null}
           shellStatus={status}
+          shellVisible={shellVisible}
           shellWorkingDirectory={session?.workingDirectory ?? null}
           view={view}
+          onCloseView={closeView}
           onSelectView={onSelectView}
         />
         <div className="terminal-panel__actions">

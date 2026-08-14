@@ -1,7 +1,7 @@
 import { type DragEvent, useState } from "react";
 import { FileTypeIcon } from "../../components/FileTypeIcon";
-import { Icon } from "../../components/Icon";
 import { ProductIcon, type ProductIconName } from "../../components/ProductIcon";
+import { TabCloseButton } from "../../components/TabCloseButton";
 import { useI18n } from "../i18n/I18nProvider";
 import { type EditorDocument, isDocumentDirty } from "../workspace/types";
 
@@ -85,12 +85,12 @@ export function WorkbenchTabs({
         const active = document.id === activeDocumentId;
         const dirty = isDocumentDirty(document);
         const classNames = [
-          "editor-tab",
-          active ? "editor-tab--active" : "",
-          draggedDocumentId === document.id ? "editor-tab--dragging" : "",
-          dropIndex === index ? "editor-tab--drop-before" : "",
+          "workbench-tab",
+          active ? "workbench-tab--active" : "",
+          draggedDocumentId === document.id ? "workbench-tab--dragging" : "",
+          dropIndex === index ? "workbench-tab--drop-before" : "",
           dropIndex === documents.length && index === documents.length - 1
-            ? "editor-tab--drop-after"
+            ? "workbench-tab--drop-after"
             : "",
         ]
           .filter(Boolean)
@@ -99,7 +99,7 @@ export function WorkbenchTabs({
           <div key={document.id} className={classNames} data-document-tab="">
             <button
               type="button"
-              className="editor-tab-main"
+              className="workbench-tab__main"
               role="tab"
               aria-selected={active}
               aria-label={`${document.name}${dirty ? ` — ${t("editor.dirty")}` : ""}`}
@@ -131,11 +131,11 @@ export function WorkbenchTabs({
         return (
           <div
             key={tab.id}
-            className={`editor-tab editor-tab--resource ${active ? "editor-tab--active" : ""}`}
+            className={`workbench-tab workbench-tab--resource ${active ? "workbench-tab--active" : ""}`}
           >
             <button
               type="button"
-              className="editor-tab-main"
+              className="workbench-tab__main"
               role="tab"
               aria-selected={active}
               onClick={() => onActivateResource(tab.id)}
@@ -149,26 +149,6 @@ export function WorkbenchTabs({
         );
       })}
     </div>
-  );
-}
-
-function TabCloseButton({
-  label,
-  onClose,
-}: {
-  readonly label: string;
-  readonly onClose: () => void;
-}) {
-  const { t } = useI18n();
-  return (
-    <button
-      type="button"
-      className="tab-close"
-      aria-label={`${t("action.close")} ${label}`}
-      onClick={onClose}
-    >
-      <Icon name="close" size={18} />
-    </button>
   );
 }
 

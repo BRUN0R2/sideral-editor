@@ -3,7 +3,7 @@
   display: grid;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: 34px minmax(0, 1fr);
+  grid-template-rows: 48px minmax(0, 1fr);
   border-top: 1px solid var(--border-strong);
   background: var(--bg-panel);
 }
@@ -50,9 +50,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 7px;
-  padding: 0 7px 0 13px;
+  padding: 5px 7px;
   border-bottom: 1px solid var(--border);
   color: var(--text-muted);
+  background: var(--bg-tab-bar);
   user-select: none;
 }
 
@@ -66,8 +67,9 @@
 .terminal-panel__tabs {
   height: 100%;
   flex: 1;
-  align-items: stretch;
+  gap: 4px;
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
 }
 
@@ -76,46 +78,7 @@
 }
 
 .terminal-panel__tab {
-  display: flex;
-  min-width: 0;
-  max-width: 240px;
-  height: 100%;
   flex: 0 1 auto;
-  align-items: center;
-  gap: 6px;
-  padding: 0 9px;
-  border: 0;
-  border-bottom: 1px solid transparent;
-  color: var(--text-muted);
-  background: transparent;
-  font-size: 12px;
-}
-
-.terminal-panel__tab:hover {
-  color: var(--text);
-  background: rgb(255 255 255 / 4%);
-}
-
-.terminal-panel__tab[aria-selected="true"] {
-  border-bottom-color: var(--accent);
-  color: var(--text);
-  background: rgb(255 255 255 / 3%);
-}
-
-.terminal-panel__tab > span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.terminal-panel__heading {
-  flex: 0 0 auto;
-  margin-right: 3px;
-  color: var(--text);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .terminal-panel__state {
@@ -193,8 +156,8 @@
 .terminal-panel__output pre {
   margin: 0;
   font:
-    12px / 1.45 "Cascadia Mono",
-    "Cascadia Code",
+    14px / 22px "Cascadia Code",
+    "JetBrains Mono",
     Consolas,
     monospace;
   overflow-wrap: anywhere;

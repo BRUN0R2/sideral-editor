@@ -520,10 +520,10 @@
   overflow-y: hidden;
   border-bottom: 1px solid var(--border);
   padding: 5px 7px;
-  background: #20242a;
+  background: var(--bg-tab-bar);
 }
 
-.editor-tab {
+.workbench-tab {
   position: relative;
   display: flex;
   height: 38px;
@@ -540,12 +540,12 @@
     border-color 130ms ease;
 }
 
-.editor-tab--dragging {
+.workbench-tab--dragging {
   opacity: 0.48;
 }
 
-.editor-tab--drop-before::before,
-.editor-tab--drop-after::after {
+.workbench-tab--drop-before::before,
+.workbench-tab--drop-after::after {
   position: absolute;
   z-index: 1;
   inset-block: 3px;
@@ -556,30 +556,30 @@
   pointer-events: none;
 }
 
-.editor-tab--drop-before::before {
+.workbench-tab--drop-before::before {
   inset-inline-start: -3px;
 }
 
-.editor-tab--drop-after::after {
+.workbench-tab--drop-after::after {
   inset-inline-end: -3px;
 }
 
-.editor-tab:hover {
+.workbench-tab:hover {
   color: #d5d8dd;
   background: #292e35;
 }
 
-.editor-tab--active {
+.workbench-tab--active {
   color: var(--text);
   border-color: var(--border-strong);
   background: #30353d;
 }
 
-.editor-tab--resource {
+.workbench-tab--resource {
   min-width: 176px;
 }
 
-.editor-tab-main {
+.workbench-tab__main {
   display: flex;
   min-width: 0;
   flex: 1;
@@ -593,35 +593,35 @@
   font-weight: 500;
 }
 
-.editor-tab-main[draggable="true"] {
+.workbench-tab__main[draggable="true"] {
   cursor: grab;
 }
 
-.editor-tab--dragging .editor-tab-main {
+.workbench-tab--dragging .workbench-tab__main {
   cursor: grabbing;
 }
 
-.editor-tab-main .file-type-icon {
+.workbench-tab__main .file-type-icon {
   width: 20px;
   height: 20px;
   flex-basis: 20px;
   font-size: 20px;
 }
 
-.editor-tab-main .product-icon {
+.workbench-tab__main .product-icon {
   width: 20px;
   flex: 0 0 20px;
   font-size: 16px;
   text-align: center;
 }
 
-.editor-tab-main span:not(.tab-dirty, .tab-saving) {
+.workbench-tab__main span:not(.tab-dirty, .tab-saving) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.tab-close {
+.workbench-tab__close {
   display: grid;
   width: 32px;
   height: 30px;
@@ -638,13 +638,13 @@
     opacity 130ms ease;
 }
 
-.editor-tab:hover .tab-close,
-.editor-tab--active .tab-close,
-.tab-close:focus-visible {
+.workbench-tab:hover .workbench-tab__close,
+.workbench-tab--active .workbench-tab__close,
+.workbench-tab__close:focus-visible {
   opacity: 1;
 }
 
-.tab-close:hover {
+.workbench-tab__close:hover {
   color: var(--text);
   background: var(--bg-hover);
 }

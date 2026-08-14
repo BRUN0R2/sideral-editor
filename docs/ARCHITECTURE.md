@@ -193,7 +193,10 @@ extension output channel requests revelation. Extension output is rendered in
 an isolated tab and never written into the interactive PTY. The native terminal
 itself is created lazily only after the shell tab is selected. Its working
 directory is the canonical active workspace, or the canonical user home when no
-workspace is open. On Windows, the fixed selection rule chooses the first
+workspace is open. Closing the shell tab stops its owned PTY; closing an output
+tab hides only that view until the extension requests `show()` again. Closing
+the panel itself preserves its tabs and terminal session.
+On Windows, the fixed selection rule chooses the first
 `pwsh.exe` in `PATH`, with `-NoLogo -NoProfile`; when PowerShell 7 is not
 installed, it chooses only the canonical executable declared by `ComSpec`, with
 `/D`. The selected profile is returned in the session snapshot and shown in the

@@ -213,7 +213,9 @@ different extensions remain independent.
 Output channels appear as extension-owned tabs in the Sideral terminal panel.
 `show()` reveals and selects the channel; `append` and `appendLine` buffer
 bounded content, while `flush` updates the tab without repeatedly stealing
-focus. Output channels never inject text into the interactive shell PTY.
+focus. Closing a channel tab hides its workbench view without disposing the
+extension-owned channel; a later `show()` reveals it again. Output channels
+never inject text into the interactive shell PTY.
 
 Visual extensions create typed preview resources rather than sending HTML to
 the workbench. A Markdown panel receives Markdown text plus an optional source

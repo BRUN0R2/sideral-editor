@@ -104,6 +104,13 @@ function Workbench({ extensionHostConnection }: AppProps) {
     reduceTerminalPanel,
     INITIAL_TERMINAL_PANEL_STATE,
   );
+  const terminalOutputResourceIds = useMemo(
+    () => extensions.outputs.map((output) => output.resourceId),
+    [extensions.outputs],
+  );
+  const visibleTerminalOutputs = extensions.outputs.filter(
+    (output) => !terminalPanel.closedOutputIds.includes(output.resourceId),
+  );
   const terminalAvailable = bootstrap.runtime === "desktop";
   const toggleTerminal = useCallback(() => {
     if (!terminalAvailable) {
@@ -131,17 +138,11 @@ function Workbench({ extensionHostConnection }: AppProps) {
   }, [extensions.outputReveal, terminalAvailable]);
 
   useEffect(() => {
-    const selectedView = terminalPanel.view;
-    if (
-      selectedView.kind === "extensionOutput" &&
-      !extensions.outputs.some((output) => output.resourceId === selectedView.resourceId)
-    ) {
-      updateTerminalPanel({
-        kind: "outputUnavailable",
-        resourceId: selectedView.resourceId,
-      });
-    }
-  }, [extensions.outputs, terminalPanel.view]);
+    updateTerminalPanel({
+      kind: "synchronizeOutputs",
+      resourceIds: terminalOutputResourceIds,
+    });
+  }, [terminalOutputResourceIds]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -468,10 +469,18 @@ function Workbench({ extensionHostConnection }: AppProps) {
             <Suspense fallback={<section className="terminal-panel" aria-busy="true" />}>
               <IntegratedTerminal
                 active={terminalPanel.open}
-                outputs={extensions.outputs}
+                outputs={visibleTerminalOutputs}
+                shellVisible={terminalPanel.shellVisible}
                 view={terminalPanel.view}
                 workspaceRoot={workspace.workspaceRoot?.path ?? null}
                 onClose={() => updateTerminalPanel({ kind: "close" })}
+                onCloseView={(view) =>
+                  updateTerminalPanel({
+                    kind: "closeView",
+                    outputResourceIds: terminalOutputResourceIds,
+                    view,
+                  })
+                }
                 onSelectView={(view) => updateTerminalPanel({ kind: "selectView", view })}
               />
             </Suspense>
