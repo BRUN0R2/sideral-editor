@@ -24,6 +24,8 @@ use crate::sideral_extensions::error::ExtensionError;
 const PROCESS_DEADLINE: Duration = Duration::from_secs(30);
 const PROCESS_TERMINATION_DEADLINE: Duration = Duration::from_secs(2);
 const MAX_PROCESS_OUTPUT_BYTES: usize = 1024 * 1024;
+#[cfg(windows)]
+const WINDOWS_CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 enum ProcessWaitOutcome {
     Completed(Result<(std::process::ExitStatus, String, String), ExtensionError>),
@@ -77,6 +79,8 @@ impl CapabilityBroker {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
+        #[cfg(windows)]
+        command.creation_flags(WINDOWS_CREATE_NO_WINDOW);
         for name in ["SYSTEMROOT", "WINDIR", "PATH", "PATHEXT", "TEMP", "TMP"] {
             if let Some(value) = std::env::var_os(name) {
                 command.env(name, value);

@@ -121,4 +121,33 @@ describe("AMXX Pawn compiler extension", () => {
     expect(harness.outputs[0]?.content).toContain("process grant executable was not found");
     expect(harness.messages[0]?.severity).toBe("error");
   });
+
+  it("reports negative native exit codes in decimal and hexadecimal", async () => {
+    const harness = createExtensionHarness(extensionModule, {
+      activeTextDocument: {
+        uri: "file:///D:/server/Sniper.sma",
+        languageId: "amxxpawn",
+        version: 1,
+        content: "public plugin_init() {}",
+      },
+      executeProcess: async () => ({
+        exitCode: -1_073_741_502,
+        standardOutput: "",
+        standardError: "",
+      }),
+      findFiles: async () => [],
+    });
+
+    await harness.activate();
+    const result = await harness.executeCommand("sideral.amxx-pawn.compile");
+
+    expect(result).toEqual({
+      ok: false,
+      exitCode: -1_073_741_502,
+      outputUri: "file:///D:/server/Sniper.amxx",
+    });
+    const message = "amxxpc failed with exit code -1073741502 (0xC0000142).";
+    expect(harness.outputs[0]?.content).toContain(message);
+    expect(harness.messages).toEqual([{ severity: "error", message }]);
+  });
 });

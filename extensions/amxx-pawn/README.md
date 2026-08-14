@@ -19,6 +19,11 @@ compiler's own standard includes continue to resolve beside its executable.
 
 No compiler binary is redistributed by this package.
 
+Compiler output and the native exit status are written to the extension's output
+channel. Negative native statuses include their hexadecimal representation, so
+Windows status codes can be looked up without manually converting the signed
+decimal value.
+
 ## Develop
 
 From this directory:

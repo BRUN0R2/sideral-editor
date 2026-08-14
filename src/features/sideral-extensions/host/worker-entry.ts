@@ -37,6 +37,8 @@ const MAX_PENDING_OUTPUT_CODE_UNITS: number = 256 * 1024;
 const MAX_BROKER_PAYLOAD_BYTES: number = 240 * 1024;
 const MAX_COMMAND_RESULT_BYTES: number = 1024 * 1024;
 const MAX_JSON_DEPTH: number = 64;
+const MIN_PROCESS_EXIT_CODE: number = -2_147_483_648;
+const MAX_PROCESS_EXIT_CODE: number = 2_147_483_647;
 
 interface WorkerScope {
   postMessage(message: WorkerToHostMessage): void;
@@ -492,12 +494,7 @@ async function executeProcess(request: ProcessRequest): Promise<ProcessResult> {
     { grant: request.grant, inputs },
     request.signal,
   );
-  if (
-    !isRecord(result) ||
-    typeof result.exitCode !== "number" ||
-    typeof result.standardOutput !== "string" ||
-    typeof result.standardError !== "string"
-  ) {
+  if (!isProcessResult(result)) {
     throw new Error("The process broker returned an invalid response.");
   }
   return {
@@ -505,6 +502,18 @@ async function executeProcess(request: ProcessRequest): Promise<ProcessResult> {
     standardOutput: result.standardOutput,
     standardError: result.standardError,
   };
+}
+
+function isProcessResult(value: unknown): value is ProcessResult {
+  return (
+    isRecord(value) &&
+    typeof value.exitCode === "number" &&
+    Number.isSafeInteger(value.exitCode) &&
+    value.exitCode >= MIN_PROCESS_EXIT_CODE &&
+    value.exitCode <= MAX_PROCESS_EXIT_CODE &&
+    typeof value.standardOutput === "string" &&
+    typeof value.standardError === "string"
+  );
 }
 
 function createOutputChannel(name: string): OutputChannel {

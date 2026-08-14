@@ -58,7 +58,7 @@ export const activate: ExtensionModule["activate"] = (context, api) => {
       return { ok: true, exitCode: result.exitCode, outputUri };
     }
 
-    const message = `amxxpc failed with exit code ${result.exitCode}.`;
+    const message = `amxxpc failed with exit code ${formatProcessExitCode(result.exitCode)}.`;
     output.appendLine(message);
     await output.flush();
     await api.window.showErrorMessage(message);
@@ -120,4 +120,13 @@ function uriPath(uri: string): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "The compiler process failed.";
+}
+
+function formatProcessExitCode(exitCode: number): string {
+  if (exitCode >= 0) {
+    return exitCode.toString(10);
+  }
+  const unsignedExitCode = exitCode >>> 0;
+  const hexadecimal = unsignedExitCode.toString(16).toUpperCase().padStart(8, "0");
+  return `${exitCode} (0x${hexadecimal})`;
 }

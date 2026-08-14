@@ -298,7 +298,7 @@ arrow shape.
 | `storage` | Always isolated to the extension | Atomic JSON, bounded keys, values and document |
 | `configuration.get` | Declared extension configuration key | Read-only effective value; user overrides are validated and atomically persisted by the native Settings flow |
 | `network.request` | Exact origin and method | No proxy/cookies, redirects revalidated, DNS pinned, bounded UTF-8 body |
-| `processes.execute` | Exact process grant | Signed literal/typed workspace-path arguments, explicit working directory, no stdin/shell, clean environment, bounded output and deterministic reap |
+| `processes.execute` | Exact process grant | Signed literal/typed workspace-path arguments, explicit working directory, no stdin/shell, clean environment, console-independent Windows launch, bounded output and deterministic reap |
 | `window` | No extra grant | Bounded terminal-panel output channels and typed preview panels owned by the extension |
 
 Cancellation is cooperative. A canceled network request or process is stopped
@@ -364,7 +364,8 @@ by the user or its signed `PATH` default.
   `PATH`, starts it beside its standard include directory, validates the
   readable `.sma` and writable `.amxx` paths, and never invokes a shell;
 - compiler stdout/stderr and the exit code are reported in an owned output
-  channel without crashing the Worker on a normal compilation failure.
+  channel without crashing the Worker on a normal compilation failure; negative
+  native statuses include their unsigned hexadecimal representation.
 
 The extension does not redistribute AMX Mod X binaries. Install the compiler
 separately, then select `amxxpc` (`amxxpc.exe` on Windows) in Settings. Keeping
