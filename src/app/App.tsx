@@ -293,6 +293,7 @@ function Workbench({ extensionHostConnection }: AppProps) {
   });
   const activeResourceTabId =
     navigation.surface.kind === "editor" ? null : workbenchResourceId(navigation.surface);
+  const hasWorkbenchTabs = workspace.documents.length > 0 || resourceTabs.length > 0;
 
   return (
     <div className="app-shell">
@@ -374,24 +375,28 @@ function Workbench({ extensionHostConnection }: AppProps) {
           />
         </div>
 
-        <div className="workspace-content" data-terminal-open={terminalPanel.open || undefined}>
-          <WorkbenchTabs
-            documents={workspace.documents}
-            resourceTabs={resourceTabs}
-            activeDocumentId={
-              navigation.surface.kind === "editor" ? (workspace.activeDocument?.id ?? null) : null
-            }
-            activeResourceTabId={activeResourceTabId}
-            savingIds={workspace.savingIds}
-            onActivateDocument={(documentId) => {
-              workspace.setActiveDocumentId(documentId);
-              navigate({ kind: "showEditor" });
-            }}
-            onActivateResource={(resourceId) => navigate({ kind: "activateResource", resourceId })}
-            onCloseDocument={workspace.requestCloseDocument}
-            onCloseResource={(resourceId) => navigate({ kind: "closeResource", resourceId })}
-            onReorderDocument={workspace.reorderDocument}
-          />
+        <div className="workspace-content">
+          {hasWorkbenchTabs ? (
+            <WorkbenchTabs
+              documents={workspace.documents}
+              resourceTabs={resourceTabs}
+              activeDocumentId={
+                navigation.surface.kind === "editor" ? (workspace.activeDocument?.id ?? null) : null
+              }
+              activeResourceTabId={activeResourceTabId}
+              savingIds={workspace.savingIds}
+              onActivateDocument={(documentId) => {
+                workspace.setActiveDocumentId(documentId);
+                navigate({ kind: "showEditor" });
+              }}
+              onActivateResource={(resourceId) =>
+                navigate({ kind: "activateResource", resourceId })
+              }
+              onCloseDocument={workspace.requestCloseDocument}
+              onCloseResource={(resourceId) => navigate({ kind: "closeResource", resourceId })}
+              onReorderDocument={workspace.reorderDocument}
+            />
+          ) : null}
           <div className="workspace-surfaces">
             <main className="editor-area" hidden={navigation.surface.kind !== "editor"}>
               {workspace.activeDocument !== null ? (
