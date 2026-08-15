@@ -20,7 +20,7 @@ use contracts::{
     validate_terminal_size,
 };
 use session::{TerminalControlHandle, TerminalSession, TerminalSpawnRequest};
-use shell::{resolve_shell_profile, resolve_working_directory};
+use shell::{resolve_shell_candidates, resolve_working_directory};
 
 const MAX_INPUT_BYTES: usize = 1024 * 1024;
 const MAX_TERMINAL_SESSIONS: usize = 8;
@@ -79,7 +79,7 @@ impl IntegratedTerminalState {
         } = request;
         validate_terminal_size(columns, rows)?;
         let working_directory = resolve_working_directory(workspace_root, home_directory)?;
-        let shell = resolve_shell_profile()?;
+        let shells = resolve_shell_candidates();
         let session_id = self.reserve_session()?;
         let session_result = TerminalSession::spawn(TerminalSpawnRequest {
             columns,
@@ -88,7 +88,7 @@ impl IntegratedTerminalState {
             output,
             owner_window,
             rows,
-            shell,
+            shells,
             working_directory,
         });
 

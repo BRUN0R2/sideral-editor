@@ -41,6 +41,7 @@ impl From<TerminalSessionId> for String {
 pub struct TerminalSessionSnapshot {
     pub(super) id: TerminalSessionId,
     pub(super) process_id: Option<u32>,
+    pub(super) shell_fallback_reason: Option<String>,
     pub(super) shell_name: String,
     pub(super) working_directory: String,
 }

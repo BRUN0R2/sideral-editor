@@ -12,7 +12,11 @@ use super::contracts::{
     TerminalSessionId, validate_terminal_size,
 };
 #[cfg(windows)]
-use super::{IntegratedTerminalState, OwnedTerminalCreation, TerminalEvent};
+use super::{
+    IntegratedTerminalState, OwnedTerminalCreation, TerminalEvent,
+    session::{TerminalSession, TerminalSpawnRequest},
+    shell::{ShellCandidate, ShellProfile},
+};
 #[cfg(windows)]
 use crate::error::{AppError, AppResult};
 
@@ -95,7 +99,7 @@ fn runs_and_reaps_the_native_windows_shell() -> AppResult<()> {
     state.write(
         "test-window",
         &snapshot.id,
-        format!("Write-Output '{OUTPUT_MARKER}'\rexit\r"),
+        format!("echo {OUTPUT_MARKER}\rexit\r"),
     )?;
     let event = match event_receiver.recv_timeout(Duration::from_secs(10)) {
         Ok(event) => event,
@@ -139,4 +143,51 @@ fn force_closes_and_reaps_the_native_windows_shell() -> AppResult<()> {
     })?;
 
     state.close("test-window", &snapshot.id)
+}
+
+#[cfg(windows)]
+#[test]
+fn falls_back_to_command_prompt_and_reports_the_primary_failure() -> AppResult<()> {
+    let output = Channel::<Response>::new(|_| Ok(()));
+    let events = Channel::<TerminalEvent>::new(|_| Ok(()));
+    let working_directory = std::env::current_dir()
+        .map_err(|error| AppError::io("could not resolve test working directory", error))?;
+    let command_prompt = std::env::var_os("ComSpec").ok_or_else(|| {
+        AppError::Terminal("ComSpec is unavailable in the test process".to_owned())
+    })?;
+    let command_prompt = std::fs::canonicalize(command_prompt)
+        .map_err(|error| AppError::io("could not resolve the test Command Prompt", error))?;
+    let missing_directory = tempfile::tempdir()
+        .map_err(|error| AppError::io("could not create a terminal test directory", error))?;
+    let mut session = TerminalSession::spawn(TerminalSpawnRequest {
+        columns: 80,
+        events,
+        id: TerminalSessionId::try_from("terminal-1".to_owned()).map_err(AppError::Terminal)?,
+        output,
+        owner_window: "test-window".to_owned(),
+        rows: 24,
+        shells: vec![
+            ShellCandidate::Ready(ShellProfile {
+                arguments: &["-NoLogo", "-NoProfile"],
+                executable: missing_directory.path().join("pwsh.exe"),
+                name: "PowerShell 7",
+            }),
+            ShellCandidate::Ready(ShellProfile {
+                arguments: &["/D"],
+                executable: command_prompt,
+                name: "Command Prompt",
+            }),
+        ],
+        working_directory,
+    })?;
+
+    let snapshot = session.snapshot();
+    assert_eq!(snapshot.shell_name, "Command Prompt");
+    let fallback_reason = snapshot
+        .shell_fallback_reason
+        .as_deref()
+        .ok_or_else(|| AppError::Terminal("terminal fallback was not reported".to_owned()))?;
+    assert!(fallback_reason.contains("PowerShell 7"));
+    assert!(fallback_reason.contains("pwsh.exe"));
+    session.shutdown()
 }

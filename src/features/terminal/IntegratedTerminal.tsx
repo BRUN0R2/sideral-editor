@@ -380,6 +380,7 @@ export function IntegratedTerminal({
       <header className="terminal-panel__header">
         <TerminalPanelTabs
           outputs={outputs}
+          shellFallbackReason={session?.shellFallbackReason ?? null}
           shellName={session?.shellName ?? null}
           shellStatus={status}
           shellVisible={shellVisible}

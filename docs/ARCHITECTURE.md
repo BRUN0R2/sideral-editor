@@ -196,11 +196,17 @@ directory is the canonical active workspace, or the canonical user home when no
 workspace is open. Closing the shell tab stops its owned PTY; closing an output
 tab hides only that view until the extension requests `show()` again. Closing
 the panel itself preserves its tabs and terminal session.
-On Windows, the fixed selection rule chooses the first
-`pwsh.exe` in `PATH`, with `-NoLogo -NoProfile`; when PowerShell 7 is not
-installed, it chooses only the canonical executable declared by `ComSpec`, with
-`/D`. The selected profile is returned in the session snapshot and shown in the
-panel; a launched shell failure is surfaced and never triggers runtime recovery.
+On Windows, shell candidates are evaluated in deterministic `PATH` order.
+Regular `pwsh.exe` files are canonicalized; zero-length file reparse launchers
+that Windows exposes as App Execution Aliases retain their original path because
+they are process activation entries rather than readable executable files. Each
+ready candidate is validated by the real ConPTY `CreateProcessW` launch with
+`-NoLogo -NoProfile`. A failed candidate is disposed before the next candidate
+receives a fresh PTY. The canonical executable declared by `ComSpec`, with `/D`,
+is the final candidate. Every skipped or failed attempt is retained in the
+successful session snapshot, and the terminal tab marks the selected shell as a
+fallback with the reason available to the user. If every candidate fails, one
+aggregated terminal error preserves all attempt diagnostics.
 A workspace replacement serially disposes the previous PTY before creating
 another. Input and resize requests share one bounded native control queue,
 output uses a raw ordered Tauri channel, the xterm scrollback is bounded, and

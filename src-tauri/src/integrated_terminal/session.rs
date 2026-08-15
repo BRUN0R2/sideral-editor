@@ -1,6 +1,6 @@
 use std::{
     io::{Read, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -17,7 +17,7 @@ use super::{
         TerminalEvent, TerminalFailureOperation, TerminalSessionId, TerminalSessionSnapshot,
         terminal_size,
     },
-    shell::{ShellProfile, path_to_string},
+    shell::{ShellCandidate, ShellProfile, path_to_string},
 };
 use crate::error::{AppError, AppResult};
 
@@ -31,7 +31,7 @@ pub(super) struct TerminalSpawnRequest {
     pub(super) output: Channel<Response>,
     pub(super) owner_window: String,
     pub(super) rows: u16,
-    pub(super) shell: ShellProfile,
+    pub(super) shells: Vec<ShellCandidate>,
     pub(super) working_directory: PathBuf,
 }
 
@@ -57,6 +57,15 @@ struct TerminalProcessState {
     wait_failure: Mutex<Option<String>>,
 }
 
+struct StartedTerminal {
+    child: Box<dyn Child + Send + Sync>,
+    fallback_reason: Option<String>,
+    master: Box<dyn MasterPty + Send>,
+    reader: Box<dyn Read + Send>,
+    shell: ShellProfile,
+    writer: Box<dyn Write + Send>,
+}
+
 enum TerminalControl {
     Resize {
         size: PtySize,
@@ -69,21 +78,23 @@ enum TerminalControl {
     },
 }
 
-impl TerminalSession {
-    pub(super) fn spawn(request: TerminalSpawnRequest) -> AppResult<Self> {
-        let TerminalSpawnRequest {
-            columns,
-            events,
-            id,
-            output,
-            owner_window,
-            rows,
-            shell,
-            working_directory,
-        } = request;
-        let working_directory_text =
-            path_to_string(&working_directory, "terminal working directory")?;
-        let pty_system = native_pty_system();
+fn start_terminal_process(
+    columns: u16,
+    rows: u16,
+    shells: Vec<ShellCandidate>,
+    working_directory: &Path,
+) -> AppResult<StartedTerminal> {
+    let pty_system = native_pty_system();
+    let mut failures = Vec::new();
+
+    for candidate in shells {
+        let shell = match candidate {
+            ShellCandidate::Ready(shell) => shell,
+            ShellCandidate::Unavailable(reason) => {
+                failures.push(reason);
+                continue;
+            }
+        };
         let pair = pty_system
             .openpty(terminal_size(columns, rows))
             .map_err(|error| AppError::Terminal(format!("could not create native PTY: {error}")))?;
@@ -96,13 +107,64 @@ impl TerminalSession {
 
         let mut command = CommandBuilder::new(&shell.executable);
         command.args(shell.arguments);
-        command.cwd(&working_directory);
+        command.cwd(working_directory);
         command.env("TERM_PROGRAM", "Sideral Editor");
         command.env("COLORTERM", "truecolor");
-        let child = pair.slave.spawn_command(command).map_err(|error| {
-            AppError::Terminal(format!("could not start {}: {error}", shell.name))
-        })?;
+        let child = match pair.slave.spawn_command(command) {
+            Ok(child) => child,
+            Err(error) => {
+                failures.push(format!(
+                    "{} at {} could not be started: {error}",
+                    shell.name,
+                    shell.executable.display()
+                ));
+                continue;
+            }
+        };
         drop(pair.slave);
+
+        return Ok(StartedTerminal {
+            child,
+            fallback_reason: (!failures.is_empty()).then(|| failures.join("; ")),
+            master: pair.master,
+            reader,
+            shell,
+            writer,
+        });
+    }
+
+    let reason = if failures.is_empty() {
+        "no shell candidates were provided".to_owned()
+    } else {
+        failures.join("; ")
+    };
+    Err(AppError::Terminal(format!(
+        "no supported terminal shell could be started: {reason}"
+    )))
+}
+
+impl TerminalSession {
+    pub(super) fn spawn(request: TerminalSpawnRequest) -> AppResult<Self> {
+        let TerminalSpawnRequest {
+            columns,
+            events,
+            id,
+            output,
+            owner_window,
+            rows,
+            shells,
+            working_directory,
+        } = request;
+        let working_directory_text =
+            path_to_string(&working_directory, "terminal working directory")?;
+        let StartedTerminal {
+            child,
+            fallback_reason,
+            master,
+            reader,
+            shell,
+            writer,
+        } = start_terminal_process(columns, rows, shells, &working_directory)?;
 
         let process_id = child.process_id();
         let killer = Arc::new(Mutex::new(child.clone_killer()));
@@ -135,7 +197,7 @@ impl TerminalSession {
                 drop(control_sender);
                 drop(writer);
                 drop(reader);
-                drop(pair.master);
+                drop(master);
                 let cleanup = terminate_unowned_child(&child);
                 return Err(spawn_failure("wait", spawn_error, cleanup));
             }
@@ -148,7 +210,7 @@ impl TerminalSession {
             .name(format!("{worker_name}-control"))
             .spawn(move || {
                 control_terminal(
-                    pair.master,
+                    master,
                     writer,
                     control_receiver,
                     control_killer,
@@ -204,6 +266,7 @@ impl TerminalSession {
             snapshot: TerminalSessionSnapshot {
                 id,
                 process_id,
+                shell_fallback_reason: fallback_reason,
                 shell_name: shell.name.to_owned(),
                 working_directory: working_directory_text,
             },

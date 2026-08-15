@@ -7,6 +7,7 @@ export type TerminalSessionId = string & {
 export interface TerminalSessionSnapshot {
   readonly id: TerminalSessionId;
   readonly processId: number | null;
+  readonly shellFallbackReason: string | null;
   readonly shellName: string;
   readonly workingDirectory: string;
 }

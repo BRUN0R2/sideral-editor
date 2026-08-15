@@ -107,8 +107,12 @@ manutencao proporcional ao beneficio.
 * APIs devem permanecer pequenas e explicitas.
 * Entradas, saidas, efeitos colaterais e falhas devem ser sempre visiveis.
 * Nenhum fallback silencioso.
-* Nenhum caminho oculto de recuperacao de inicializacao.
-* Nenhuma falsa resiliencia escondendo falhas reais.
+* Fallback operacional e permitido somente quando possuir ordem deterministica,
+  escopo limitado e contrato explicito.
+* Toda opcao ignorada ou tentativa que falhar antes de um fallback bem-sucedido
+  deve permanecer observavel para o usuario e para o diagnostico.
+* Nenhum caminho oculto de recuperacao de inicializacao ou falsa resiliencia
+  escondendo falhas reais.
 * Erros devem aparecer de forma clara e previsivel.
 * Transicoes de estado devem ser rastreaveis.
 

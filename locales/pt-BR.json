@@ -156,6 +156,8 @@
     "terminal.resize": "Redimensionar painel do terminal",
     "terminal.views": "Visualizações do terminal",
     "terminal.shell": "Shell",
+    "terminal.shellFallbackLabel": "{shell} (fallback)",
+    "terminal.shellFallbackReason": "Motivo do fallback: {reason}",
     "terminal.outputEmpty": "Ainda não há saída.",
     "terminal.clear": "Limpar terminal",
     "terminal.restart": "Reiniciar terminal",

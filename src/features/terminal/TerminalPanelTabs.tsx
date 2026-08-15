@@ -14,6 +14,7 @@ export const TERMINAL_SHELL_TAB_ID = "terminal-shell-tab";
 
 interface TerminalPanelTabsProps {
   readonly outputs: readonly OutputChannelView[];
+  readonly shellFallbackReason: string | null;
   readonly shellName: string | null;
   readonly shellStatus: TerminalShellStatus;
   readonly shellVisible: boolean;
@@ -25,6 +26,7 @@ interface TerminalPanelTabsProps {
 
 export function TerminalPanelTabs({
   outputs,
+  shellFallbackReason,
   shellName,
   shellStatus,
   shellVisible,
@@ -35,7 +37,17 @@ export function TerminalPanelTabs({
 }: TerminalPanelTabsProps) {
   const { t } = useI18n();
   const shellSelected = view.kind === "shell";
-  const shellLabel = shellName ?? t("terminal.shell");
+  const baseShellLabel = shellName ?? t("terminal.shell");
+  const shellLabel =
+    shellName !== null && shellFallbackReason !== null
+      ? t("terminal.shellFallbackLabel", { shell: shellName })
+      : baseShellLabel;
+  const shellTitle =
+    shellFallbackReason === null
+      ? (shellWorkingDirectory ?? undefined)
+      : shellWorkingDirectory === null
+        ? t("terminal.shellFallbackReason", { reason: shellFallbackReason })
+        : `${t("terminal.shellFallbackReason", { reason: shellFallbackReason })}\n${shellWorkingDirectory}`;
   return (
     <div className="terminal-panel__tabs" role="tablist" aria-label={t("terminal.views")}>
       {shellVisible ? (
@@ -50,7 +62,7 @@ export function TerminalPanelTabs({
             aria-controls={TERMINAL_SHELL_PANEL_ID}
             aria-selected={shellSelected}
             tabIndex={shellSelected ? 0 : -1}
-            title={shellWorkingDirectory ?? undefined}
+            title={shellTitle}
             onClick={() => onSelectView(SHELL_TERMINAL_VIEW)}
             onKeyDown={handleTerminalTabKeyDown}
           >

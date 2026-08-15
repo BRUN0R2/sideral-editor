@@ -15,13 +15,24 @@ const MAX_TERMINAL_OUTPUT_BYTES = 16 * 1024;
 
 export function decodeTerminalSessionSnapshot(value: unknown): TerminalSessionSnapshot {
   const path = "integrated terminal session response";
-  const source = record(value, path, ["id", "processId", "shellName", "workingDirectory"]);
+  const source = record(value, path, [
+    "id",
+    "processId",
+    "shellFallbackReason",
+    "shellName",
+    "workingDirectory",
+  ]);
   return {
     id: decodeTerminalSessionId(required(source, "id", path), `${path}.id`),
     processId: nullable(
       required(source, "processId", path),
       `${path}.processId`,
       (item, itemPath) => safeInteger(item, itemPath, 1),
+    ),
+    shellFallbackReason: nullable(
+      required(source, "shellFallbackReason", path),
+      `${path}.shellFallbackReason`,
+      nonEmptyString,
     ),
     shellName: nonEmptyString(required(source, "shellName", path), `${path}.shellName`),
     workingDirectory: nonEmptyString(

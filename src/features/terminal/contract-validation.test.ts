@@ -11,15 +11,29 @@ describe("integrated terminal boundary", () => {
       decodeTerminalSessionSnapshot({
         id: "terminal-7",
         processId: 42,
+        shellFallbackReason: null,
         shellName: "PowerShell",
         workingDirectory: "C:\\workspace",
       }),
     ).toEqual({
       id: "terminal-7",
       processId: 42,
+      shellFallbackReason: null,
       shellName: "PowerShell",
       workingDirectory: "C:\\workspace",
     });
+  });
+
+  it("decodes an explicit shell fallback reason", () => {
+    expect(
+      decodeTerminalSessionSnapshot({
+        id: "terminal-8",
+        processId: 43,
+        shellFallbackReason: "PowerShell 7 could not be started.",
+        shellName: "Command Prompt",
+        workingDirectory: "C:\\workspace",
+      }).shellFallbackReason,
+    ).toBe("PowerShell 7 could not be started.");
   });
 
   it("rejects unknown event fields", () => {
