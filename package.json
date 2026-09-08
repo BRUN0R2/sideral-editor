@@ -67,6 +67,8 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@sideral/extension-sdk": "0.2.0",
+    "@sideral/extension-testkit": "0.2.0",
     "@biomejs/biome": "2.5.8",
     "@tauri-apps/cli": "2.11.4",
     "@types/node": "26.2.0",

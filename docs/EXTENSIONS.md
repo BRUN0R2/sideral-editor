@@ -349,6 +349,11 @@ and output. Native capabilities must be
 provided explicitly, so a test cannot accidentally access the machine. The
 official scaffold pins the matching testkit locally together with the SDK.
 
+Root type checking resolves the in-repository SDK and testkit directly from
+their sources. Generated declarations are built before workspace checks and
+runtime tests, so a clean `npm ci` never depends on stale or pre-existing
+`dist` output.
+
 ```ts
 import { createExtensionHarness } from "@sideral/extension-testkit";
 import * as extension from "../src/extension";

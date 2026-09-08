@@ -7,7 +7,8 @@
     "moduleResolution": "Bundler",
     "paths": {
       "@sideral/extension-sdk": ["./packages/sideral-extension-sdk/src/index.ts"],
-      "@sideral/extension-sdk/protocol": ["./packages/sideral-extension-sdk/src/protocol.ts"]
+      "@sideral/extension-sdk/protocol": ["./packages/sideral-extension-sdk/src/protocol.ts"],
+      "@sideral/extension-testkit": ["./packages/sideral-extension-testkit/src/index.ts"]
     },
     "allowImportingTsExtensions": false,
     "resolveJsonModule": true,
