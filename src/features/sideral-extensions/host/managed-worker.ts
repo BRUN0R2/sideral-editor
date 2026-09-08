@@ -3,6 +3,7 @@ import type {
   JsonValue,
   ProtocolFailure,
   TextDocument,
+  WindowActivityState,
   WorkerToHostMessage,
   WorkspaceAccess,
   WorkspaceContext,
@@ -171,6 +172,17 @@ export class ManagedWorker {
         protocolVersion: PROTOCOL_VERSION,
         generation: this.generation,
         context,
+      });
+    }
+  }
+
+  updateWindowActivityState(state: WindowActivityState): void {
+    if (!this.#terminated) {
+      this.#post({
+        kind: "windowActivityStateChanged",
+        protocolVersion: PROTOCOL_VERSION,
+        generation: this.generation,
+        state,
       });
     }
   }

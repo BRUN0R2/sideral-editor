@@ -1,4 +1,4 @@
-import type { JsonValue, WorkspaceContext } from "@sideral/extension-sdk";
+import type { Disposable, JsonValue, WorkspaceContext } from "@sideral/extension-sdk";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isDesktopRuntime } from "../../lib/backend";
 import { toApplicationError } from "../../lib/errors";
@@ -32,6 +32,7 @@ import type {
 import type { ExtensionHostConnection } from "./host/connection";
 import { observeOutputChannel } from "./output-lifecycle";
 import { applyPreviewChange, visiblePreviewMap } from "./preview-lifecycle";
+import { observeWindowActivity } from "./window-activity";
 
 const EMPTY_SNAPSHOT: ExtensionSnapshot = {
   sequence: 0,
@@ -311,6 +312,29 @@ export function useExtensionSystem(
       current = false;
     };
   }, [desktop, hostConnection, workspaceContext]);
+
+  useEffect(() => {
+    if (!desktop || hostConnection === null) {
+      return;
+    }
+    let current = true;
+    let observation: Disposable | null = null;
+    void hostConnection
+      .then((host) => {
+        if (current) {
+          observation = observeWindowActivity((state) => host.updateWindowActivityState(state));
+        }
+      })
+      .catch((reason: unknown) => {
+        if (current) {
+          setError(errorMessage(reason));
+        }
+      });
+    return () => {
+      current = false;
+      void observation?.dispose();
+    };
+  }, [desktop, hostConnection]);
 
   useEffect(() => {
     const liveOutputIds = new Set(outputs.keys());

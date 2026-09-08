@@ -1,6 +1,6 @@
 [package]
 name = "sideral-extension-tool"
-version = "0.1.0"
+version.workspace = true
 description = "Official scaffold, signing and inspection tool for Sideral extensions"
 edition = "2024"
 rust-version = "1.97"

@@ -7,6 +7,7 @@ use tokio::{
     sync::{mpsc, oneshot},
     task::JoinHandle,
 };
+use url::Url;
 
 use super::{Cancellation, CapabilityBroker, lock};
 use crate::sideral_extensions::error::ExtensionError;
@@ -14,6 +15,9 @@ use crate::sideral_extensions::error::ExtensionError;
 const SESSION_COMMAND_CAPACITY: usize = 8;
 const MAX_ACTIVITY_TEXT_BYTES: usize = 128;
 const MAX_ASSET_KEY_BYTES: usize = 256;
+const MAX_ACTIVITY_BUTTONS: usize = 2;
+const MAX_BUTTON_LABEL_CHARACTERS: usize = 32;
+const MAX_BUTTON_URL_CHARACTERS: usize = 512;
 const MAX_UNIX_TIMESTAMP: i64 = 253_402_300_799;
 
 #[derive(Clone, Deserialize)]
@@ -29,6 +33,8 @@ pub(super) struct DiscordActivityPayload {
     start_timestamp: Option<i64>,
     #[serde(default)]
     assets: Option<DiscordActivityAssets>,
+    #[serde(default)]
+    buttons: Vec<DiscordActivityButton>,
 }
 
 #[derive(Clone, Copy, Default, Deserialize)]
@@ -65,6 +71,13 @@ struct DiscordActivityAssets {
     small_text: Option<String>,
 }
 
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DiscordActivityButton {
+    label: String,
+    url: String,
+}
+
 #[derive(Clone)]
 struct DiscordActivity {
     activity_type: DiscordActivityType,
@@ -72,6 +85,7 @@ struct DiscordActivity {
     state: Option<String>,
     start_timestamp: Option<i64>,
     assets: Option<DiscordActivityAssets>,
+    buttons: Vec<DiscordActivityButton>,
 }
 
 #[derive(Default)]
@@ -488,12 +502,21 @@ impl DiscordActivityPayload {
                 MAX_ACTIVITY_TEXT_BYTES,
             )?;
         }
+        if self.buttons.len() > MAX_ACTIVITY_BUTTONS {
+            return Err(ExtensionError::InvalidRequest(format!(
+                "Discord activity accepts at most {MAX_ACTIVITY_BUTTONS} buttons"
+            )));
+        }
+        for button in &self.buttons {
+            validate_button(button)?;
+        }
         Ok(DiscordActivity {
             activity_type: self.activity_type,
             details: self.details,
             state: self.state,
             start_timestamp: self.start_timestamp,
             assets: self.assets,
+            buttons: self.buttons,
         })
     }
 }
@@ -518,6 +541,17 @@ impl DiscordActivity {
             insert_optional(&mut value, "small_image", &assets.small_image);
             insert_optional(&mut value, "small_text", &assets.small_text);
             activity.insert("assets".to_owned(), Value::Object(value));
+        }
+        if !self.buttons.is_empty() {
+            activity.insert(
+                "buttons".to_owned(),
+                Value::Array(
+                    self.buttons
+                        .iter()
+                        .map(|button| json!({ "label": button.label, "url": button.url }))
+                        .collect(),
+                ),
+            );
         }
         Value::Object(activity)
     }
@@ -573,6 +607,42 @@ fn validate_optional_text(
         return Err(ExtensionError::InvalidRequest(format!(
             "Discord {field} must be clean text of at most {maximum_bytes} bytes"
         )));
+    }
+    Ok(())
+}
+
+fn validate_button(button: &DiscordActivityButton) -> Result<(), ExtensionError> {
+    if button.label.is_empty()
+        || button.label.trim() != button.label
+        || button.label.chars().count() > MAX_BUTTON_LABEL_CHARACTERS
+        || button.label.chars().any(char::is_control)
+    {
+        return Err(ExtensionError::InvalidRequest(format!(
+            "Discord activity button labels must be clean text of at most {MAX_BUTTON_LABEL_CHARACTERS} characters"
+        )));
+    }
+    if button.url.is_empty()
+        || button.url.trim() != button.url
+        || button.url.chars().count() > MAX_BUTTON_URL_CHARACTERS
+        || button.url.chars().any(char::is_control)
+    {
+        return Err(ExtensionError::InvalidRequest(format!(
+            "Discord activity button URLs must contain at most {MAX_BUTTON_URL_CHARACTERS} characters"
+        )));
+    }
+    let url = Url::parse(&button.url).map_err(|_| {
+        ExtensionError::InvalidRequest(
+            "Discord activity button URLs must be valid absolute HTTPS URLs".to_owned(),
+        )
+    })?;
+    if url.scheme() != "https"
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return Err(ExtensionError::InvalidRequest(
+            "Discord activity button URLs must be credential-free absolute HTTPS URLs".to_owned(),
+        ));
     }
     Ok(())
 }
@@ -876,20 +946,46 @@ mod tests {
     const APPLICATION_ID: &str = "123456789012345678";
 
     #[test]
-    fn validates_bounded_activity_payloads() {
+    fn validates_bounded_activity_payloads() -> Result<(), Box<dyn std::error::Error>> {
         let valid = serde_json::from_value::<DiscordActivityPayload>(json!({
             "type": "playing",
-            "details": "Editing main.rs",
-            "state": "Workspace: sideral-editor",
+            "details": "🧑‍💻 main.rs",
+            "state": "📁 sideral-editor",
             "startTimestamp": 1_725_000_000,
-        }));
-        assert!(valid.is_ok_and(|payload| payload.validate().is_ok()));
+            "buttons": [{
+                "label": "Download",
+                "url": "https://github.com/BRUN0R2/sideral-editor/releases/latest"
+            }]
+        }))?;
+        let activity = valid.validate()?;
+        assert_eq!(
+            activity.rpc_value()["buttons"],
+            json!([{
+                "label": "Download",
+                "url": "https://github.com/BRUN0R2/sideral-editor/releases/latest"
+            }])
+        );
 
         let empty = serde_json::from_value::<DiscordActivityPayload>(json!({}));
         assert!(empty.is_ok_and(|payload| payload.validate().is_err()));
+        let insecure_button = serde_json::from_value::<DiscordActivityPayload>(json!({
+            "details": "Sideral",
+            "buttons": [{ "label": "Download", "url": "http://example.com" }]
+        }));
+        assert!(insecure_button.is_ok_and(|payload| payload.validate().is_err()));
+        let too_many_buttons = serde_json::from_value::<DiscordActivityPayload>(json!({
+            "details": "Sideral",
+            "buttons": [
+                { "label": "One", "url": "https://example.com/one" },
+                { "label": "Two", "url": "https://example.com/two" },
+                { "label": "Three", "url": "https://example.com/three" }
+            ]
+        }));
+        assert!(too_many_buttons.is_ok_and(|payload| payload.validate().is_err()));
         assert!(validate_application_id("12345678901234567").is_ok());
         assert!(validate_application_id("00000000000000000").is_err());
         assert!(validate_application_id("not-an-id").is_err());
+        Ok(())
     }
 
     #[tokio::test]

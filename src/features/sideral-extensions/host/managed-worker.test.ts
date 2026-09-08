@@ -1,6 +1,7 @@
 import type { HostToWorkerMessage } from "@sideral/extension-sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ManagedWorker } from "./managed-worker";
+import { EXTENSION_PROTOCOL_VERSION as PROTOCOL_VERSION } from "./protocol-version";
 
 const STRESS_ITERATIONS: number = 128;
 
@@ -50,7 +51,7 @@ describe("ManagedWorker resource ownership", () => {
       );
       const initialization = runtime.initialize({
         kind: "initialize",
-        protocolVersion: 2,
+        protocolVersion: PROTOCOL_VERSION,
         generation: index + 1,
         extensionId: `publisher.extension-${index}`,
         extensionUri: `file:///extensions/${index}`,
@@ -59,6 +60,7 @@ describe("ManagedWorker resource ownership", () => {
         commandIds: [],
         workspaceAccess: "none",
         workspaceContext: null,
+        windowActivityState: "active",
       });
 
       runtime.terminate();
@@ -89,7 +91,7 @@ describe("ManagedWorker resource ownership", () => {
       );
       const initialization = runtime.initialize({
         kind: "initialize",
-        protocolVersion: 2,
+        protocolVersion: PROTOCOL_VERSION,
         generation: 1,
         extensionId: `publisher.${suffix}`,
         extensionUri: `file:///extensions/${suffix}`,
@@ -99,6 +101,7 @@ describe("ManagedWorker resource ownership", () => {
         workspaceAccess,
         workspaceContext:
           workspaceAccess === "none" ? null : { workspaceName: null, activeDocument: null },
+        windowActivityState: "active",
       });
       void initialization.catch(() => undefined);
       return { initialization, runtime };
@@ -122,7 +125,7 @@ describe("ManagedWorker resource ownership", () => {
     ).toEqual([
       {
         kind: "workspaceContextChanged",
-        protocolVersion: 2,
+        protocolVersion: PROTOCOL_VERSION,
         generation: 1,
         context,
       },
@@ -132,5 +135,48 @@ describe("ManagedWorker resource ownership", () => {
     permitted.terminate();
     await expect(deniedOwner.initialization).rejects.toThrow("was terminated");
     await expect(permittedOwner.initialization).rejects.toThrow("was terminated");
+  });
+
+  it("forwards window activity transitions without a manifest permission", async () => {
+    const runtime = new ManagedWorker(
+      "publisher.activity",
+      1,
+      "a".repeat(64),
+      "blob:activity",
+      "none",
+      async () => undefined,
+      async () => undefined,
+    );
+    const initialization = runtime.initialize({
+      kind: "initialize",
+      protocolVersion: PROTOCOL_VERSION,
+      generation: 1,
+      extensionId: "publisher.activity",
+      extensionUri: "file:///extensions/activity",
+      storageUri: "file:///storage/activity",
+      bundleUrl: "blob:activity",
+      commandIds: [],
+      workspaceAccess: "none",
+      workspaceContext: null,
+      windowActivityState: "active",
+    });
+    void initialization.catch(() => undefined);
+
+    runtime.updateWindowActivityState("idle");
+
+    expect(
+      FakeWorker.instances[0]?.messages.filter(
+        (message) => message.kind === "windowActivityStateChanged",
+      ),
+    ).toEqual([
+      {
+        kind: "windowActivityStateChanged",
+        protocolVersion: PROTOCOL_VERSION,
+        generation: 1,
+        state: "idle",
+      },
+    ]);
+    runtime.terminate();
+    await expect(initialization).rejects.toThrow("was terminated");
   });
 });

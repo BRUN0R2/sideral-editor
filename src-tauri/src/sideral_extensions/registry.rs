@@ -959,10 +959,9 @@ mod tests {
             ExtensionError::io("could not create registry E2E directory", error)
         })?;
         let root = directory.path().join("extensions");
-        let mut registry = ExtensionRegistry::load(
-            root.clone(),
-            Version::parse("0.1.0").map_err(|error| ExtensionError::Runtime(error.to_string()))?,
-        )?;
+        let sideral_version = Version::parse(env!("CARGO_PKG_VERSION"))
+            .map_err(|error| ExtensionError::Runtime(error.to_string()))?;
+        let mut registry = ExtensionRegistry::load(root.clone(), sideral_version.clone())?;
         let package = registry.inspect_package(&package_path)?;
         let view = registry.package_install_view(&package);
         let extension_id = view.id.clone();
@@ -998,10 +997,7 @@ mod tests {
                 .any(|language| language.id == *expected)
         }));
 
-        let restored = ExtensionRegistry::load(
-            root,
-            Version::parse("0.1.0").map_err(|error| ExtensionError::Runtime(error.to_string()))?,
-        )?;
+        let restored = ExtensionRegistry::load(root, sideral_version)?;
         let restored_snapshot = restored.snapshot(&BTreeMap::new());
         assert_eq!(restored_snapshot.extensions.len(), 1);
         assert_eq!(restored_snapshot.extensions[0].id, extension_id);

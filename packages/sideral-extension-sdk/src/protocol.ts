@@ -4,10 +4,11 @@ import type {
   JsonObject,
   JsonValue,
   TextDocument,
+  WindowActivityState,
   WorkspaceContext,
 } from "./runtime";
 
-export type ExtensionProtocolVersion = 2;
+export type ExtensionProtocolVersion = 3;
 
 export type ExtensionRuntimeState =
   | "dormant"
@@ -73,10 +74,15 @@ export type HostToWorkerMessage =
       readonly commandIds: readonly string[];
       readonly workspaceAccess: WorkspaceAccess;
       readonly workspaceContext: WorkspaceContext | null;
+      readonly windowActivityState: WindowActivityState;
     })
   | (WorkerEnvelope & {
       readonly kind: "workspaceContextChanged";
       readonly context: WorkspaceContext;
+    })
+  | (WorkerEnvelope & {
+      readonly kind: "windowActivityStateChanged";
+      readonly state: WindowActivityState;
     })
   | (WorkerEnvelope & {
       readonly kind: "activate";

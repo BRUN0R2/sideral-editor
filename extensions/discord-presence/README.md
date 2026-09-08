@@ -2,7 +2,7 @@
 
 First-party Sideral extension that publishes the active workspace and document names to the local Discord desktop client. It never receives document contents or full filesystem paths.
 
-Requires Sideral Editor `^0.1.0`.
+Requires Sideral Editor `^0.1.1`.
 
 ## Use
 
@@ -20,6 +20,12 @@ Presence** from the command palette for explicit control.
 - Starts native Discord synchronization in a controller-owned background queue,
   so external IPC latency never blocks Worker activation.
 - Updates on workspace, active document, or language changes without polling.
+- Shows `📁 <workspace>`, `🧑‍💻 <document>` and, after five minutes
+  without window interaction, `Stopped for a coffee ☕`.
+- Shows one `Download` button that opens the latest official Sideral Editor
+  release on GitHub.
+- Restores the document activity immediately after keyboard, pointer, wheel, or
+  window-focus activity; no input content leaves the editor.
 - Deduplicates identical activities and keeps a stable session start time.
 - Persists the explicit toggle state.
 - Clears and closes its owned IPC session when disabled, reloaded, or shut down.
@@ -28,6 +34,9 @@ Presence** from the command palette for explicit control.
 The native broker implements Discord's documented local RPC framing and
 `SET_ACTIVITY` command. The extension has only `workspace: metadata` and
 `discordPresence` capabilities.
+
+Discord shows Rich Presence buttons to other users; it does not show the owner
+their own button in their profile preview.
 
 Protocol references: [Discord RPC](https://github.com/discord/discord-api-docs/blob/main/developers/topics/rpc.mdx)
 and [Setting Rich Presence](https://docs.discord.com/developers/discord-social-sdk/development-guides/setting-rich-presence).

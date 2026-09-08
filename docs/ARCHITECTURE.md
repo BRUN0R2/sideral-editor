@@ -182,6 +182,7 @@ within their own panel through the validated `appearance.scrollbar` contract.
 | Temporary files | Rust RAII | Closed automatically; persisted atomically |
 | Extension client channels | Native extension service | Removed by connection ID; failed channels are pruned |
 | Extension supervisor session | Main document | Session-scoped disconnect on document teardown; native invalidation on main-window destruction |
+| Window activity observer | Extension-system hook | Capture listeners and its single idle timer are removed with the owning hook |
 | Extension Worker | Host supervisor | Graceful reverse-order disposal, then unconditional termination |
 | Worker bundle Blob URL | `ManagedWorker` | Revoked with Worker termination |
 | Broker request | Native capability broker | Bounded semaphore slot plus generation/request cancellation record |

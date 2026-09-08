@@ -9,8 +9,8 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@sideral/extension-sdk": "0.1.0",
-    "@sideral/extension-testkit": "0.1.0",
+    "@sideral/extension-sdk": "0.2.0",
+    "@sideral/extension-testkit": "0.2.0",
     "@types/node": "26.2.0",
     "rolldown": "1.2.3",
     "typescript": "7.0.2",

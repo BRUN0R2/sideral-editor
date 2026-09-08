@@ -3,6 +3,11 @@
 Sideral Editor uses the official Tauri 2 updater. Development builds do not
 invent a signing identity or silently enable updates.
 
+Users can download the latest published Windows release from
+[GitHub Releases](https://github.com/BRUN0R2/sideral-editor/releases/latest).
+The first-party Discord presence exposes the same destination through its sole
+`Download` button.
+
 ## Configure releases
 
 1. Generate and securely back up a Tauri updater signing key pair.

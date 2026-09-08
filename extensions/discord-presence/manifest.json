@@ -3,9 +3,9 @@
   "apiVersion": 1,
   "id": "sideral.discord-presence",
   "displayName": "Discord Work Presence",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "engines": {
-    "sideral": "^0.1.0"
+    "sideral": "^0.1.1"
   },
   "description": "Shows the current Sideral workspace and active document on Discord.",
   "license": "MIT",

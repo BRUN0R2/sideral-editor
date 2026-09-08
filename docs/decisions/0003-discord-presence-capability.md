@@ -30,7 +30,13 @@ configure it.
   executable property.
 - API v1 exposes typed `setActivity` and `clearActivity` methods. Rust validates
   the capability again, resolves the effective Application ID and accepts only
-  the supported activity types and bounded text, timestamp and asset fields.
+  the supported activity types and bounded text, timestamp, asset and action
+  button fields. Buttons are limited to Discord's two-button, 32-character
+  label and 512-character URL bounds, and Sideral narrows URLs to
+  credential-free absolute HTTPS links.
+- API v1 exposes only `active` and `idle` window states. A host-owned five-minute
+  timer observes interaction categories without forwarding keystrokes, pointer
+  coordinates or input contents, and sends only state transitions to Workers.
 - The native broker implements Discord's documented little-endian RPC frames
   over the ten deterministic Windows named-pipe candidates. It performs a
   version-1 handshake, answers ping frames and sends `SET_ACTIVITY`; every frame
@@ -47,13 +53,18 @@ configure it.
   identical payloads, persists its explicit toggle and starts synchronization
   on a controller-owned serialized queue after synchronous Worker activation.
   External Discord latency therefore does not inflate activation time, while
-  failures remain observable through the owned output channel.
-- The internal host/Worker protocol moves atomically to version 2. No legacy
+  failures remain observable through the owned output channel. Its English
+  activity lines use folder, developer and coffee emojis for workspace,
+  document and idle states. It includes one `Download` button linked to the
+  latest official GitHub release.
+- The internal host/Worker protocol moves atomically to version 3. No legacy
   protocol decoder or compatibility branch is retained.
 
 ## Consequences
 
 - Source text and full paths never reach the Discord extension or Discord.
+- Raw window input never reaches an extension; only an `active` or `idle`
+  transition crosses the isolated Worker boundary.
 - The named pipe inherits Discord RPC's same-desktop-session trust boundary;
   only public application and activity metadata are sent through it.
 - Installation review shows both metadata and Discord authorities explicitly.

@@ -4,12 +4,13 @@ import {
   decodeHostToWorkerMessage,
   decodeWorkerToHostMessage,
 } from "./protocol-validation";
+import { EXTENSION_PROTOCOL_VERSION as PROTOCOL_VERSION } from "./protocol-version";
 
 describe("extension protocol boundary", () => {
   it("decodes an exact native activation instruction", () => {
     const instruction = {
       kind: "activateExtension",
-      protocolVersion: 2,
+      protocolVersion: PROTOCOL_VERSION,
       requestId: "activate-1",
       extensionId: "acme.sample",
       generation: 2,
@@ -31,7 +32,7 @@ describe("extension protocol boundary", () => {
     expect(() =>
       decodeHostInstruction({
         kind: "cancelRequest",
-        protocolVersion: 2,
+        protocolVersion: PROTOCOL_VERSION,
         requestId: "request-1",
         extensionId: "acme.sample",
         generation: 1,
@@ -43,7 +44,7 @@ describe("extension protocol boundary", () => {
   it("decodes bounded workspace metadata without accepting paths or contents", () => {
     const message = {
       kind: "workspaceContextChanged",
-      protocolVersion: 2,
+      protocolVersion: PROTOCOL_VERSION,
       generation: 3,
       context: {
         workspaceName: "sideral-editor",
@@ -67,7 +68,7 @@ describe("extension protocol boundary", () => {
     expect(() =>
       decodeWorkerToHostMessage({
         kind: "commandResult",
-        protocolVersion: 2,
+        protocolVersion: PROTOCOL_VERSION,
         generation: 1,
         requestId: "command-1",
         result: null,
@@ -80,7 +81,7 @@ describe("extension protocol boundary", () => {
     expect(() =>
       decodeHostToWorkerMessage({
         kind: "brokerResponse",
-        protocolVersion: 2,
+        protocolVersion: PROTOCOL_VERSION,
         generation: 1,
         requestId: "broker-1",
         result: undefined,
@@ -92,12 +93,24 @@ describe("extension protocol boundary", () => {
     expect(() =>
       decodeWorkerToHostMessage({
         kind: "brokerRequest",
-        protocolVersion: 2,
+        protocolVersion: PROTOCOL_VERSION,
         generation: 1,
         requestId: "broker-1",
         method: "storage.get",
         payload: { invalid: Number.NaN },
       }),
     ).toThrow(/finite number/u);
+  });
+
+  it("decodes only explicit window activity states", () => {
+    const message = {
+      kind: "windowActivityStateChanged",
+      protocolVersion: PROTOCOL_VERSION,
+      generation: 3,
+      state: "idle",
+    } as const;
+
+    expect(decodeHostToWorkerMessage(message)).toEqual(message);
+    expect(() => decodeHostToWorkerMessage({ ...message, state: "away" })).toThrow(/active, idle/u);
   });
 });

@@ -5,7 +5,7 @@ use sideral_extension_core::{
     KeybindingContribution, LanguageContribution, PermissionSet, WorkspaceAccess,
 };
 
-pub const EXTENSION_PROTOCOL_VERSION: u16 = 2;
+pub const EXTENSION_PROTOCOL_VERSION: u16 = 3;
 pub const WORKER_START_DEADLINE_MILLISECONDS: u64 = 5_000;
 pub const WORKER_ACTIVATION_DEADLINE_MILLISECONDS: u64 = 10_000;
 pub const COMMAND_EXECUTION_DEADLINE_MILLISECONDS: u64 = 30_000;

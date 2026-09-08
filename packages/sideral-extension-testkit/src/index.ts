@@ -17,6 +17,8 @@ import type {
   ProcessResult,
   TextDocument,
   TextEditorCommandHandler,
+  WindowActivityState,
+  WindowActivityStateListener,
   WorkspaceContext,
   WorkspaceContextListener,
 } from "@sideral/extension-sdk";
@@ -50,6 +52,7 @@ export interface ExtensionHarnessOptions {
   readonly storage?: Readonly<Record<string, JsonValue>>;
   readonly activeTextDocument?: TextDocument;
   readonly workspaceContext?: WorkspaceContext;
+  readonly windowActivityState?: WindowActivityState;
   readonly readTextDocument?: (uri: string, signal?: AbortSignal) => Promise<TextDocument>;
   readonly writeTextDocument?: (
     uri: string,
@@ -81,6 +84,7 @@ export interface ExtensionHarness {
     ...arguments_: readonly JsonValue[]
   ): Promise<JsonValue | undefined>;
   updateWorkspaceContext(context: WorkspaceContext): Promise<void>;
+  updateWindowActivityState(state: WindowActivityState): Promise<void>;
   dispose(): Promise<void>;
 }
 
@@ -104,9 +108,11 @@ class Harness implements ExtensionHarness {
   readonly #commandStack: string[] = [];
   readonly #subscriptions: Disposable[] = [];
   readonly #cancellation = new AbortController();
+  readonly #windowActivityStateListeners = new Set<WindowActivityStateListener>();
   readonly #workspaceContextListeners = new Set<WorkspaceContextListener>();
   readonly #discordActivityUpdates: (DiscordActivity | null)[] = [];
   #workspaceContext: WorkspaceContext;
+  #windowActivityState: WindowActivityState;
   #active = false;
   #disposed = false;
   #extensionOperationQueue = Promise.resolve();
@@ -122,6 +128,7 @@ class Harness implements ExtensionHarness {
     this.#workspaceContext = cloneWorkspaceContext(
       options.workspaceContext ?? { workspaceName: null, activeDocument: null },
     );
+    this.#windowActivityState = options.windowActivityState ?? "active";
   }
 
   get messages(): readonly TestMessage[] {
@@ -193,6 +200,26 @@ class Harness implements ExtensionHarness {
     await operation;
   }
 
+  async updateWindowActivityState(state: WindowActivityState): Promise<void> {
+    if (this.#disposed) {
+      throw new Error("The extension harness is disposed.");
+    }
+    if (state === this.#windowActivityState) {
+      return;
+    }
+    const operation = this.#extensionOperationQueue.then(async () => {
+      this.#windowActivityState = state;
+      for (const listener of this.#windowActivityStateListeners) {
+        await listener(state);
+      }
+    });
+    this.#extensionOperationQueue = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    await operation;
+  }
+
   async dispose(): Promise<void> {
     if (this.#disposal === null) {
       this.#disposed = true;
@@ -218,6 +245,7 @@ class Harness implements ExtensionHarness {
       }
     }
     this.#commands.clear();
+    this.#windowActivityStateListeners.clear();
     this.#workspaceContextListeners.clear();
     if (failures.length > 0) {
       throw new AggregateError(failures, "One or more extension cleanup operations failed.");
@@ -304,6 +332,11 @@ class Harness implements ExtensionHarness {
         keys: async () => [...this.#storage.keys()].sort(),
       },
       window: {
+        getActivityState: () => this.#windowActivityState,
+        onDidChangeActivityState: (listener) => {
+          this.#windowActivityStateListeners.add(listener);
+          return once(() => this.#windowActivityStateListeners.delete(listener));
+        },
         createOutputChannel: (name) => {
           const output = new MutableOutputChannel(name);
           this.#outputs.push(output);

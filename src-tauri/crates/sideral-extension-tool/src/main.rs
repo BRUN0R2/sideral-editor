@@ -565,7 +565,7 @@ fn scaffold_manifest(extension_id: &str, command_id: &str) -> String {
   "id": "{extension_id}",
   "displayName": "My Sideral Extension",
   "version": "0.1.0",
-  "engines": {{ "sideral": "^0.1.0" }},
+  "engines": {{ "sideral": "^0.1.1" }},
   "runtime": {{ "kind": "worker", "entry": "dist/extension.mjs" }},
   "contributes": {{
     "commands": [{{ "id": "{command_id}", "title": "Say hello" }}]
@@ -678,7 +678,7 @@ const SCAFFOLD_TSCONFIG: &str = r#"{
 
 const EMBEDDED_SDK_PACKAGE: &str = r#"{
   "name": "@sideral/extension-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "types": "./src/index.ts",
@@ -691,7 +691,7 @@ const EMBEDDED_SDK_PACKAGE: &str = r#"{
 
 const EMBEDDED_TESTKIT_PACKAGE: &str = r#"{
   "name": "@sideral/extension-testkit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -701,7 +701,7 @@ const EMBEDDED_TESTKIT_PACKAGE: &str = r#"{
     }
   },
   "peerDependencies": {
-    "@sideral/extension-sdk": "0.1.0"
+    "@sideral/extension-sdk": "0.2.0"
   }
 }
 "#;
@@ -736,6 +736,7 @@ mod tests {
         let embedded_sdk =
             fs::read_to_string(project.join("vendor/sideral-extension-sdk/src/runtime.ts"))?;
         assert!(embedded_sdk.contains("export interface ProcessRequest"));
+        assert!(embedded_sdk.contains("export type WindowActivityState"));
         assert!(project.join("src/extension.test.ts").is_file());
 
         fs::create_dir(project.join("dist"))?;

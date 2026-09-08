@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { HostHandshake, HostInstruction } from "../contracts";
+import { EXTENSION_PROTOCOL_VERSION as PROTOCOL_VERSION } from "./protocol-version";
 
 const mocks = vi.hoisted(() => ({
   channels: [] as Array<{ onmessage: (message: unknown) => void }>,
@@ -49,7 +50,7 @@ vi.mock("./supervisor", () => ({
 import { connectExtensionHost } from "./connection";
 
 const HANDSHAKE: HostHandshake = {
-  protocolVersion: 2,
+  protocolVersion: PROTOCOL_VERSION,
   supportedApiVersions: [1],
   sessionId: 7,
   sessionToken: "native-session-token",
@@ -57,7 +58,7 @@ const HANDSHAKE: HostHandshake = {
 };
 const PENDING_INSTRUCTION: HostInstruction = {
   kind: "disposeAll",
-  protocolVersion: 2,
+  protocolVersion: PROTOCOL_VERSION,
   reason: "applicationShutdown",
   graceMilliseconds: 2_000,
 };

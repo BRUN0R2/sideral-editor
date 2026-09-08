@@ -21,8 +21,14 @@ describe("Discord Work Presence", () => {
     expect(harness.discordActivityUpdates).toHaveLength(1);
     expect(harness.discordActivityUpdates[0]).toMatchObject({
       type: "playing",
-      details: "Editing main.rs",
-      state: "Workspace: sideral-editor",
+      details: "🧑‍💻 main.rs",
+      state: "📁 sideral-editor",
+      buttons: [
+        {
+          label: "Download",
+          url: "https://github.com/BRUN0R2/sideral-editor/releases/latest",
+        },
+      ],
     });
 
     const nextContext = {
@@ -33,11 +39,40 @@ describe("Discord Work Presence", () => {
     await harness.updateWorkspaceContext(nextContext);
     expect(harness.discordActivityUpdates).toHaveLength(2);
     expect(harness.discordActivityUpdates[1]).toMatchObject({
-      details: "Editing worker-entry.ts",
+      details: "🧑‍💻 worker-entry.ts",
     });
 
     await harness.dispose();
     expect(harness.discordActivityUpdates.at(-1)).toBeNull();
+  });
+
+  it("shows a coffee stop while the Sideral window is idle", async () => {
+    const context = {
+      workspaceName: "sideral-editor",
+      activeDocument: { name: "main.rs", languageId: "rust" },
+    } as const;
+    const harness = createExtensionHarness(
+      { activate },
+      {
+        extensionId: "sideral.discord-presence",
+        workspaceContext: context,
+      },
+    );
+
+    await harness.activate();
+    await harness.updateWorkspaceContext(context);
+    await harness.updateWindowActivityState("idle");
+    expect(harness.discordActivityUpdates.at(-1)).toMatchObject({
+      details: "Stopped for a coffee ☕",
+      state: "📁 sideral-editor",
+    });
+
+    await harness.updateWindowActivityState("active");
+    expect(harness.discordActivityUpdates.at(-1)).toMatchObject({
+      details: "🧑‍💻 main.rs",
+      state: "📁 sideral-editor",
+    });
+    await harness.dispose();
   });
 
   it("publishes immediately without user configuration", async () => {

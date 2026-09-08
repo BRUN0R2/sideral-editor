@@ -1,6 +1,6 @@
 {
   "name": "@sideral/extension-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Type-only contracts for modern Sideral extensions",
   "type": "module",
   "sideEffects": false,

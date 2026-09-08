@@ -1,6 +1,6 @@
 [package]
 name = "sideral-extension-package"
-version = "0.1.0"
+version.workspace = true
 description = "Signed archive validation for Sideral extensions"
 edition = "2024"
 rust-version = "1.97"

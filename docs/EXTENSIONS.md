@@ -56,7 +56,7 @@ enter the `.sideralx` package.
   "id": "acme.sample",
   "displayName": "Acme Sample",
   "version": "0.1.0",
-  "engines": { "sideral": "^0.1.0" },
+  "engines": { "sideral": "^0.1.1" },
   "runtime": { "kind": "worker", "entry": "dist/extension.mjs" },
   "activationEvents": ["onLanguage:sample-text"],
   "permissions": {
@@ -171,12 +171,21 @@ name plus the active document name and language ID. It does not authorize file
 reads, searches, writes, full paths or contents. Listener promises are processed
 serially and should be registered in `context.subscriptions`.
 
+`api.window.getActivityState()` and `onDidChangeActivityState()` expose only the
+bounded `active` and `idle` states, never keystrokes, pointer coordinates or
+input contents. One host-owned timer transitions to idle after five minutes
+without keyboard, pointer, wheel or focus activity. Only state transitions cross
+the Worker boundary, and listeners run on the same serialized operation lane.
+
 Discord Rich Presence is explicit and local. A manifest binds
 `permissions.discordPresence.applicationId` to either a signed literal or a
 declared `text` configuration key. `api.discordPresence.setActivity()` accepts
-bounded typed activity fields; `clearActivity()` releases the activity. Rust
-revalidates the signed grant, application ID, field limits and activity type,
-then owns Discord's named-pipe session for exactly one extension generation.
+bounded typed activity fields and up to two action buttons; `clearActivity()`
+releases the activity. Button labels contain at most 32 characters. Button URLs
+contain at most 512 characters and must be credential-free absolute HTTPS URLs.
+Rust revalidates the signed grant, application ID, field limits, URLs and
+activity type, then owns Discord's named-pipe session for exactly one extension
+generation.
 Only one live extension may own the process-wide Discord presence; another
 extension receives an explicit conflict instead of silently replacing it.
 
@@ -323,10 +332,10 @@ arrow shape.
 | `workspace.findFiles` | `workspace: read` or `readWrite` | Forward-slash glob, deterministic order, bounded result/traversal |
 | `storage` | Always isolated to the extension | Atomic JSON, bounded keys, values and document |
 | `configuration.get` | Declared extension configuration key | Read-only effective value; user overrides are validated and atomically persisted by the native Settings flow |
-| `discordPresence.setActivity`, `discordPresence.clearActivity` | `discordPresence` with literal or text-configured Application ID | Official local RPC framing, bounded fields, generation ownership, finite I/O and cancellation |
+| `discordPresence.setActivity`, `discordPresence.clearActivity` | `discordPresence` with literal or text-configured Application ID | Official local RPC framing, bounded fields and HTTPS buttons, generation ownership, finite I/O and cancellation |
 | `network.request` | Exact origin and method | No proxy/cookies, redirects revalidated, DNS pinned, bounded UTF-8 body |
 | `processes.execute` | Exact process grant | Signed literal/typed workspace-path arguments, explicit working directory, no stdin/shell, clean environment, console-independent Windows launch, bounded output and deterministic reap |
-| `window` | No extra grant | Bounded terminal-panel output channels and typed preview panels owned by the extension |
+| `window` | No extra grant | Typed active/idle transitions plus bounded output channels and preview panels owned by the extension |
 
 Cancellation is cooperative. A canceled network request or process is stopped
 and a canceled process is reaped. A remote server may still have observed a
@@ -416,6 +425,9 @@ and native broker, verify a non-empty `.amxx`, and remove the temporary tree.
   not need a Developer Portal account, bot token, secret or OAuth flow;
 - active-document changes are event-driven and identical activities are
   deduplicated;
+- workspace, document and idle lines use `📁`, `🧑‍💻` and `☕` respectively;
+- five minutes without Sideral window activity changes the presence to
+  `Stopped for a coffee ☕`; the next interaction restores it immediately;
 - Worker activation does not await Discord IPC; controller-owned initialization
   continues on the same serialized queue and remains observable and disposable;
 - Toggle persists an explicit enabled state and Refresh retries connectivity
@@ -431,10 +443,12 @@ See `extensions/discord-presence/README.md` for setup and development commands.
 
 `manifestVersion`, `apiVersion` and the host protocol are independent. Manifest
 and API version 1 reject unknown versions instead of guessing a fallback. The
-internal host/Worker protocol is version 2 and is upgraded atomically with the
+internal host/Worker protocol is version 3 and is upgraded atomically with the
 editor; there is no compatibility branch. `engines.sideral`
 is checked during project validation and packaging, then again before
 installation, enablement, rollback and bundle loading.
+The editor and official extension CLI inherit one Cargo workspace version, so
+their engine-compatibility target cannot drift between releases.
 
 The Extensions view reports the runtime state, last error, activation count and
 duration, and command count, failures and last duration. A failed extension

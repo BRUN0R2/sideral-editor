@@ -6,6 +6,7 @@ import type {
   CommandInvocation,
   ConfigurationContribution,
   ConfigurationProperty,
+  ExtensionProtocolVersion,
   JsonObject,
   JsonValue,
   LanguageContribution,
@@ -215,7 +216,7 @@ export type HostInstruction =
 export type HostEvent =
   | {
       readonly kind: "stateChanged";
-      readonly protocolVersion: 2;
+      readonly protocolVersion: ExtensionProtocolVersion;
       readonly extensionId: string;
       readonly generation: number;
       readonly state: ExtensionRuntimeState;
@@ -225,7 +226,7 @@ export type HostEvent =
     }
   | {
       readonly kind: "commandResult";
-      readonly protocolVersion: 2;
+      readonly protocolVersion: ExtensionProtocolVersion;
       readonly requestId: string;
       readonly extensionId: string;
       readonly generation: number;
@@ -234,7 +235,7 @@ export type HostEvent =
     }
   | {
       readonly kind: "activated";
-      readonly protocolVersion: 2;
+      readonly protocolVersion: ExtensionProtocolVersion;
       readonly requestId: string;
       readonly extensionId: string;
       readonly generation: number;
@@ -242,7 +243,7 @@ export type HostEvent =
     }
   | {
       readonly kind: "deactivated";
-      readonly protocolVersion: 2;
+      readonly protocolVersion: ExtensionProtocolVersion;
       readonly requestId: string;
       readonly extensionId: string;
       readonly generation: number;
@@ -250,12 +251,12 @@ export type HostEvent =
     }
   | {
       readonly kind: "hostFault";
-      readonly protocolVersion: 2;
+      readonly protocolVersion: ExtensionProtocolVersion;
       readonly error: ProtocolFailure;
     };
 
 export interface BrokerRequest {
-  readonly protocolVersion: 2;
+  readonly protocolVersion: ExtensionProtocolVersion;
   readonly extensionId: string;
   readonly generation: number;
   readonly requestId: string;

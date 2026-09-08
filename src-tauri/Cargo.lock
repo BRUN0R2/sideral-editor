@@ -3827,7 +3827,7 @@ checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
 name = "sideral-editor"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.23.1",
  "getrandom 0.4.3",
@@ -3855,7 +3855,7 @@ dependencies = [
 
 [[package]]
 name = "sideral-extension-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "semver",
  "serde",
@@ -3866,7 +3866,7 @@ dependencies = [
 
 [[package]]
 name = "sideral-extension-package"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.23.1",
  "ed25519-dalek",
@@ -3881,7 +3881,7 @@ dependencies = [
 
 [[package]]
 name = "sideral-extension-tool"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.23.1",
  "ed25519-dalek",

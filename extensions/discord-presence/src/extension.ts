@@ -8,6 +8,9 @@ const extension: ExtensionModule = {
     const contextSubscription = api.workspace.onDidChangeContext((workspaceContext) =>
       controller.contextChanged(workspaceContext),
     );
+    const activitySubscription = api.window.onDidChangeActivityState((state) =>
+      controller.activityStateChanged(state),
+    );
     const toggleCommand = api.commands.registerCommand("sideral.discord-presence.toggle", () =>
       controller.toggle(),
     );
@@ -20,6 +23,7 @@ const extension: ExtensionModule = {
     context.subscriptions.add(
       output,
       contextSubscription,
+      activitySubscription,
       toggleCommand,
       refreshCommand,
       controller,

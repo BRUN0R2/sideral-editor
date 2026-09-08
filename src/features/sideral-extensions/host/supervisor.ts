@@ -1,4 +1,8 @@
-import type { ProtocolFailure, WorkspaceContext } from "@sideral/extension-sdk";
+import type {
+  ProtocolFailure,
+  WindowActivityState,
+  WorkspaceContext,
+} from "@sideral/extension-sdk";
 import { invoke } from "@tauri-apps/api/core";
 import { arrayBuffer, voidValue } from "../../../lib/runtime-validation";
 import { decodeBrokerResponse } from "../contract-validation";
@@ -22,6 +26,7 @@ export class ExtensionHostSupervisor {
   >();
   #handshake: HostHandshake | null = null;
   #workspaceContext: WorkspaceContext = { workspaceName: null, activeDocument: null };
+  #windowActivityState: WindowActivityState = "active";
   #disposed = false;
 
   updateWorkspaceContext(context: WorkspaceContext): void {
@@ -31,6 +36,16 @@ export class ExtensionHostSupervisor {
     this.#workspaceContext = context;
     for (const worker of this.#workers.values()) {
       worker.updateWorkspaceContext(context);
+    }
+  }
+
+  updateWindowActivityState(state: WindowActivityState): void {
+    if (this.#disposed || state === this.#windowActivityState) {
+      return;
+    }
+    this.#windowActivityState = state;
+    for (const worker of this.#workers.values()) {
+      worker.updateWindowActivityState(state);
     }
   }
 
@@ -347,6 +362,7 @@ export class ExtensionHostSupervisor {
     cancellationSignal.addEventListener("abort", abortStartup, { once: true });
     const initialWorkspaceContext =
       instruction.workspaceAccess === "none" ? null : this.#workspaceContext;
+    const initialWindowActivityState = this.#windowActivityState;
     try {
       await runtime.initialize({
         kind: "initialize",
@@ -359,6 +375,7 @@ export class ExtensionHostSupervisor {
         commandIds: instruction.commandIds,
         workspaceAccess: instruction.workspaceAccess,
         workspaceContext: initialWorkspaceContext,
+        windowActivityState: initialWindowActivityState,
       });
       throwIfAborted(cancellationSignal);
       if (
@@ -366,6 +383,9 @@ export class ExtensionHostSupervisor {
         !sameWorkspaceContext(initialWorkspaceContext, this.#workspaceContext)
       ) {
         runtime.updateWorkspaceContext(this.#workspaceContext);
+      }
+      if (initialWindowActivityState !== this.#windowActivityState) {
+        runtime.updateWindowActivityState(this.#windowActivityState);
       }
       return runtime;
     } catch (error: unknown) {

@@ -23,6 +23,8 @@ import type {
   ProtocolFailure,
   TextDocument,
   TextEditorCommandHandler,
+  WindowActivityState,
+  WindowActivityStateListener,
   WorkerToHostMessage,
   WorkspaceAccess,
   WorkspaceContext,
@@ -91,6 +93,7 @@ const pendingBrokerRequests = new Map<string, PendingBrokerRequest>();
 const commandCancellations = new Map<string, AbortController>();
 const subscriptions: Disposable[] = [];
 const localCommandStack: string[] = [];
+const windowActivityStateListeners = new Set<WindowActivityStateListener>();
 const workspaceContextListeners = new Set<WorkspaceContextListener>();
 const extensionCancellation = new AbortController();
 const cleanupCancellation = new AbortController();
@@ -105,6 +108,7 @@ let extensionModule: ExtensionModule | null = null;
 let allowedCommands = new Set<string>();
 let workspaceAccess: WorkspaceAccess = "none";
 let workspaceContext: WorkspaceContext | null = null;
+let windowActivityState: WindowActivityState = "active";
 let initialized = false;
 let activated = false;
 let deactivating = false;
@@ -134,6 +138,11 @@ async function handleMessage(value: unknown): Promise<void> {
   switch (message.kind) {
     case "workspaceContextChanged": {
       const operation = enqueueExtensionOperation(() => updateWorkspaceContext(message.context));
+      await operation;
+      return;
+    }
+    case "windowActivityStateChanged": {
+      const operation = enqueueExtensionOperation(() => updateWindowActivityState(message.state));
       await operation;
       return;
     }
@@ -182,6 +191,7 @@ async function initialize(
   workspaceAccess = message.workspaceAccess;
   workspaceContext =
     message.workspaceContext === null ? null : freezeWorkspaceContext(message.workspaceContext);
+  windowActivityState = message.windowActivityState;
   const imported: unknown = await import(/* @vite-ignore */ message.bundleUrl);
   extensionModule = validateExtensionModule(imported);
   initialized = true;
@@ -293,6 +303,7 @@ async function performDeactivation(
       }
     }
     handlers.clear();
+    windowActivityStateListeners.clear();
     workspaceContextListeners.clear();
     if (cleanupFailures.length > 0) {
       throw new AggregateError(cleanupFailures, "One or more extension cleanup operations failed.");
@@ -389,6 +400,24 @@ function createApi(): ExtensionApi {
       },
     },
     window: {
+      getActivityState() {
+        return windowActivityState;
+      },
+      onDidChangeActivityState(listener) {
+        if (typeof listener !== "function") {
+          throw new TypeError("The window activity state listener must be a function.");
+        }
+        windowActivityStateListeners.add(listener);
+        let disposed = false;
+        return {
+          dispose() {
+            if (!disposed) {
+              disposed = true;
+              windowActivityStateListeners.delete(listener);
+            }
+          },
+        };
+      },
       createOutputChannel: createOutputChannel,
       createPreviewPanel,
       async showInformationMessage(message) {
@@ -459,6 +488,16 @@ async function updateWorkspaceContext(context: WorkspaceContext): Promise<void> 
   }
 }
 
+async function updateWindowActivityState(state: WindowActivityState): Promise<void> {
+  if (deactivating || state === windowActivityState) {
+    return;
+  }
+  windowActivityState = state;
+  for (const listener of windowActivityStateListeners) {
+    await listener(state);
+  }
+}
+
 function requireWorkspaceContext(): WorkspaceContext {
   if (workspaceAccess === "none" || workspaceContext === null) {
     throw new Error("The extension does not have workspace metadata permission.");
@@ -482,6 +521,7 @@ function freezeWorkspaceContext(context: WorkspaceContext): WorkspaceContext {
 
 function discordActivityPayload(activity: DiscordActivity): JsonObject {
   const assets = activity.assets;
+  const buttons = activity.buttons;
   return {
     ...(activity.type === undefined ? {} : { type: activity.type }),
     ...(activity.details === undefined ? {} : { details: activity.details }),
@@ -496,6 +536,11 @@ function discordActivityPayload(activity: DiscordActivity): JsonObject {
             ...(assets.smallImage === undefined ? {} : { smallImage: assets.smallImage }),
             ...(assets.smallText === undefined ? {} : { smallText: assets.smallText }),
           },
+        }),
+    ...(buttons === undefined
+      ? {}
+      : {
+          buttons: buttons.map(({ label, url }) => ({ label, url })),
         }),
   };
 }

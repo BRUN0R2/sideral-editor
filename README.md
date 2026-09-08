@@ -4,6 +4,8 @@ Sideral Editor is a new, focused desktop code editor built with Rust, Tauri and
 strict TypeScript. It takes product and architecture references from modern
 editors while keeping its own small, explicit codebase.
 
+[Download the latest Windows release](https://github.com/BRUN0R2/sideral-editor/releases/latest).
+
 The first working foundation includes:
 
 - a native Tauri 2 shell for Windows;
@@ -25,7 +27,8 @@ The first working foundation includes:
   Worker runtimes, a native capability broker, command palette, diagnostics,
   rollback, authoring SDK, testkit and packaging CLI;
 - a first-party Discord Work Presence extension driven by workspace metadata
-  events and an owned, capability-gated local Discord RPC session;
+  events, privacy-preserving active/idle window transitions and an owned,
+  capability-gated local Discord RPC session;
 - strict TypeScript, Rust safety lints, Biome checks and focused tests.
 
 This is an original project. The ignored `references/vscode/` checkout is for
@@ -83,3 +86,7 @@ that preview.
 - [Extension-system decisions](docs/decisions/0001-native-extension-system.md)
 - [Discord presence capability decision](docs/decisions/0003-discord-presence-capability.md)
 - [Next work](docs/TODO.md)
+
+## License
+
+Sideral Editor is open-source software released under the [MIT License](LICENSE).

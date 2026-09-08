@@ -128,7 +128,12 @@ export interface PreviewPanel extends Disposable {
   toggle(): Promise<boolean>;
 }
 
+export type WindowActivityState = "active" | "idle";
+export type WindowActivityStateListener = (state: WindowActivityState) => void | Promise<void>;
+
 export interface WindowApi {
+  getActivityState(): WindowActivityState;
+  onDidChangeActivityState(listener: WindowActivityStateListener): Disposable;
   createOutputChannel(name: string): OutputChannel;
   createPreviewPanel(document: PreviewDocument): PreviewPanel;
   showInformationMessage(message: string): Promise<void>;
@@ -187,12 +192,22 @@ export interface DiscordActivityAssets {
   readonly smallText?: string;
 }
 
+export interface DiscordActivityButton {
+  readonly label: string;
+  readonly url: string;
+}
+
+export type DiscordActivityButtons =
+  | readonly [DiscordActivityButton]
+  | readonly [DiscordActivityButton, DiscordActivityButton];
+
 export interface DiscordActivity {
   readonly type?: DiscordActivityType;
   readonly details?: string;
   readonly state?: string;
   readonly startTimestamp?: number;
   readonly assets?: DiscordActivityAssets;
+  readonly buttons?: DiscordActivityButtons;
 }
 
 export interface DiscordPresenceApi {

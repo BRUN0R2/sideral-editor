@@ -227,7 +227,7 @@ export function decodeWorkerToHostMessage(value: unknown): WorkerToHostMessage {
   );
   const protocolVersion = literal(
     required(envelope, "protocolVersion", path),
-    2,
+    3,
     `${path}.protocolVersion`,
   );
   const generation = safeInteger(required(envelope, "generation", path), `${path}.generation`);
@@ -320,6 +320,7 @@ export function decodeHostToWorkerMessage(value: unknown): HostToWorkerMessage {
     [
       "initialize",
       "workspaceContextChanged",
+      "windowActivityStateChanged",
       "activate",
       "executeCommand",
       "brokerResponse",
@@ -330,7 +331,7 @@ export function decodeHostToWorkerMessage(value: unknown): HostToWorkerMessage {
   );
   const protocolVersion = literal(
     required(envelope, "protocolVersion", path),
-    2,
+    3,
     `${path}.protocolVersion`,
   );
   const generation = safeInteger(required(envelope, "generation", path), `${path}.generation`);
@@ -346,6 +347,7 @@ export function decodeHostToWorkerMessage(value: unknown): HostToWorkerMessage {
       "commandIds",
       "workspaceAccess",
       "workspaceContext",
+      "windowActivityState",
     ]);
     return {
       kind,
@@ -378,6 +380,11 @@ export function decodeHostToWorkerMessage(value: unknown): HostToWorkerMessage {
         `${path}.workspaceContext`,
         decodeWorkspaceContext,
       ),
+      windowActivityState: enumeration(
+        required(source, "windowActivityState", path),
+        ["active", "idle"],
+        `${path}.windowActivityState`,
+      ),
     };
   }
   if (kind === "workspaceContextChanged") {
@@ -387,6 +394,15 @@ export function decodeHostToWorkerMessage(value: unknown): HostToWorkerMessage {
       protocolVersion,
       generation,
       context: decodeWorkspaceContext(required(source, "context", path), `${path}.context`),
+    };
+  }
+  if (kind === "windowActivityStateChanged") {
+    const source = record(value, path, ["kind", "protocolVersion", "generation", "state"]);
+    return {
+      kind,
+      protocolVersion,
+      generation,
+      state: enumeration(required(source, "state", path), ["active", "idle"], `${path}.state`),
     };
   }
   const requestId = decodeRequestId(required(envelope, "requestId", path), `${path}.requestId`);

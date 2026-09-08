@@ -1,4 +1,4 @@
-import type { WorkspaceContext } from "@sideral/extension-sdk";
+import type { WindowActivityState, WorkspaceContext } from "@sideral/extension-sdk";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { voidValue } from "../../../lib/runtime-validation";
 import { decodeHostHandshake } from "../contract-validation";
@@ -8,6 +8,7 @@ import { ExtensionHostSupervisor } from "./supervisor";
 
 export interface ExtensionHostConnection {
   updateWorkspaceContext(context: WorkspaceContext): void;
+  updateWindowActivityState(state: WindowActivityState): void;
   dispose(): Promise<void>;
 }
 
@@ -69,6 +70,9 @@ export async function connectExtensionHost(): Promise<ExtensionHostConnection> {
   return {
     updateWorkspaceContext(context) {
       supervisor.updateWorkspaceContext(context);
+    },
+    updateWindowActivityState(state) {
+      supervisor.updateWindowActivityState(state);
     },
     dispose() {
       disposal ??= disposeConnection(supervisor, channel, handshake, pendingInstructions);

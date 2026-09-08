@@ -1,25 +1,37 @@
-import type { DiscordActivity, WorkspaceContext } from "@sideral/extension-sdk";
+import type {
+  DiscordActivity,
+  WindowActivityState,
+  WorkspaceContext,
+} from "@sideral/extension-sdk";
 
 const MAX_DISCORD_TEXT_BYTES: number = 128;
 const ELLIPSIS = "…";
+const DOWNLOAD_BUTTON = {
+  label: "Download",
+  url: "https://github.com/BRUN0R2/sideral-editor/releases/latest",
+} as const;
 
 export function createWorkActivity(
   context: WorkspaceContext,
+  windowActivityState: WindowActivityState,
   startTimestamp: number,
 ): DiscordActivity {
   const details =
-    context.activeDocument === null
-      ? "Browsing in Sideral"
-      : `Editing ${cleanName(context.activeDocument.name, "untitled")}`;
+    windowActivityState === "idle"
+      ? "Stopped for a coffee ☕"
+      : context.activeDocument === null
+        ? "Browsing in Sideral"
+        : `🧑‍💻 ${cleanName(context.activeDocument.name, "untitled")}`;
   const state =
     context.workspaceName === null
-      ? "No workspace open"
-      : `Workspace: ${cleanName(context.workspaceName, "workspace")}`;
+      ? "📁 No workspace open"
+      : `📁 ${cleanName(context.workspaceName, "workspace")}`;
   return {
     type: "playing",
     details: truncateUtf8(details, MAX_DISCORD_TEXT_BYTES),
     state: truncateUtf8(state, MAX_DISCORD_TEXT_BYTES),
     startTimestamp,
+    buttons: [DOWNLOAD_BUTTON],
   };
 }
 

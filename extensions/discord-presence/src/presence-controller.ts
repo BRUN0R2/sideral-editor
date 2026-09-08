@@ -2,6 +2,7 @@ import type {
   Disposable,
   ExtensionApi,
   OutputChannel,
+  WindowActivityState,
   WorkspaceContext,
 } from "@sideral/extension-sdk";
 import { createWorkActivity } from "./activity";
@@ -15,12 +16,14 @@ export class PresenceController implements Disposable {
   #enabled = true;
   #disposed = false;
   #lastFingerprint: string | null = null;
+  #windowActivityState: WindowActivityState;
   #tail: Promise<void> = Promise.resolve();
 
   constructor(api: ExtensionApi, output: OutputChannel) {
     this.#api = api;
     this.#output = output;
     this.#startTimestamp = Math.floor(Date.now() / 1_000);
+    this.#windowActivityState = api.window.getActivityState();
   }
 
   start(): void {
@@ -41,6 +44,15 @@ export class PresenceController implements Disposable {
     return this.#runSafely("update", async () => {
       if (this.#enabled) {
         await this.#synchronize(context, false);
+      }
+    });
+  }
+
+  activityStateChanged(state: WindowActivityState): Promise<void> {
+    return this.#runSafely("update activity state", async () => {
+      this.#windowActivityState = state;
+      if (this.#enabled) {
+        await this.#synchronize(this.#api.workspace.getContext(), false);
       }
     });
   }
@@ -89,7 +101,7 @@ export class PresenceController implements Disposable {
   }
 
   async #synchronize(context: WorkspaceContext, force: boolean): Promise<void> {
-    const activity = createWorkActivity(context, this.#startTimestamp);
+    const activity = createWorkActivity(context, this.#windowActivityState, this.#startTimestamp);
     const fingerprint = JSON.stringify(activity);
     if (!force && fingerprint === this.#lastFingerprint) {
       return;

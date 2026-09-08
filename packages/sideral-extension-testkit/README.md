@@ -2,7 +2,7 @@
 
 `createExtensionHarness` activates an extension module against deterministic,
 in-memory implementations of the Sideral API. Tests can execute registered
-commands, push serialized workspace metadata changes, and inspect Discord
+commands, push serialized workspace metadata and window activity changes, and inspect Discord
 activity history, messages, output, read-only configuration and storage without
 starting the desktop application. Native capabilities are unavailable unless a
 test provides an explicit handler.
@@ -33,4 +33,5 @@ await harness.updateWorkspaceContext({
   workspaceName: "fixture",
   activeDocument: { name: "next.txt", languageId: "text" }
 });
+await harness.updateWindowActivityState("idle");
 ```

@@ -1,7 +1,7 @@
 # Sideral Extension SDK
 
 This package contains the versioned compile-time contracts for Sideral manifest
-v1, API v1 and host/Worker protocol v2. Install it as a development dependency
+v1, API v1 and host/Worker protocol v3. Install it as a development dependency
 and use `import type`; it contributes zero runtime bytes to an extension bundle.
 Projects created by the official scaffold receive an exact local snapshot of
 this package, so they are immediately installable and buildable outside the
@@ -19,7 +19,7 @@ export const manifest = {
   id: "acme.sample",
   displayName: "Acme Sample",
   version: "0.1.0",
-  engines: { sideral: "^0.1.0" },
+  engines: { sideral: "^0.1.1" },
   runtime: { kind: "worker", entry: "dist/extension.mjs" },
   permissions: { workspace: "read" },
   contributes: {
@@ -128,8 +128,14 @@ context.subscriptions.add(
   api.workspace.onDidChangeContext(async (next) => {
     await api.discordPresence.setActivity({
       type: "playing",
-      details: next.activeDocument === null ? "Browsing" : `Editing ${next.activeDocument.name}`,
-      state: next.workspaceName === null ? "No workspace" : `Workspace: ${next.workspaceName}`
+      details: next.activeDocument === null ? "Browsing" : `🧑‍💻 ${next.activeDocument.name}`,
+      state: next.workspaceName === null ? "📁 No workspace open" : `📁 ${next.workspaceName}`,
+      buttons: [
+        {
+          label: "Download",
+          url: "https://github.com/BRUN0R2/sideral-editor/releases/latest"
+        }
+      ]
     });
   })
 );
@@ -138,7 +144,22 @@ void current;
 
 The corresponding manifest needs `workspace: "metadata"` and an explicit
 `discordPresence` grant. The native broker validates and owns the local IPC
-session; the Worker never opens a socket or named pipe directly.
+session; the Worker never opens a socket or named pipe directly. Activities may
+contain up to two buttons. Button labels are limited to 32 characters and URLs
+to 512 characters; URLs must be absolute, credential-free HTTPS links.
+
+Window activity is privacy-preserving and event-driven. It exposes only
+`active` or `idle`; raw keyboard and pointer data never enter a Worker:
+
+```ts
+const currentState = api.window.getActivityState();
+context.subscriptions.add(
+  api.window.onDidChangeActivityState((state) => {
+    void state;
+  })
+);
+void currentState;
+```
 
 The corresponding manifest argument is an immutable
 `{ kind: "literal", value }`, a validated

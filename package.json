@@ -1,7 +1,12 @@
 {
   "name": "sideral-editor",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BRUN0R2/sideral-editor.git"
+  },
   "type": "module",
   "workspaces": [
     "packages/sideral-extension-sdk",
