@@ -67,6 +67,8 @@ historico.
   * descrever claramente mudancas reais
 * Manter `docs/TODO.md` minimalista, atualizado e acionavel.
 * Nunca versionar segredos, credenciais, tokens ou dados privados.
+* Versionar arquivos de texto com finais de linha LF por meio do
+  `.gitattributes`; somente scripts Batch usam CRLF explicitamente.
 * Evitar arquivos, dependencias, assets, logs ou ferramentas sem necessidade
   real.
 * Preferir uma base limpa e funcional ao inves de preservar compatibilidade
