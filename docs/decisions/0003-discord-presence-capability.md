@@ -14,8 +14,9 @@ library or proprietary SDK DLL would add another executable or dependency and a
 separate lifecycle without improving the two fields this feature publishes.
 
 Discord documents desktop IPC framing, its handshake and `SET_ACTIVITY`. The
-Discord desktop client and a valid public Application ID are still external
-runtime requirements.
+Discord desktop client and a valid public Application ID are still runtime
+requirements. The first-party extension owns that public ID; users do not
+configure it.
 
 ## Decision
 
@@ -54,9 +55,9 @@ runtime requirements.
 - The named pipe inherits Discord RPC's same-desktop-session trust boundary;
   only public application and activity metadata are sent through it.
 - Installation review shows both metadata and Discord authorities explicitly.
-- A missing or invalid Application ID, or a stopped Discord client, is
-  recoverable with Settings plus the Refresh command; it does not require a
-  Worker restart.
+- The first-party extension signs its public Application ID as a literal. A
+  stopped Discord client is recoverable with the Refresh command; it does not
+  require configuration or a Worker restart.
 - Closing a generation closes its pipe, so presence cannot outlive its owner.
 - The current transport is supported on Windows, the project's declared
   operational target. A future platform must implement and validate its native

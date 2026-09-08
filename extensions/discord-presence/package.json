@@ -1,7 +1,7 @@
 {
   "name": "sideral.discord-presence",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.2",
   "type": "module",
   "scripts": {
     "build": "rolldown src/extension.ts --file dist/extension.mjs --format esm --platform browser --minify",

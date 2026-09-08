@@ -9,6 +9,7 @@ use std::{
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use ed25519_dalek::SigningKey;
+use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use sideral_extension_core::{
     assess_worker_bundle_size, parse_manifest_json, validate_package_path,
@@ -134,6 +135,7 @@ fn pack(project: &Path, key_path: &Path, output: &Path) -> Result<(), ToolError>
         ToolError::InvalidProject(format!("manifest.json is not UTF-8: {error}"))
     })?;
     let manifest = parse_manifest_json(manifest_text)?;
+    ensure_sideral_compatibility(&manifest.id, &manifest.engines.sideral)?;
     let runtime = manifest.runtime.as_ref().ok_or_else(|| {
         ToolError::InvalidProject("manifest must declare a worker runtime".to_owned())
     })?;
@@ -179,6 +181,7 @@ fn check(project: &Path) -> Result<(), ToolError> {
         ToolError::InvalidProject(format!("manifest.json is not UTF-8: {error}"))
     })?;
     let manifest = parse_manifest_json(manifest_text)?;
+    ensure_sideral_compatibility(&manifest.id, &manifest.engines.sideral)?;
     let runtime = manifest.runtime.as_ref().ok_or_else(|| {
         ToolError::InvalidProject("manifest must declare a worker runtime".to_owned())
     })?;
@@ -202,6 +205,25 @@ fn check(project: &Path) -> Result<(), ToolError> {
         }
     );
     Ok(())
+}
+
+fn ensure_sideral_compatibility(extension_id: &str, requirement: &str) -> Result<(), ToolError> {
+    let tool_version = Version::parse(env!("CARGO_PKG_VERSION")).map_err(|error| {
+        ToolError::InvalidProject(format!(
+            "extension tool has an invalid Sideral version: {error}"
+        ))
+    })?;
+    let requirement = VersionReq::parse(requirement).map_err(|error| {
+        ToolError::InvalidProject(format!(
+            "extension {extension_id} has an invalid Sideral engine requirement: {error}"
+        ))
+    })?;
+    if requirement.matches(&tool_version) {
+        return Ok(());
+    }
+    Err(ToolError::InvalidProject(format!(
+        "extension {extension_id} requires Sideral {requirement}, but this extension tool targets Sideral {tool_version}"
+    )))
 }
 
 fn scaffold(publisher: &str, name: &str, directory: &Path) -> Result<(), ToolError> {
@@ -691,7 +713,7 @@ mod tests {
     use serde_json::Value;
     use tempfile::tempdir;
 
-    use super::{check, scaffold};
+    use super::{ToolError, check, ensure_sideral_compatibility, scaffold};
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -723,5 +745,18 @@ mod tests {
         )?;
         check(&project)?;
         Ok(())
+    }
+
+    #[test]
+    fn compatibility_validation_rejects_an_engine_for_an_unavailable_version() {
+        assert!(matches!(
+            ensure_sideral_compatibility("acme.sample", "<0.0.0"),
+            Err(ToolError::InvalidProject(message))
+                if message.contains("requires Sideral <0.0.0")
+                    && message.contains(concat!(
+                        "targets Sideral ",
+                        env!("CARGO_PKG_VERSION")
+                    ))
+        ));
     }
 }

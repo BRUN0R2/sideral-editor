@@ -6,9 +6,7 @@ import type {
 } from "@sideral/extension-sdk";
 import { createWorkActivity } from "./activity";
 
-const APPLICATION_ID_CONFIGURATION = "application-id";
 const ENABLED_STORAGE_KEY = "presence-enabled";
-const APPLICATION_ID_PATTERN = /^[0-9]{17,20}$/u;
 
 export class PresenceController implements Disposable {
   readonly #api: ExtensionApi;
@@ -17,7 +15,6 @@ export class PresenceController implements Disposable {
   #enabled = true;
   #disposed = false;
   #lastFingerprint: string | null = null;
-  #configurationWarningShown = false;
   #tail: Promise<void> = Promise.resolve();
 
   constructor(api: ExtensionApi, output: OutputChannel) {
@@ -92,22 +89,8 @@ export class PresenceController implements Disposable {
   }
 
   async #synchronize(context: WorkspaceContext, force: boolean): Promise<void> {
-    const applicationId = await this.#api.configuration.get(APPLICATION_ID_CONFIGURATION);
-    if (!validApplicationId(applicationId)) {
-      await this.#clear();
-      if (!this.#configurationWarningShown) {
-        this.#configurationWarningShown = true;
-        const message =
-          "Set a valid Discord Application ID in Extension Settings, then run Refresh.";
-        this.#output.appendLine(message);
-        this.#output.show();
-        await this.#api.window.showWarningMessage(message);
-      }
-      return;
-    }
-    this.#configurationWarningShown = false;
     const activity = createWorkActivity(context, this.#startTimestamp);
-    const fingerprint = JSON.stringify({ applicationId, activity });
+    const fingerprint = JSON.stringify(activity);
     if (!force && fingerprint === this.#lastFingerprint) {
       return;
     }
@@ -152,8 +135,4 @@ export class PresenceController implements Disposable {
       throw new Error("Discord Work Presence is disposed.");
     }
   }
-}
-
-function validApplicationId(value: string): boolean {
-  return APPLICATION_ID_PATTERN.test(value) && !/^0+$/u.test(value);
 }

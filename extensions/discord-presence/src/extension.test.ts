@@ -2,15 +2,12 @@ import { createExtensionHarness } from "@sideral/extension-testkit";
 import { describe, expect, it } from "vitest";
 import { activate } from "./extension";
 
-const APPLICATION_ID = "123456789012345678";
-
 describe("Discord Work Presence", () => {
   it("publishes metadata changes once and clears the activity on disposal", async () => {
     const harness = createExtensionHarness(
       { activate },
       {
         extensionId: "sideral.discord-presence",
-        configuration: { "application-id": APPLICATION_ID },
         workspaceContext: {
           workspaceName: "sideral-editor",
           activeDocument: { name: "main.rs", languageId: "rust" },
@@ -41,25 +38,18 @@ describe("Discord Work Presence", () => {
     expect(harness.discordActivityUpdates.at(-1)).toBeNull();
   });
 
-  it("stays active without configuration and explains how to recover", async () => {
+  it("publishes immediately without user configuration", async () => {
     const harness = createExtensionHarness(
       { activate },
       {
         extensionId: "sideral.discord-presence",
-        configuration: { "application-id": "" },
       },
     );
 
     await harness.activate();
 
-    expect(harness.discordActivityUpdates).toHaveLength(0);
-    expect(harness.messages).toEqual([
-      {
-        severity: "warning",
-        message: "Set a valid Discord Application ID in Extension Settings, then run Refresh.",
-      },
-    ]);
-    expect(harness.outputs[0]?.visible).toBe(true);
+    expect(harness.discordActivityUpdates).toHaveLength(1);
+    expect(harness.messages).toHaveLength(0);
     await harness.dispose();
   });
 
@@ -69,7 +59,6 @@ describe("Discord Work Presence", () => {
       { activate },
       {
         extensionId: "sideral.discord-presence",
-        configuration: { "application-id": APPLICATION_ID },
         workspaceContext: { workspaceName: "workspace", activeDocument: null },
         setDiscordActivity: async () => {
           attempts += 1;

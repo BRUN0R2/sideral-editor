@@ -3,9 +3,9 @@
   "apiVersion": 1,
   "id": "sideral.discord-presence",
   "displayName": "Discord Work Presence",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "engines": {
-    "sideral": "^1.0.0"
+    "sideral": "^0.1.0"
   },
   "description": "Shows the current Sideral workspace and active document on Discord.",
   "license": "MIT",
@@ -18,8 +18,8 @@
     "workspace": "metadata",
     "discordPresence": {
       "applicationId": {
-        "kind": "configuration",
-        "key": "application-id"
+        "kind": "literal",
+        "value": "1546744954645127258"
       }
     }
   },
@@ -35,19 +35,6 @@
         "title": "Refresh Discord Work Presence",
         "category": "Discord"
       }
-    ],
-    "configuration": {
-      "title": "Discord Work Presence",
-      "properties": [
-        {
-          "kind": "text",
-          "key": "application-id",
-          "title": "Application ID",
-          "description": "Public application ID from the Discord Developer Portal.",
-          "placeholder": "123456789012345678",
-          "default": ""
-        }
-      ]
-    }
+    ]
   }
 }

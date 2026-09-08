@@ -428,9 +428,17 @@ export function useExtensionSystem(
       async installPackage(path, expectedPackageSha256, approvePublisher) {
         setError(null);
         try {
-          applySnapshot(
-            await installExtensionPackage(path, expectedPackageSha256, approvePublisher),
+          const installed = await installExtensionPackage(
+            path,
+            expectedPackageSha256,
+            approvePublisher,
           );
+          applySnapshot(installed);
+          try {
+            await activateExtensionEvent({ kind: "workbenchReady" });
+          } catch (reason: unknown) {
+            setError(errorMessage(reason));
+          }
         } catch (reason: unknown) {
           setError(errorMessage(reason));
           throw reason;

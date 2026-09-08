@@ -3886,6 +3886,7 @@ dependencies = [
  "base64 0.23.1",
  "ed25519-dalek",
  "getrandom 0.4.3",
+ "semver",
  "serde",
  "serde_json",
  "sideral-extension-core",

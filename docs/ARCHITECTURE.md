@@ -147,8 +147,8 @@ within their own panel through the validated `appearance.scrollbar` contract.
 - `src-tauri/crates/sideral-extension-package`: bounded archive parsing,
   canonical Ed25519 signatures and deterministic package construction.
 - `src-tauri/crates/sideral-extension-tool`: non-overwriting standalone
-  scaffold with a pinned SDK/testkit, plus check, key, pack and inspect
-  commands.
+  scaffold with a pinned SDK/testkit, plus engine-aware check and pack, key and
+  inspect commands.
 - `packages/sideral-extension-sdk`: declaration-only authoring contract that
   contributes zero runtime bytes to extension bundles.
 - `packages/sideral-extension-testkit`: deterministic in-memory lifecycle and

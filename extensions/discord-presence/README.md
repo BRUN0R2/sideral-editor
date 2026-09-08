@@ -2,13 +2,17 @@
 
 First-party Sideral extension that publishes the active workspace and document names to the local Discord desktop client. It never receives document contents or full filesystem paths.
 
-## Configure
+Requires Sideral Editor `^0.1.0`.
 
-1. Create an application in the [Discord Developer Portal](https://discord.com/developers/applications).
-2. Copy its public Application ID.
-3. Open Sideral **Settings → Extension settings**, save the ID under **Discord Work Presence**, and run **Discord: Refresh Discord Work Presence** from the command palette.
+## Use
 
-The Discord desktop client must be running. The application ID is public metadata, not a bot token or secret; never place a bot token in this setting.
+Install the signed `.sideralx` package and keep the Discord desktop client
+running. The extension includes its public Discord Application ID in the signed
+manifest, activates automatically and requires no user configuration, bot,
+token or OAuth flow.
+
+Use **Discord: Toggle Discord Work Presence** or **Discord: Refresh Discord Work
+Presence** from the command palette for explicit control.
 
 ## Behavior
 
@@ -17,7 +21,7 @@ The Discord desktop client must be running. The application ID is public metadat
 - Deduplicates identical activities and keeps a stable session start time.
 - Persists the explicit toggle state.
 - Clears and closes its owned IPC session when disabled, reloaded, or shut down.
-- Reports recoverable configuration and connectivity failures in the **Discord Work Presence** output channel.
+- Reports recoverable connectivity failures in the **Discord Work Presence** output channel.
 
 The native broker implements Discord's documented local RPC framing and
 `SET_ACTIVITY` command. The extension has only `workspace: metadata` and

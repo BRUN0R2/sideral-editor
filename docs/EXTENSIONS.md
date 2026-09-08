@@ -29,13 +29,16 @@ npm run extension:tool -- inspect D:\packages\acme-sample.sideralx
 
 Open Extensions with `Ctrl+Shift+X`, choose the package, review its publisher
 key, exact package hash and capabilities, then trust and install it. The tool
-never overwrites a key, package or scaffold directory. `examples/hello-sideral`
+never overwrites a key, package or scaffold directory. Both `check` and `pack`
+reject an `engines.sideral` range that excludes the Sideral version targeted by
+the tool, so the supported workflow cannot produce an incompatible package.
+`examples/hello-sideral`
 is the minimal reference and `examples/markdown-preview` is the first visual,
 document-aware reference extension. `extensions/amxx-pawn` is a complete
 third-party-style compiler extension with its own tests and package manifest.
 `extensions/discord-presence` demonstrates metadata-only workspace events,
-typed text configuration and a local native integration without a helper
-process or community dependency.
+a signed literal Application ID and a local native integration without a
+helper process, user configuration or community dependency.
 New scaffolds use pinned Rolldown, strict TypeScript and a version-pinned,
 type-only SDK snapshot under `vendor/`. They also include one deterministic
 test and the matching testkit, so `npm install` works in a directory completely
@@ -407,12 +410,12 @@ and native broker, verify a non-empty `.amxx`, and remove the temporary tree.
 
 - its only workspace authority is `metadata`, so it cannot read source code or
   filesystem paths;
-- the public Discord Application ID is a user-owned typed text setting, never a
-  bot token or secret;
+- the public Discord Application ID is a signed manifest literal, so users do
+  not need a Developer Portal account, bot token, secret or OAuth flow;
 - active-document changes are event-driven and identical activities are
   deduplicated;
-- Toggle persists an explicit enabled state and Refresh retries configuration or
-  connectivity failures;
+- Toggle persists an explicit enabled state and Refresh retries connectivity
+  failures;
 - the Worker owns its listener, commands, output channel and controller through
   reverse-order subscriptions;
 - the native broker owns and cancels the corresponding IPC task and pipe with
@@ -426,7 +429,8 @@ See `extensions/discord-presence/README.md` for setup and development commands.
 and API version 1 reject unknown versions instead of guessing a fallback. The
 internal host/Worker protocol is version 2 and is upgraded atomically with the
 editor; there is no compatibility branch. `engines.sideral`
-is checked before installation, enablement, rollback and bundle loading.
+is checked during project validation and packaging, then again before
+installation, enablement, rollback and bundle loading.
 
 The Extensions view reports the runtime state, last error, activation count and
 duration, and command count, failures and last duration. A failed extension
