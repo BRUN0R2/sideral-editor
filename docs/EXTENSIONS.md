@@ -416,6 +416,8 @@ and native broker, verify a non-empty `.amxx`, and remove the temporary tree.
   not need a Developer Portal account, bot token, secret or OAuth flow;
 - active-document changes are event-driven and identical activities are
   deduplicated;
+- Worker activation does not await Discord IPC; controller-owned initialization
+  continues on the same serialized queue and remains observable and disposable;
 - Toggle persists an explicit enabled state and Refresh retries connectivity
   failures;
 - the Worker owns its listener, commands, output channel and controller through

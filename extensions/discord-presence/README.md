@@ -17,6 +17,8 @@ Presence** from the command palette for explicit control.
 ## Behavior
 
 - Activates once the workbench is ready.
+- Starts native Discord synchronization in a controller-owned background queue,
+  so external IPC latency never blocks Worker activation.
 - Updates on workspace, active document, or language changes without polling.
 - Deduplicates identical activities and keeps a stable session start time.
 - Persists the explicit toggle state.

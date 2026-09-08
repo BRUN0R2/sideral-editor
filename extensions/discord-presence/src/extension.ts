@@ -2,7 +2,7 @@ import type { ExtensionModule } from "@sideral/extension-sdk";
 import { PresenceController } from "./presence-controller";
 
 const extension: ExtensionModule = {
-  async activate(context, api) {
+  activate(context, api) {
     const output = api.window.createOutputChannel("Discord Work Presence");
     const controller = new PresenceController(api, output);
     const contextSubscription = api.workspace.onDidChangeContext((workspaceContext) =>
@@ -24,7 +24,7 @@ const extension: ExtensionModule = {
       refreshCommand,
       controller,
     );
-    await controller.initialize();
+    controller.start();
   },
 };
 

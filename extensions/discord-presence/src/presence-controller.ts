@@ -23,8 +23,8 @@ export class PresenceController implements Disposable {
     this.#startTimestamp = Math.floor(Date.now() / 1_000);
   }
 
-  initialize(): Promise<void> {
-    return this.#runSafely("initialize", async () => {
+  start(): void {
+    void this.#runSafely("initialize", async () => {
       const stored = await this.#api.storage.get(ENABLED_STORAGE_KEY);
       if (typeof stored === "boolean") {
         this.#enabled = stored;

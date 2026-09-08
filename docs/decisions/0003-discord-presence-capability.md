@@ -44,8 +44,10 @@ configure it.
   detached helper.
 - `extensions/discord-presence` is a thin first-party client. It derives an
   activity from metadata, preserves one session start timestamp, deduplicates
-  identical payloads, persists its explicit toggle and reports recoverable
-  failures through its owned output channel.
+  identical payloads, persists its explicit toggle and starts synchronization
+  on a controller-owned serialized queue after synchronous Worker activation.
+  External Discord latency therefore does not inflate activation time, while
+  failures remain observable through the owned output channel.
 - The internal host/Worker protocol moves atomically to version 2. No legacy
   protocol decoder or compatibility branch is retained.
 
