@@ -4,6 +4,7 @@ import { isDesktopRuntime } from "../../lib/backend";
 import { toApplicationError } from "../../lib/errors";
 import { toExtensionTextDocument } from "../workspace/document-uri";
 import type { EditorDocument, WorkspaceRoot } from "../workspace/types";
+import { replayCurrentActivationEvents } from "./activation-lifecycle";
 import {
   activateExtensionEvent,
   connectExtensionClient,
@@ -120,6 +121,15 @@ export function useExtensionSystem(
   );
   const workspaceContextRef = useRef(workspaceContext);
   workspaceContextRef.current = workspaceContext;
+
+  const replayActivationEvents = useCallback(
+    () =>
+      replayCurrentActivationEvents(
+        activateExtensionEvent,
+        activeDocumentRef.current?.languageId ?? null,
+      ),
+    [],
+  );
 
   const updateBusyCount = useCallback((extensionId: string, change: 1 | -1): void => {
     setBusyCounts((current) => {
@@ -332,11 +342,18 @@ export function useExtensionSystem(
   }, [activeDocument?.languageId, status]);
 
   const runExtensionMutation = useCallback(
-    async (extensionId: string, operation: () => Promise<ExtensionSnapshot>): Promise<void> => {
+    async (
+      extensionId: string,
+      operation: () => Promise<ExtensionSnapshot>,
+      reactivate = false,
+    ): Promise<void> => {
       updateBusyCount(extensionId, 1);
       setError(null);
       try {
         applySnapshot(await operation());
+        if (reactivate) {
+          await replayActivationEvents();
+        }
       } catch (reason: unknown) {
         setError(errorMessage(reason));
         throw reason;
@@ -344,7 +361,7 @@ export function useExtensionSystem(
         updateBusyCount(extensionId, -1);
       }
     },
-    [applySnapshot, updateBusyCount],
+    [applySnapshot, replayActivationEvents, updateBusyCount],
   );
 
   const dismissPreview = useCallback(
@@ -435,7 +452,7 @@ export function useExtensionSystem(
           );
           applySnapshot(installed);
           try {
-            await activateExtensionEvent({ kind: "workbenchReady" });
+            await replayActivationEvents();
           } catch (reason: unknown) {
             setError(errorMessage(reason));
           }
@@ -444,14 +461,18 @@ export function useExtensionSystem(
           throw reason;
         }
       },
-      setEnabled(extensionId, enabled) {
-        return runExtensionMutation(extensionId, () => setExtensionEnabled(extensionId, enabled));
+      async setEnabled(extensionId, enabled) {
+        await runExtensionMutation(
+          extensionId,
+          () => setExtensionEnabled(extensionId, enabled),
+          enabled,
+        );
       },
-      restart(extensionId) {
-        return runExtensionMutation(extensionId, () => restartExtension(extensionId));
+      async restart(extensionId) {
+        await runExtensionMutation(extensionId, () => restartExtension(extensionId), true);
       },
-      rollback(extensionId) {
-        return runExtensionMutation(extensionId, () => rollbackExtension(extensionId));
+      async rollback(extensionId) {
+        await runExtensionMutation(extensionId, () => rollbackExtension(extensionId), true);
       },
       uninstall(extensionId) {
         return runExtensionMutation(extensionId, () => uninstallExtension(extensionId));
@@ -473,6 +494,7 @@ export function useExtensionSystem(
       outputs,
       outputReveal,
       previews,
+      replayActivationEvents,
       reportError,
       runExtensionMutation,
       snapshot,

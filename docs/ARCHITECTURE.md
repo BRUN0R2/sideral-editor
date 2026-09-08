@@ -60,6 +60,9 @@ startup, serializes commands per extension and keeps independent extensions
 parallel. Explicit acknowledgements drive every state transition; deadlines
 terminate invalid work and never act as startup coordination. A generation
 invalidated by disable, reload or host failure cannot publish late state.
+Lifecycle mutations replay the current workbench and language triggers after
+install, re-enable, restart and rollback, keeping activation deterministic
+without requiring an application restart.
 
 The native broker is the sole authority for workspace, storage, configuration,
 network, process, Discord presence and window requests. Extension configuration

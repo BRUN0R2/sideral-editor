@@ -135,7 +135,9 @@ Unknown properties and unsupported versions fail validation. IDs use lowercase
 namespaced segments. Every command and process grant must begin with the
 extension ID. Commands activate their owner automatically; do not add an
 `onCommand` event. Supported explicit events are `onWorkbenchReady` and
-`onLanguage:<id>`.
+`onLanguage:<id>`. Installation, re-enablement, Restart and rollback replay the
+current workbench and active-language events, so a matching extension resumes
+within the same editor session.
 
 Commands use `workbench` invocation by default. `activeTextDocument` commands
 must request workspace read access and register with
