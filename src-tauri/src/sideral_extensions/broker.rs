@@ -17,12 +17,14 @@ use tempfile::NamedTempFile;
 use tokio::sync::{Mutex as AsyncMutex, Notify, Semaphore};
 
 mod configuration;
+mod discord_presence;
 mod network;
 mod process;
 mod storage;
 mod window;
 mod workspace;
 
+use discord_presence::{DiscordActivityPayload, DiscordPresenceSessions};
 #[cfg(test)]
 use network::is_public_ipv4;
 use network::network_client_builder;
@@ -72,6 +74,7 @@ struct BrokerShared {
     process_slots: Arc<Semaphore>,
     storage_gate: AsyncMutex<()>,
     configuration_gate: AsyncMutex<()>,
+    discord_presence: DiscordPresenceSessions,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -282,6 +285,7 @@ impl CapabilityBroker {
                 process_slots: Arc::new(Semaphore::new(MAX_CONCURRENT_PROCESSES)),
                 storage_gate: AsyncMutex::new(()),
                 configuration_gate: AsyncMutex::new(()),
+                discord_presence: DiscordPresenceSessions::default(),
             }),
         })
     }
@@ -378,6 +382,16 @@ impl CapabilityBroker {
                 self.configuration_value(manifest, &payload.key)
                     .await
                     .map(Value::String)
+            }
+            BrokerMethod::DiscordPresenceSetActivity => {
+                let payload: DiscordActivityPayload = parse_payload(request.payload)?;
+                self.set_discord_activity(manifest, request.generation, payload, cancellation)
+                    .await
+            }
+            BrokerMethod::DiscordPresenceClearActivity => {
+                require_empty_payload(&request.payload)?;
+                self.clear_discord_activity(manifest, request.generation, cancellation)
+                    .await
             }
             BrokerMethod::StorageGet => {
                 let payload: KeyPayload = parse_payload(request.payload)?;
@@ -538,6 +552,7 @@ impl CapabilityBroker {
         if let Ok(mut previews) = self.shared.previews.lock() {
             previews.retain(|_, preview| preview.extension_id != extension_id);
         }
+        self.shared.discord_presence.cancel_extension(extension_id);
     }
 
     pub fn cancel_all(&self) {
@@ -553,6 +568,7 @@ impl CapabilityBroker {
         if let Ok(mut previews) = self.shared.previews.lock() {
             previews.clear();
         }
+        self.shared.discord_presence.cancel_all();
     }
 
     pub fn set_workspace_root(&self, root: Option<PathBuf>) -> Result<(), ExtensionError> {

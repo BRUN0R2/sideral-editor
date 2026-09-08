@@ -66,6 +66,43 @@ describe("Sideral extension test kit", () => {
     await harness.dispose();
   });
 
+  it("serializes commands and workspace callbacks on the same extension lane", async () => {
+    const executionOrder: string[] = [];
+    let releaseCommand: (() => void) | undefined;
+    const commandGate = new Promise<void>((resolve) => {
+      releaseCommand = resolve;
+    });
+    const extension: ExtensionModule = {
+      activate(context, api) {
+        context.subscriptions.add(
+          api.commands.registerCommand("test.extension.wait", async () => {
+            executionOrder.push("command:start");
+            await commandGate;
+            executionOrder.push("command:end");
+          }),
+          api.workspace.onDidChangeContext(() => {
+            executionOrder.push("workspace");
+          }),
+        );
+      },
+    };
+    const harness = createExtensionHarness(extension);
+
+    await harness.activate();
+    const command = harness.executeCommand("test.extension.wait");
+    await Promise.resolve();
+    const workspaceUpdate = harness.updateWorkspaceContext({
+      workspaceName: "next-workspace",
+      activeDocument: null,
+    });
+    expect(executionOrder).toEqual(["command:start"]);
+
+    releaseCommand?.();
+    await Promise.all([command, workspaceUpdate]);
+    expect(executionOrder).toEqual(["command:start", "command:end", "workspace"]);
+    await harness.dispose();
+  });
+
   it("keeps preview scrollbar overrides scoped and cloned", async () => {
     const appearance = {
       scrollbar: {

@@ -2,10 +2,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sideral_extension_core::{
     CommandContribution, CommandDocumentSync, CommandInvocation, ConfigurationContribution,
-    KeybindingContribution, LanguageContribution, PermissionSet,
+    KeybindingContribution, LanguageContribution, PermissionSet, WorkspaceAccess,
 };
 
-pub const EXTENSION_PROTOCOL_VERSION: u16 = 1;
+pub const EXTENSION_PROTOCOL_VERSION: u16 = 2;
 pub const WORKER_START_DEADLINE_MILLISECONDS: u64 = 5_000;
 pub const WORKER_ACTIVATION_DEADLINE_MILLISECONDS: u64 = 10_000;
 pub const COMMAND_EXECUTION_DEADLINE_MILLISECONDS: u64 = 30_000;
@@ -197,6 +197,7 @@ pub enum HostInstruction {
         extension_uri: String,
         storage_uri: String,
         command_ids: Vec<String>,
+        workspace_access: WorkspaceAccess,
         activation_reason: ActivationReason,
         start_deadline_milliseconds: u64,
         activation_deadline_milliseconds: u64,
@@ -211,6 +212,7 @@ pub enum HostInstruction {
         extension_uri: String,
         storage_uri: String,
         command_ids: Vec<String>,
+        workspace_access: WorkspaceAccess,
         command_id: String,
         arguments: Vec<Value>,
         active_text_document: Option<TextDocumentView>,
@@ -444,6 +446,15 @@ pub enum ExtensionConfigurationPropertyView {
         value: String,
         user_defined: bool,
     },
+    Text {
+        key: String,
+        title: String,
+        description: Option<String>,
+        placeholder: Option<String>,
+        default_value: String,
+        value: String,
+        user_defined: bool,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -475,6 +486,10 @@ pub enum BrokerMethod {
     CommandsExecute,
     #[serde(rename = "configuration.get")]
     ConfigurationGet,
+    #[serde(rename = "discordPresence.clearActivity")]
+    DiscordPresenceClearActivity,
+    #[serde(rename = "discordPresence.setActivity")]
+    DiscordPresenceSetActivity,
     #[serde(rename = "network.request")]
     NetworkRequest,
     #[serde(rename = "processes.execute")]

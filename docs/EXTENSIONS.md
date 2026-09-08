@@ -33,6 +33,9 @@ never overwrites a key, package or scaffold directory. `examples/hello-sideral`
 is the minimal reference and `examples/markdown-preview` is the first visual,
 document-aware reference extension. `extensions/amxx-pawn` is a complete
 third-party-style compiler extension with its own tests and package manifest.
+`extensions/discord-presence` demonstrates metadata-only workspace events,
+typed text configuration and a local native integration without a helper
+process or community dependency.
 New scaffolds use pinned Rolldown, strict TypeScript and a version-pinned,
 type-only SDK snapshot under `vendor/`. They also include one deterministic
 test and the matching testkit, so `npm install` works in a directory completely
@@ -147,15 +150,30 @@ immediately update open named documents. Duplicate language IDs or file
 extensions across installed packages are rejected instead of depending on load
 order.
 
-Configuration contributions are extension-scoped and strict. Manifest v1
-supports the `executable` property kind: every property declares a key, title,
-required bare executable default resolved from `PATH` and optional description.
-The Settings view renders these
-declarations generically as `<section> › <property>` executable selectors. A
-selected file is required to be absolute, canonicalized and validated natively
-before its override is written atomically. Reset removes the override and
+Configuration contributions are extension-scoped, typed and strict. Every
+property declares a key, title, default and optional description. An
+`executable` default is a required bare name resolved from `PATH`; its selected
+override must be absolute, canonicalized and validated natively. A `text`
+property may use an empty default and an optional placeholder; values are
+single-line, trimmed and limited to 1,024 UTF-8 bytes. Settings renders the
+matching selector or editable field generically. Reset removes the override and
 restores the signed default. Workers can read declared effective values through
 `api.configuration.get`; they cannot mutate user configuration.
+
+`workspace: metadata` is the least-privilege workspace grant. It enables
+`api.workspace.getContext()` and `onDidChangeContext()` with only the workspace
+name plus the active document name and language ID. It does not authorize file
+reads, searches, writes, full paths or contents. Listener promises are processed
+serially and should be registered in `context.subscriptions`.
+
+Discord Rich Presence is explicit and local. A manifest binds
+`permissions.discordPresence.applicationId` to either a signed literal or a
+declared `text` configuration key. `api.discordPresence.setActivity()` accepts
+bounded typed activity fields; `clearActivity()` releases the activity. Rust
+revalidates the signed grant, application ID, field limits and activity type,
+then owns Discord's named-pipe session for exactly one extension generation.
+Only one live extension may own the process-wide Discord presence; another
+extension receives an explicit conflict instead of silently replacing it.
 
 Network permissions are exact origins and methods. HTTPS is required except for
 an exact loopback origin used during local development. A process permission has
@@ -206,9 +224,9 @@ is idempotent, reverse-order and exhaustive. `context.cancellationSignal`
 represents the extension lifetime. Workspace, network and process operations
 also accept explicit `AbortSignal` values where useful.
 
-Command handlers are serial within one extension. Calling another command from
-the same extension executes locally; cyclic calls are rejected. Commands from
-different extensions remain independent.
+Command handlers and workspace-context callbacks share one serial operation lane
+within an extension. Calling another command from the same extension executes
+locally; cyclic calls are rejected. Different extensions remain independent.
 
 Output channels appear as extension-owned tabs in the Sideral terminal panel.
 `show()` reveals and selects the channel; `append` and `appendLine` buffer
@@ -294,11 +312,13 @@ arrow shape.
 | API | Manifest authority | Important behavior |
 | --- | --- | --- |
 | `commands` | Declared command IDs and invocation | Registration and active-document context are checked against the signed manifest |
+| `workspace.getContext`, `workspace.onDidChangeContext` | `workspace: metadata`, `read` or `readWrite` | Names and language ID only; event-driven, serial listeners, no paths or contents |
 | `workspace.readTextDocument` | `workspace: read` or `readWrite` | UTF-8, 4 MiB, canonical path containment |
 | `workspace.writeTextDocument` | `workspace: readWrite` | Existing text files, expected version, atomic replacement |
 | `workspace.findFiles` | `workspace: read` or `readWrite` | Forward-slash glob, deterministic order, bounded result/traversal |
 | `storage` | Always isolated to the extension | Atomic JSON, bounded keys, values and document |
 | `configuration.get` | Declared extension configuration key | Read-only effective value; user overrides are validated and atomically persisted by the native Settings flow |
+| `discordPresence.setActivity`, `discordPresence.clearActivity` | `discordPresence` with literal or text-configured Application ID | Official local RPC framing, bounded fields, generation ownership, finite I/O and cancellation |
 | `network.request` | Exact origin and method | No proxy/cookies, redirects revalidated, DNS pinned, bounded UTF-8 body |
 | `processes.execute` | Exact process grant | Signed literal/typed workspace-path arguments, explicit working directory, no stdin/shell, clean environment, console-independent Windows launch, bounded output and deterministic reap |
 | `window` | No extra grant | Bounded terminal-panel output channels and typed preview panels owned by the extension |
@@ -310,7 +330,8 @@ request that was already transmitted.
 ## Unit testing
 
 `@sideral/extension-testkit` runs an extension against deterministic in-memory
-storage, configuration, messages and output. Native capabilities must be
+storage, configuration, workspace metadata, Discord activity history, messages
+and output. Native capabilities must be
 provided explicitly, so a test cannot accidentally access the machine. The
 official scaffold pins the matching testkit locally together with the SDK.
 
@@ -327,8 +348,10 @@ await harness.executeCommand("acme.sample.run");
 await harness.dispose();
 ```
 
-The harness serializes commands, supports nested local commands, clones stored
-JSON and attempts every registered cleanup even when one fails.
+The harness puts commands and workspace-context listeners on the same serial
+operation lane, supports nested local commands, clones stored JSON, records
+successful Discord activity updates and attempts every registered cleanup even
+when one fails.
 
 ## Package and trust model
 
@@ -378,10 +401,31 @@ The opt-in real compiler tests use `SIDERAL_AMXXPC_E2E_COMPILER`,
 temporary source copy inside the workspace through both the extension command
 and native broker, verify a non-empty `.amxx`, and remove the temporary tree.
 
+## Discord Work Presence reference
+
+`extensions/discord-presence` is the first native-integration reference:
+
+- its only workspace authority is `metadata`, so it cannot read source code or
+  filesystem paths;
+- the public Discord Application ID is a user-owned typed text setting, never a
+  bot token or secret;
+- active-document changes are event-driven and identical activities are
+  deduplicated;
+- Toggle persists an explicit enabled state and Refresh retries configuration or
+  connectivity failures;
+- the Worker owns its listener, commands, output channel and controller through
+  reverse-order subscriptions;
+- the native broker owns and cancels the corresponding IPC task and pipe with
+  the extension generation.
+
+See `extensions/discord-presence/README.md` for setup and development commands.
+
 ## Versioning and diagnostics
 
-`manifestVersion`, `apiVersion` and the host protocol are independent. Version
-1 rejects unknown API versions instead of guessing a fallback. `engines.sideral`
+`manifestVersion`, `apiVersion` and the host protocol are independent. Manifest
+and API version 1 reject unknown versions instead of guessing a fallback. The
+internal host/Worker protocol is version 2 and is upgraded atomically with the
+editor; there is no compatibility branch. `engines.sideral`
 is checked before installation, enablement, rollback and bundle loading.
 
 The Extensions view reports the runtime state, last error, activation count and

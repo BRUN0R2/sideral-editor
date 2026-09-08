@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -21,24 +21,34 @@ pub enum ConfigurationProperty {
         description: Option<String>,
         default: String,
     },
+    Text {
+        key: String,
+        title: String,
+        #[serde(default)]
+        description: Option<String>,
+        #[serde(default)]
+        placeholder: Option<String>,
+        default: String,
+    },
 }
 
 impl ConfigurationProperty {
     pub fn key(&self) -> &str {
         match self {
-            Self::Executable { key, .. } => key,
+            Self::Executable { key, .. } | Self::Text { key, .. } => key,
         }
     }
 
     pub fn default_value(&self) -> &str {
         match self {
-            Self::Executable { default, .. } => default,
+            Self::Executable { default, .. } | Self::Text { default, .. } => default,
         }
     }
 
     pub fn validate_value(&self, value: &str) -> Result<(), ManifestError> {
         match self {
             Self::Executable { .. } => validate_executable_value(value),
+            Self::Text { .. } => validate_text_value(value),
         }
     }
 }
@@ -51,7 +61,7 @@ pub struct ConfigurationContribution {
 }
 
 impl ConfigurationContribution {
-    pub(crate) fn validate(&self) -> Result<HashSet<&str>, ManifestError> {
+    pub(crate) fn validate(&self) -> Result<HashMap<&str, &ConfigurationProperty>, ManifestError> {
         validate_text("contributes.configuration.title", &self.title, 120)?;
         if self.properties.is_empty() || self.properties.len() > MAX_CONFIGURATION_PROPERTIES {
             return Err(ManifestError::invalid(
@@ -60,7 +70,7 @@ impl ConfigurationContribution {
             ));
         }
 
-        let mut keys = HashSet::new();
+        let mut properties = HashMap::new();
         for property in &self.properties {
             match property {
                 ConfigurationProperty::Executable {
@@ -79,16 +89,41 @@ impl ConfigurationContribution {
                         )?;
                     }
                     validate_default_executable(default)?;
-                    if !keys.insert(key.as_str()) {
-                        return Err(ManifestError::Duplicate {
-                            kind: "configuration property",
-                            value: key.clone(),
-                        });
+                }
+                ConfigurationProperty::Text {
+                    key,
+                    title,
+                    description,
+                    placeholder,
+                    default,
+                } => {
+                    validate_configuration_key("contributes.configuration.properties.key", key)?;
+                    validate_text("contributes.configuration.properties.title", title, 120)?;
+                    if let Some(description) = description {
+                        validate_text(
+                            "contributes.configuration.properties.description",
+                            description,
+                            500,
+                        )?;
                     }
+                    if let Some(placeholder) = placeholder {
+                        validate_text(
+                            "contributes.configuration.properties.placeholder",
+                            placeholder,
+                            120,
+                        )?;
+                    }
+                    validate_text_value(default)?;
                 }
             }
+            if properties.insert(property.key(), property).is_some() {
+                return Err(ManifestError::Duplicate {
+                    kind: "configuration property",
+                    value: property.key().to_owned(),
+                });
+            }
         }
-        Ok(keys)
+        Ok(properties)
     }
 }
 
@@ -134,6 +169,23 @@ fn validate_default_executable(value: &str) -> Result<(), ManifestError> {
         return Err(ManifestError::invalid(
             "contributes.configuration.properties.default",
             "default executable must be a bare name resolved from the operating system PATH",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_text_value(value: &str) -> Result<(), ManifestError> {
+    if value.len() > 1_024 {
+        return Err(ManifestError::invalid(
+            "contributes.configuration.properties.default",
+            "text cannot exceed 1024 bytes",
+        ));
+    }
+    if value.contains('\0') || value.contains('\r') || value.contains('\n') || value.trim() != value
+    {
+        return Err(ManifestError::invalid(
+            "contributes.configuration.properties.default",
+            "text cannot contain NUL, line breaks or surrounding whitespace",
         ));
     }
     Ok(())

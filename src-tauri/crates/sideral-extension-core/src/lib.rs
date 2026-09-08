@@ -16,8 +16,10 @@ pub use manifest::{
     RuntimeKind, WorkerRuntime, normalize_keybinding, parse_manifest_json, validate_manifest_json,
     validate_package_path,
 };
+
 pub use package::{BundleSizeAssessment, assess_worker_bundle_size, validate_package_size};
 pub use permissions::{
-    NetworkMethod, NetworkPermission, PermissionSet, ProcessArgument, ProcessExecutable,
-    ProcessPathAccess, ProcessPermission, ProcessWorkingDirectory, WorkspaceAccess,
+    DiscordApplicationId, DiscordPresencePermission, NetworkMethod, NetworkPermission,
+    PermissionSet, ProcessArgument, ProcessExecutable, ProcessPathAccess, ProcessPermission,
+    ProcessWorkingDirectory, WorkspaceAccess,
 };

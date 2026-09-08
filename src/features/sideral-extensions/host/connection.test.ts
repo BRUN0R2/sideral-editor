@@ -49,7 +49,7 @@ vi.mock("./supervisor", () => ({
 import { connectExtensionHost } from "./connection";
 
 const HANDSHAKE: HostHandshake = {
-  protocolVersion: 1,
+  protocolVersion: 2,
   supportedApiVersions: [1],
   sessionId: 7,
   sessionToken: "native-session-token",
@@ -57,7 +57,7 @@ const HANDSHAKE: HostHandshake = {
 };
 const PENDING_INSTRUCTION: HostInstruction = {
   kind: "disposeAll",
-  protocolVersion: 1,
+  protocolVersion: 2,
   reason: "applicationShutdown",
   graceMilliseconds: 2_000,
 };

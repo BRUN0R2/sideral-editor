@@ -4,6 +4,8 @@ import type {
   ProtocolFailure,
   TextDocument,
   WorkerToHostMessage,
+  WorkspaceAccess,
+  WorkspaceContext,
 } from "@sideral/extension-sdk";
 import { HostFailure, toFailure, withDeadline } from "./host-errors";
 import { decodeWorkerToHostMessage } from "./protocol-validation";
@@ -31,6 +33,7 @@ export class ManagedWorker {
   readonly extensionId: string;
   readonly generation: number;
   readonly bundleSha256: string;
+  readonly workspaceAccess: WorkspaceAccess;
   readonly #bundleUrl: string;
   readonly #worker: Worker;
   readonly #ready = new Deferred<void>();
@@ -46,12 +49,14 @@ export class ManagedWorker {
     generation: number,
     bundleSha256: string,
     bundleUrl: string,
+    workspaceAccess: WorkspaceAccess,
     onBrokerMessage: BrokerMessageHandler,
     onFault: WorkerFaultHandler,
   ) {
     this.extensionId = extensionId;
     this.generation = generation;
     this.bundleSha256 = bundleSha256;
+    this.workspaceAccess = workspaceAccess;
     this.#bundleUrl = bundleUrl;
     this.#onBrokerMessage = onBrokerMessage;
     this.#onFault = onFault;
@@ -155,6 +160,17 @@ export class ManagedWorker {
         protocolVersion: PROTOCOL_VERSION,
         generation: this.generation,
         requestId,
+      });
+    }
+  }
+
+  updateWorkspaceContext(context: WorkspaceContext): void {
+    if (!this.#terminated && this.workspaceAccess !== "none") {
+      this.#post({
+        kind: "workspaceContextChanged",
+        protocolVersion: PROTOCOL_VERSION,
+        generation: this.generation,
+        context,
       });
     }
   }

@@ -44,18 +44,21 @@ describe("ManagedWorker resource ownership", () => {
         index + 1,
         "a".repeat(64),
         bundleUrl,
+        "none",
         async () => undefined,
         async () => undefined,
       );
       const initialization = runtime.initialize({
         kind: "initialize",
-        protocolVersion: 1,
+        protocolVersion: 2,
         generation: index + 1,
         extensionId: `publisher.extension-${index}`,
         extensionUri: `file:///extensions/${index}`,
         storageUri: `file:///storage/${index}`,
         bundleUrl,
         commandIds: [],
+        workspaceAccess: "none",
+        workspaceContext: null,
       });
 
       runtime.terminate();
@@ -67,5 +70,67 @@ describe("ManagedWorker resource ownership", () => {
     expect(FakeWorker.instances).toHaveLength(STRESS_ITERATIONS);
     expect(FakeWorker.instances.every((worker) => worker.terminationCount === 1)).toBe(true);
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(STRESS_ITERATIONS);
+  });
+
+  it("forwards workspace metadata only to a worker with manifest authority", async () => {
+    const context = {
+      workspaceName: "sideral-editor",
+      activeDocument: { name: "main.rs", languageId: "rust" },
+    } as const;
+    const createRuntime = (workspaceAccess: "none" | "metadata", suffix: string) => {
+      const runtime = new ManagedWorker(
+        `publisher.${suffix}`,
+        1,
+        "a".repeat(64),
+        `blob:${suffix}`,
+        workspaceAccess,
+        async () => undefined,
+        async () => undefined,
+      );
+      const initialization = runtime.initialize({
+        kind: "initialize",
+        protocolVersion: 2,
+        generation: 1,
+        extensionId: `publisher.${suffix}`,
+        extensionUri: `file:///extensions/${suffix}`,
+        storageUri: `file:///storage/${suffix}`,
+        bundleUrl: `blob:${suffix}`,
+        commandIds: [],
+        workspaceAccess,
+        workspaceContext:
+          workspaceAccess === "none" ? null : { workspaceName: null, activeDocument: null },
+      });
+      void initialization.catch(() => undefined);
+      return { initialization, runtime };
+    };
+    const deniedOwner = createRuntime("none", "denied");
+    const denied = deniedOwner.runtime;
+    denied.updateWorkspaceContext(context);
+    expect(
+      FakeWorker.instances[0]?.messages.filter(
+        (message) => message.kind === "workspaceContextChanged",
+      ),
+    ).toEqual([]);
+
+    const permittedOwner = createRuntime("metadata", "permitted");
+    const permitted = permittedOwner.runtime;
+    permitted.updateWorkspaceContext(context);
+    expect(
+      FakeWorker.instances[1]?.messages.filter(
+        (message) => message.kind === "workspaceContextChanged",
+      ),
+    ).toEqual([
+      {
+        kind: "workspaceContextChanged",
+        protocolVersion: 2,
+        generation: 1,
+        context,
+      },
+    ]);
+
+    denied.terminate();
+    permitted.terminate();
+    await expect(deniedOwner.initialization).rejects.toThrow("was terminated");
+    await expect(permittedOwner.initialization).rejects.toThrow("was terminated");
   });
 });

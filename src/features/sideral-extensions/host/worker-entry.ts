@@ -3,6 +3,7 @@ import type {
   BrokerMethod,
   CommandHandler,
   DeactivationReason,
+  DiscordActivity,
   Disposable,
   ExtensionApi,
   ExtensionContext,
@@ -23,6 +24,9 @@ import type {
   TextDocument,
   TextEditorCommandHandler,
   WorkerToHostMessage,
+  WorkspaceAccess,
+  WorkspaceContext,
+  WorkspaceContextListener,
 } from "@sideral/extension-sdk";
 import {
   jsonValue as decodeJsonValue,
@@ -87,6 +91,7 @@ const pendingBrokerRequests = new Map<string, PendingBrokerRequest>();
 const commandCancellations = new Map<string, AbortController>();
 const subscriptions: Disposable[] = [];
 const localCommandStack: string[] = [];
+const workspaceContextListeners = new Set<WorkspaceContextListener>();
 const extensionCancellation = new AbortController();
 const cleanupCancellation = new AbortController();
 
@@ -98,12 +103,14 @@ let generation = 0;
 let brokerSequence = 1;
 let extensionModule: ExtensionModule | null = null;
 let allowedCommands = new Set<string>();
+let workspaceAccess: WorkspaceAccess = "none";
+let workspaceContext: WorkspaceContext | null = null;
 let initialized = false;
 let activated = false;
 let deactivating = false;
 let currentOperationSignal: AbortSignal | null = null;
 let currentTextDocument: TextDocument | undefined;
-let commandQueue = Promise.resolve();
+let extensionOperationQueue = Promise.resolve();
 let deactivationOperation: Promise<ProtocolFailure | undefined> | null = null;
 
 scope.addEventListener("message", (event) => {
@@ -125,13 +132,19 @@ async function handleMessage(value: unknown): Promise<void> {
     return;
   }
   switch (message.kind) {
-    case "activate":
-      await activate(message.requestId, message.reason);
+    case "workspaceContextChanged": {
+      const operation = enqueueExtensionOperation(() => updateWorkspaceContext(message.context));
+      await operation;
       return;
+    }
+    case "activate": {
+      await enqueueExtensionOperation(() => activate(message.requestId, message.reason));
+      return;
+    }
     case "executeCommand": {
       const cancellation = new AbortController();
       commandCancellations.set(message.requestId, cancellation);
-      const operation = commandQueue.then(() =>
+      const operation = enqueueExtensionOperation(() =>
         executeCommand(
           message.requestId,
           message.commandId,
@@ -140,7 +153,6 @@ async function handleMessage(value: unknown): Promise<void> {
           cancellation.signal,
         ),
       );
-      commandQueue = settleForSequence(operation);
       await operation;
       return;
     }
@@ -167,6 +179,9 @@ async function initialize(
   storageUri = message.storageUri;
   generation = message.generation;
   allowedCommands = new Set(message.commandIds);
+  workspaceAccess = message.workspaceAccess;
+  workspaceContext =
+    message.workspaceContext === null ? null : freezeWorkspaceContext(message.workspaceContext);
   const imported: unknown = await import(/* @vite-ignore */ message.bundleUrl);
   extensionModule = validateExtensionModule(imported);
   initialized = true;
@@ -263,7 +278,7 @@ async function performDeactivation(
   let failure: ProtocolFailure | undefined;
   const cleanupFailures: unknown[] = [];
   try {
-    await commandQueue;
+    await extensionOperationQueue;
     currentOperationSignal = cleanupCancellation.signal;
     try {
       await extensionModule?.deactivate?.(reason);
@@ -278,6 +293,7 @@ async function performDeactivation(
       }
     }
     handlers.clear();
+    workspaceContextListeners.clear();
     if (cleanupFailures.length > 0) {
       throw new AggregateError(cleanupFailures, "One or more extension cleanup operations failed.");
     }
@@ -339,6 +355,18 @@ function createApi(): ExtensionApi {
         return value;
       },
     },
+    discordPresence: {
+      async setActivity(activity, signal) {
+        await brokerRequest(
+          "discordPresence.setActivity",
+          discordActivityPayload(activity),
+          signal,
+        );
+      },
+      async clearActivity(signal) {
+        await brokerRequest("discordPresence.clearActivity", {}, signal);
+      },
+    },
     network: {
       request: requestNetwork,
     },
@@ -374,6 +402,25 @@ function createApi(): ExtensionApi {
       },
     },
     workspace: {
+      getContext() {
+        return requireWorkspaceContext();
+      },
+      onDidChangeContext(listener) {
+        if (typeof listener !== "function") {
+          throw new TypeError("The workspace context listener must be a function.");
+        }
+        requireWorkspaceContext();
+        workspaceContextListeners.add(listener);
+        let disposed = false;
+        return {
+          dispose() {
+            if (!disposed) {
+              disposed = true;
+              workspaceContextListeners.delete(listener);
+            }
+          },
+        };
+      },
       async readTextDocument(uri, signal) {
         return asTextDocument(await brokerRequest("workspace.readTextDocument", { uri }, signal));
       },
@@ -399,6 +446,57 @@ function createApi(): ExtensionApi {
         );
       },
     },
+  };
+}
+
+async function updateWorkspaceContext(context: WorkspaceContext): Promise<void> {
+  if (workspaceAccess === "none" || deactivating) {
+    return;
+  }
+  workspaceContext = freezeWorkspaceContext(context);
+  for (const listener of workspaceContextListeners) {
+    await listener(workspaceContext);
+  }
+}
+
+function requireWorkspaceContext(): WorkspaceContext {
+  if (workspaceAccess === "none" || workspaceContext === null) {
+    throw new Error("The extension does not have workspace metadata permission.");
+  }
+  return workspaceContext;
+}
+
+function freezeWorkspaceContext(context: WorkspaceContext): WorkspaceContext {
+  const activeDocument =
+    context.activeDocument === null
+      ? null
+      : Object.freeze({
+          name: context.activeDocument.name,
+          languageId: context.activeDocument.languageId,
+        });
+  return Object.freeze({
+    workspaceName: context.workspaceName,
+    activeDocument,
+  });
+}
+
+function discordActivityPayload(activity: DiscordActivity): JsonObject {
+  const assets = activity.assets;
+  return {
+    ...(activity.type === undefined ? {} : { type: activity.type }),
+    ...(activity.details === undefined ? {} : { details: activity.details }),
+    ...(activity.state === undefined ? {} : { state: activity.state }),
+    ...(activity.startTimestamp === undefined ? {} : { startTimestamp: activity.startTimestamp }),
+    ...(assets === undefined
+      ? {}
+      : {
+          assets: {
+            ...(assets.largeImage === undefined ? {} : { largeImage: assets.largeImage }),
+            ...(assets.largeText === undefined ? {} : { largeText: assets.largeText }),
+            ...(assets.smallImage === undefined ? {} : { smallImage: assets.smallImage }),
+            ...(assets.smallText === undefined ? {} : { smallText: assets.smallText }),
+          },
+        }),
   };
 }
 
@@ -922,6 +1020,12 @@ function settleForSequence(operation: Promise<unknown>): Promise<void> {
     () => undefined,
     () => undefined,
   );
+}
+
+function enqueueExtensionOperation<Result>(operation: () => Promise<Result>): Promise<Result> {
+  const result = extensionOperationQueue.then(operation);
+  extensionOperationQueue = settleForSequence(result);
+  return result;
 }
 
 function reportDeferredFailure(operation: Promise<unknown>, code: string): void {

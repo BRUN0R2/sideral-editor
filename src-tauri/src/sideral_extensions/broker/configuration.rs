@@ -51,25 +51,9 @@ impl CapabilityBroker {
         let property = configuration_property(&manifest, &key)?;
         let stored_value = match update {
             ConfigurationUpdate::Default => None,
-            ConfigurationUpdate::Value { value } => {
-                property.validate_value(&value).map_err(|_| {
-                    ExtensionError::InvalidRequest(format!(
-                        "configuration {key} has an invalid executable value"
-                    ))
-                })?;
-                if !Path::new(&value).is_absolute() {
-                    return Err(ExtensionError::InvalidRequest(
-                        "selected executable paths must be absolute".to_owned(),
-                    ));
-                }
-                let canonical = resolve_process_executable(&value)?;
-                let normalized = canonical.into_os_string().into_string().map_err(|_| {
-                    ExtensionError::InvalidRequest(
-                        "selected executable path is not valid Unicode".to_owned(),
-                    )
-                })?;
-                Some(Value::String(normalized))
-            }
+            ConfigurationUpdate::Value { value } => Some(Value::String(
+                normalize_configuration_value(property, value)?,
+            )),
         };
         let path = self.store_path(&manifest.id, StoreKind::Configuration);
         let _gate = StoreKind::Configuration.gate(&self.shared).lock().await;
@@ -132,6 +116,21 @@ fn configuration_view(
                     value,
                     user_defined,
                 }),
+                ConfigurationProperty::Text {
+                    key,
+                    title,
+                    description,
+                    placeholder,
+                    default,
+                } => Ok(ExtensionConfigurationPropertyView::Text {
+                    key: key.clone(),
+                    title: title.clone(),
+                    description: description.clone(),
+                    placeholder: placeholder.clone(),
+                    default_value: default.clone(),
+                    value,
+                    user_defined,
+                }),
             }
         })
         .collect::<Result<Vec<_>, ExtensionError>>()?;
@@ -179,17 +178,47 @@ fn resolved_value(
     })?;
     property.validate_value(value).map_err(|_| {
         ExtensionError::InvalidRequest(format!(
-            "stored configuration {} has an invalid executable value",
+            "stored configuration {} has an invalid value",
             property.key()
         ))
     })?;
-    if !Path::new(value).is_absolute() {
+    if matches!(property, ConfigurationProperty::Executable { .. })
+        && !Path::new(value).is_absolute()
+    {
         return Err(ExtensionError::InvalidRequest(format!(
             "stored configuration {} must contain an absolute executable path",
             property.key()
         )));
     }
     Ok((value.to_owned(), true))
+}
+
+fn normalize_configuration_value(
+    property: &ConfigurationProperty,
+    value: String,
+) -> Result<String, ExtensionError> {
+    property.validate_value(&value).map_err(|_| {
+        ExtensionError::InvalidRequest(format!(
+            "configuration {} has an invalid value",
+            property.key()
+        ))
+    })?;
+    if !matches!(property, ConfigurationProperty::Executable { .. }) {
+        return Ok(value);
+    }
+    if !Path::new(&value).is_absolute() {
+        return Err(ExtensionError::InvalidRequest(
+            "selected executable paths must be absolute".to_owned(),
+        ));
+    }
+    resolve_process_executable(&value)?
+        .into_os_string()
+        .into_string()
+        .map_err(|_| {
+            ExtensionError::InvalidRequest(
+                "selected executable path is not valid Unicode".to_owned(),
+            )
+        })
 }
 
 #[cfg(test)]
@@ -242,6 +271,20 @@ mod tests {
         assert_eq!(reset_json["value"], json!("tool"));
         assert_eq!(reset_json["userDefined"], json!(false));
 
+        let text = broker
+            .update_configuration(
+                manifest.clone(),
+                "label".to_owned(),
+                ConfigurationUpdate::Value {
+                    value: "configured".to_owned(),
+                },
+            )
+            .await?;
+        let text_json = serde_json::to_value(&text.properties[1])?;
+        assert_eq!(text_json["kind"], json!("text"));
+        assert_eq!(text_json["value"], json!("configured"));
+        assert_eq!(text_json["userDefined"], json!(true));
+
         let configuration_path = broker.store_path(&manifest.id, StoreKind::Configuration);
         fs::write(
             configuration_path,
@@ -281,6 +324,12 @@ mod tests {
                         "key": "tool-path",
                         "title": "Tool Path",
                         "default": "tool"
+                    }, {
+                        "kind": "text",
+                        "key": "label",
+                        "title": "Label",
+                        "placeholder": "Optional label",
+                        "default": ""
                     }]
                 }
             }

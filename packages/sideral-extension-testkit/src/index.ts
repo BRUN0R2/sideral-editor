@@ -1,6 +1,7 @@
 import type {
   ActivationReason,
   CommandHandler,
+  DiscordActivity,
   Disposable,
   ExtensionApi,
   ExtensionContext,
@@ -16,6 +17,8 @@ import type {
   ProcessResult,
   TextDocument,
   TextEditorCommandHandler,
+  WorkspaceContext,
+  WorkspaceContextListener,
 } from "@sideral/extension-sdk";
 
 export interface TestMessage {
@@ -46,6 +49,7 @@ export interface ExtensionHarnessOptions {
   readonly configuration?: Readonly<Record<string, string>>;
   readonly storage?: Readonly<Record<string, JsonValue>>;
   readonly activeTextDocument?: TextDocument;
+  readonly workspaceContext?: WorkspaceContext;
   readonly readTextDocument?: (uri: string, signal?: AbortSignal) => Promise<TextDocument>;
   readonly writeTextDocument?: (
     uri: string,
@@ -59,6 +63,8 @@ export interface ExtensionHarnessOptions {
   ) => Promise<readonly string[]>;
   readonly requestNetwork?: (request: NetworkRequest) => Promise<NetworkResponse>;
   readonly executeProcess?: (request: ProcessRequest) => Promise<ProcessResult>;
+  readonly setDiscordActivity?: (activity: DiscordActivity, signal?: AbortSignal) => Promise<void>;
+  readonly clearDiscordActivity?: (signal?: AbortSignal) => Promise<void>;
 }
 
 export interface ExtensionHarness {
@@ -68,11 +74,13 @@ export interface ExtensionHarness {
   readonly previews: readonly TestPreviewPanel[];
   readonly storage: ReadonlyMap<string, JsonValue>;
   readonly configuration: ReadonlyMap<string, string>;
+  readonly discordActivityUpdates: readonly (DiscordActivity | null)[];
   activate(): Promise<void>;
   executeCommand(
     commandId: string,
     ...arguments_: readonly JsonValue[]
   ): Promise<JsonValue | undefined>;
+  updateWorkspaceContext(context: WorkspaceContext): Promise<void>;
   dispose(): Promise<void>;
 }
 
@@ -96,9 +104,12 @@ class Harness implements ExtensionHarness {
   readonly #commandStack: string[] = [];
   readonly #subscriptions: Disposable[] = [];
   readonly #cancellation = new AbortController();
+  readonly #workspaceContextListeners = new Set<WorkspaceContextListener>();
+  readonly #discordActivityUpdates: (DiscordActivity | null)[] = [];
+  #workspaceContext: WorkspaceContext;
   #active = false;
   #disposed = false;
-  #commandQueue = Promise.resolve();
+  #extensionOperationQueue = Promise.resolve();
   #disposal: Promise<void> | null = null;
   #currentTextDocument: TextDocument | undefined;
 
@@ -108,6 +119,9 @@ class Harness implements ExtensionHarness {
     this.extensionId = options.extensionId ?? "test.extension";
     this.#storage = cloneEntries(options.storage);
     this.#configuration = new Map(Object.entries(options.configuration ?? {}));
+    this.#workspaceContext = cloneWorkspaceContext(
+      options.workspaceContext ?? { workspaceName: null, activeDocument: null },
+    );
   }
 
   get messages(): readonly TestMessage[] {
@@ -130,6 +144,10 @@ class Harness implements ExtensionHarness {
     return this.#configuration;
   }
 
+  get discordActivityUpdates(): readonly (DiscordActivity | null)[] {
+    return this.#discordActivityUpdates;
+  }
+
   async activate(): Promise<void> {
     if (this.#disposed) {
       throw new Error("The extension harness is disposed.");
@@ -148,14 +166,31 @@ class Harness implements ExtensionHarness {
     if (!this.#active || this.#disposed) {
       throw new Error("The extension harness is not active.");
     }
-    const operation = this.#commandQueue.then(() =>
+    const operation = this.#extensionOperationQueue.then(() =>
       this.#invokeRegisteredCommand(commandId, arguments_, this.#options.activeTextDocument),
     );
-    this.#commandQueue = operation.then(
+    this.#extensionOperationQueue = operation.then(
       () => undefined,
       () => undefined,
     );
     return operation;
+  }
+
+  async updateWorkspaceContext(context: WorkspaceContext): Promise<void> {
+    if (this.#disposed) {
+      throw new Error("The extension harness is disposed.");
+    }
+    const operation = this.#extensionOperationQueue.then(async () => {
+      this.#workspaceContext = cloneWorkspaceContext(context);
+      for (const listener of this.#workspaceContextListeners) {
+        await listener(cloneWorkspaceContext(this.#workspaceContext));
+      }
+    });
+    this.#extensionOperationQueue = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    await operation;
   }
 
   async dispose(): Promise<void> {
@@ -169,7 +204,7 @@ class Harness implements ExtensionHarness {
 
   async #disposeDeterministically(): Promise<void> {
     const failures: unknown[] = [];
-    await this.#commandQueue;
+    await this.#extensionOperationQueue;
     try {
       await this.#module.deactivate?.("applicationShutdown");
     } catch (error: unknown) {
@@ -183,6 +218,7 @@ class Harness implements ExtensionHarness {
       }
     }
     this.#commands.clear();
+    this.#workspaceContextListeners.clear();
     if (failures.length > 0) {
       throw new AggregateError(failures, "One or more extension cleanup operations failed.");
     }
@@ -235,6 +271,20 @@ class Harness implements ExtensionHarness {
           return value;
         },
       },
+      discordPresence: {
+        setActivity: async (activity, signal) => {
+          throwIfAborted(signal);
+          await this.#options.setDiscordActivity?.(activity, signal);
+          throwIfAborted(signal);
+          this.#discordActivityUpdates.push(structuredClone(activity));
+        },
+        clearActivity: async (signal) => {
+          throwIfAborted(signal);
+          await this.#options.clearDiscordActivity?.(signal);
+          throwIfAborted(signal);
+          this.#discordActivityUpdates.push(null);
+        },
+      },
       network: {
         request: async (request) =>
           requireHandler(this.#options.requestNetwork, "network request")(request),
@@ -269,6 +319,11 @@ class Harness implements ExtensionHarness {
         showErrorMessage: (message) => this.#recordMessage("error", message),
       },
       workspace: {
+        getContext: () => cloneWorkspaceContext(this.#workspaceContext),
+        onDidChangeContext: (listener) => {
+          this.#workspaceContextListeners.add(listener);
+          return once(() => this.#workspaceContextListeners.delete(listener));
+        },
         readTextDocument: async (uri, signal) =>
           requireHandler(this.#options.readTextDocument, "workspace read")(uri, signal),
         writeTextDocument: async (uri, content, expectedVersion, signal) =>
@@ -318,6 +373,16 @@ class Harness implements ExtensionHarness {
       this.#currentTextDocument = previousDocument;
       this.#commandStack.pop();
     }
+  }
+}
+
+function cloneWorkspaceContext(context: WorkspaceContext): WorkspaceContext {
+  return structuredClone(context);
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted === true) {
+    throw new DOMException("The extension operation was cancelled.", "AbortError");
   }
 }
 

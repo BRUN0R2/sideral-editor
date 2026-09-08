@@ -1,9 +1,9 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{ManifestError, configuration::validate_configuration_key};
+use crate::{ConfigurationProperty, ManifestError, configuration::validate_configuration_key};
 
 const MAX_NETWORK_ORIGINS: usize = 32;
 const MAX_PROCESS_PERMISSIONS: usize = 16;
@@ -15,8 +15,27 @@ const MAX_PROCESS_ARGUMENT_EXTENSIONS: usize = 16;
 pub enum WorkspaceAccess {
     #[default]
     None,
+    Metadata,
     Read,
     ReadWrite,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum DiscordApplicationId {
+    Literal { value: String },
+    Configuration { key: String },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DiscordPresencePermission {
+    pub application_id: DiscordApplicationId,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -109,27 +128,31 @@ pub struct PermissionSet {
     pub network: Vec<NetworkPermission>,
     #[serde(default)]
     pub processes: Vec<ProcessPermission>,
+    #[serde(default)]
+    pub discord_presence: Option<DiscordPresencePermission>,
 }
 
 impl PermissionSet {
     pub(crate) fn validate(
         &self,
         extension_id: &str,
-        executable_configuration_keys: &HashSet<&str>,
+        configuration_properties: &HashMap<&str, &ConfigurationProperty>,
     ) -> Result<(), ManifestError> {
         validate_network_origins(&self.network)?;
         validate_process_permissions(
             extension_id,
             self.workspace,
             &self.processes,
-            executable_configuration_keys,
-        )
+            configuration_properties,
+        )?;
+        validate_discord_presence(self.discord_presence.as_ref(), configuration_properties)
     }
 
     pub(crate) fn is_empty(&self) -> bool {
         self.workspace == WorkspaceAccess::None
             && self.network.is_empty()
             && self.processes.is_empty()
+            && self.discord_presence.is_none()
     }
 }
 
@@ -218,7 +241,7 @@ fn validate_process_permissions(
     extension_id: &str,
     workspace_access: WorkspaceAccess,
     permissions: &[ProcessPermission],
-    executable_configuration_keys: &HashSet<&str>,
+    configuration_properties: &HashMap<&str, &ConfigurationProperty>,
 ) -> Result<(), ManifestError> {
     if permissions.len() > MAX_PROCESS_PERMISSIONS {
         return Err(ManifestError::invalid(
@@ -237,7 +260,10 @@ fn validate_process_permissions(
             }
             ProcessExecutable::Configuration { key } => {
                 validate_configuration_key("permissions.processes.executable.key", key)?;
-                if !executable_configuration_keys.contains(key.as_str()) {
+                if !matches!(
+                    configuration_properties.get(key.as_str()),
+                    Some(ConfigurationProperty::Executable { .. })
+                ) {
                     return Err(ManifestError::Inconsistent(format!(
                         "process grant {} references undeclared executable configuration {key}",
                         permission.id
@@ -286,7 +312,10 @@ fn validate_process_permissions(
             }
         }
         if permission.working_directory == ProcessWorkingDirectory::Workspace
-            && workspace_access == WorkspaceAccess::None
+            && matches!(
+                workspace_access,
+                WorkspaceAccess::None | WorkspaceAccess::Metadata
+            )
         {
             return Err(ManifestError::Inconsistent(format!(
                 "process grant {} uses the workspace working directory without workspace access",
@@ -325,7 +354,10 @@ fn validate_process_path_input(
     let permitted = match (workspace_access, access) {
         (WorkspaceAccess::Read | WorkspaceAccess::ReadWrite, ProcessPathAccess::Read)
         | (WorkspaceAccess::ReadWrite, ProcessPathAccess::Write) => true,
-        (WorkspaceAccess::None, ProcessPathAccess::Read | ProcessPathAccess::Write)
+        (
+            WorkspaceAccess::None | WorkspaceAccess::Metadata,
+            ProcessPathAccess::Read | ProcessPathAccess::Write,
+        )
         | (WorkspaceAccess::Read, ProcessPathAccess::Write) => false,
     };
     if permitted {
@@ -335,6 +367,44 @@ fn validate_process_path_input(
             "process grant {permission_id} declares {access:?} workspace input {name} without sufficient workspace access"
         )))
     }
+}
+
+fn validate_discord_presence(
+    permission: Option<&DiscordPresencePermission>,
+    configuration_properties: &HashMap<&str, &ConfigurationProperty>,
+) -> Result<(), ManifestError> {
+    let Some(permission) = permission else {
+        return Ok(());
+    };
+
+    match &permission.application_id {
+        DiscordApplicationId::Literal { value } => validate_discord_application_id(value),
+        DiscordApplicationId::Configuration { key } => {
+            validate_configuration_key("permissions.discordPresence.applicationId.key", key)?;
+            if !matches!(
+                configuration_properties.get(key.as_str()),
+                Some(ConfigurationProperty::Text { .. })
+            ) {
+                return Err(ManifestError::Inconsistent(format!(
+                    "Discord presence references undeclared text configuration {key}"
+                )));
+            }
+            Ok(())
+        }
+    }
+}
+
+fn validate_discord_application_id(value: &str) -> Result<(), ManifestError> {
+    if !(17..=20).contains(&value.len())
+        || !value.bytes().all(|byte| byte.is_ascii_digit())
+        || value.bytes().all(|byte| byte == b'0')
+    {
+        return Err(ManifestError::invalid(
+            "permissions.discordPresence.applicationId.value",
+            "Discord application ID must contain 17 to 20 decimal digits and cannot be zero",
+        ));
+    }
+    Ok(())
 }
 
 fn validate_process_permission_id(value: &str, expected_prefix: &str) -> Result<(), ManifestError> {

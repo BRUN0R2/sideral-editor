@@ -41,7 +41,7 @@ impl SideralExtensionState {
         }
         self.require_host_connected()?;
 
-        let (extension_id, api_version, bundle_sha256, command_ids, invocation) = {
+        let (extension_id, api_version, bundle_sha256, command_ids, workspace_access, invocation) = {
             let registry = lock(&self.service.registry, "extension registry")?;
             let installed = registry.extension_for_command(&command_id)?;
             registry.active(&installed.active.manifest.id)?;
@@ -66,6 +66,7 @@ impl SideralExtensionState {
                     .iter()
                     .map(|command| command.id.clone())
                     .collect::<Vec<_>>(),
+                installed.active.manifest.permissions.workspace,
                 invocation,
             )
         };
@@ -128,6 +129,7 @@ impl SideralExtensionState {
             extension_uri: format!("sideral-extension:/{extension_id}/"),
             storage_uri: format!("sideral-storage:/{extension_id}/"),
             command_ids,
+            workspace_access,
             command_id,
             arguments,
             active_text_document,
@@ -271,7 +273,7 @@ impl SideralExtensionState {
         activation_reason: ActivationReason,
     ) -> Result<(), ExtensionError> {
         self.require_host_connected()?;
-        let (api_version, bundle_sha256, command_ids) = {
+        let (api_version, bundle_sha256, command_ids, workspace_access) = {
             let registry = lock(&self.service.registry, "extension registry")?;
             let installed = registry.active(&extension_id)?;
             (
@@ -285,6 +287,7 @@ impl SideralExtensionState {
                     .iter()
                     .map(|command| command.id.clone())
                     .collect::<Vec<_>>(),
+                installed.active.manifest.permissions.workspace,
             )
         };
         let generation = {
@@ -327,6 +330,7 @@ impl SideralExtensionState {
             extension_uri: format!("sideral-extension:/{extension_id}/"),
             storage_uri: format!("sideral-storage:/{extension_id}/"),
             command_ids,
+            workspace_access,
             activation_reason,
             start_deadline_milliseconds: WORKER_START_DEADLINE_MILLISECONDS,
             activation_deadline_milliseconds: WORKER_ACTIVATION_DEADLINE_MILLISECONDS,

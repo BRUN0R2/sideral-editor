@@ -318,7 +318,7 @@
   gap: 8px;
 }
 
-.extension-configuration__path {
+.extension-configuration__input {
   min-width: 0;
   height: 34px;
   border: 1px solid var(--border-strong);

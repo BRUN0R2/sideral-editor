@@ -563,11 +563,16 @@ function decodeExtensionKeybinding(value: unknown, path: string): ExtensionKeybi
 }
 
 function decodePermissionSet(value: unknown, path: string): PermissionSet {
-  const source = record(value, path, ["workspace", "network", "processes"]);
+  const source = record(value, path, ["workspace", "network", "processes", "discordPresence"]);
+  const discordPresence = nullable(
+    required(source, "discordPresence", path),
+    `${path}.discordPresence`,
+    decodeDiscordPresencePermission,
+  );
   return {
     workspace: enumeration(
       required(source, "workspace", path),
-      ["none", "read", "readWrite"],
+      ["none", "metadata", "read", "readWrite"],
       `${path}.workspace`,
     ),
     network: arrayOf(required(source, "network", path), `${path}.network`, (item, itemPath) => {
@@ -610,6 +615,44 @@ function decodePermissionSet(value: unknown, path: string): PermissionSet {
         };
       },
     ),
+    ...(discordPresence === null ? {} : { discordPresence }),
+  };
+}
+
+function decodeDiscordPresencePermission(
+  value: unknown,
+  path: string,
+): NonNullable<PermissionSet["discordPresence"]> {
+  const source = record(value, path, ["applicationId"]);
+  return {
+    applicationId: decodeDiscordApplicationId(
+      required(source, "applicationId", path),
+      `${path}.applicationId`,
+    ),
+  };
+}
+
+function decodeDiscordApplicationId(
+  value: unknown,
+  path: string,
+): NonNullable<PermissionSet["discordPresence"]>["applicationId"] {
+  const tagged = record(value, path);
+  const kind = enumeration(
+    required(tagged, "kind", path),
+    ["literal", "configuration"],
+    `${path}.kind`,
+  );
+  if (kind === "literal") {
+    const source = record(value, path, ["kind", "value"]);
+    return {
+      kind,
+      value: stringValue(required(source, "value", path), `${path}.value`),
+    };
+  }
+  const source = record(value, path, ["kind", "key"]);
+  return {
+    kind,
+    key: stringValue(required(source, "key", path), `${path}.key`),
   };
 }
 
@@ -703,28 +746,44 @@ function decodeConfigurationContribution(value: unknown, path: string): Configur
       required(source, "properties", path),
       `${path}.properties`,
       (property, propertyPath) => {
-        const entry = record(property, propertyPath, [
+        const tagged = record(property, propertyPath);
+        const kind = enumeration(
+          required(tagged, "kind", propertyPath),
+          ["executable", "text"],
+          `${propertyPath}.kind`,
+        );
+        const fields = [
           "kind",
           "key",
           "title",
           "description",
           "default",
-        ]);
+          ...(kind === "text" ? ["placeholder"] : []),
+        ];
+        const entry = record(property, propertyPath, fields);
         const description = nullable(
           required(entry, "description", propertyPath),
           `${propertyPath}.description`,
           stringValue,
         );
-        return {
-          kind: literal(
-            required(entry, "kind", propertyPath),
-            "executable",
-            `${propertyPath}.kind`,
-          ),
+        const common = {
+          kind,
           key: stringValue(required(entry, "key", propertyPath), `${propertyPath}.key`),
           title: stringValue(required(entry, "title", propertyPath), `${propertyPath}.title`),
           ...(description === null ? {} : { description }),
           default: stringValue(required(entry, "default", propertyPath), `${propertyPath}.default`),
+        };
+        if (kind === "executable") {
+          return common;
+        }
+        const placeholder = nullable(
+          required(entry, "placeholder", propertyPath),
+          `${propertyPath}.placeholder`,
+          stringValue,
+        );
+        return {
+          ...common,
+          ...(placeholder === null ? {} : { placeholder }),
         };
       },
     ),
@@ -751,6 +810,8 @@ function decodeExtensionConfigurationProperty(
   value: unknown,
   path: string,
 ): ExtensionConfigurationPropertyView {
+  const tagged = record(value, path);
+  const kind = enumeration(required(tagged, "kind", path), ["executable", "text"], `${path}.kind`);
   const source = record(value, path, [
     "kind",
     "key",
@@ -759,9 +820,9 @@ function decodeExtensionConfigurationProperty(
     "defaultValue",
     "value",
     "userDefined",
+    ...(kind === "text" ? ["placeholder"] : []),
   ]);
-  return {
-    kind: literal(required(source, "kind", path), "executable", `${path}.kind`),
+  const common = {
     key: stringValue(required(source, "key", path), `${path}.key`),
     title: stringValue(required(source, "title", path), `${path}.title`),
     description: nullable(
@@ -772,6 +833,18 @@ function decodeExtensionConfigurationProperty(
     defaultValue: stringValue(required(source, "defaultValue", path), `${path}.defaultValue`),
     value: stringValue(required(source, "value", path), `${path}.value`),
     userDefined: booleanValue(required(source, "userDefined", path), `${path}.userDefined`),
+  };
+  if (kind === "executable") {
+    return { kind, ...common };
+  }
+  return {
+    kind,
+    ...common,
+    placeholder: nullable(
+      required(source, "placeholder", path),
+      `${path}.placeholder`,
+      stringValue,
+    ),
   };
 }
 

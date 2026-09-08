@@ -84,7 +84,7 @@ function Workbench({ extensionHostConnection }: AppProps) {
   );
   const workspace = useWorkspace(desktopPreferences.preferences.autoSave);
   const extensions = useExtensionSystem(
-    workspace.workspaceRoot?.path ?? null,
+    workspace.workspaceRoot,
     workspace.activeDocument,
     extensionHostConnection,
     workspace.saveDocument,

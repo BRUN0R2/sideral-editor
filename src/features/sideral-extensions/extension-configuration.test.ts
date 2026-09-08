@@ -14,11 +14,21 @@ const CONFIGURATION = {
       value: "D:\\Tools\\compiler.exe",
       userDefined: true,
     },
+    {
+      kind: "text",
+      key: "application-id",
+      title: "Application ID",
+      description: null,
+      placeholder: "123456789012345678",
+      defaultValue: "",
+      value: "123456789012345678",
+      userDefined: true,
+    },
   ],
 };
 
 describe("extension configuration contracts", () => {
-  it("decodes executable settings without weakening their discriminated type", () => {
+  it("decodes typed settings without weakening their discriminated union", () => {
     expect(decodeExtensionConfiguration(CONFIGURATION)).toEqual(CONFIGURATION);
     expect(decodeExtensionConfigurations([CONFIGURATION])).toEqual([CONFIGURATION]);
   });

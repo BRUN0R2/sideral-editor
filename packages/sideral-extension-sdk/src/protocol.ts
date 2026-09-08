@@ -1,6 +1,13 @@
-import type { DeactivationReason, JsonObject, JsonValue, TextDocument } from "./runtime";
+import type { WorkspaceAccess } from "./manifest";
+import type {
+  DeactivationReason,
+  JsonObject,
+  JsonValue,
+  TextDocument,
+  WorkspaceContext,
+} from "./runtime";
 
-export type ExtensionProtocolVersion = 1;
+export type ExtensionProtocolVersion = 2;
 
 export type ExtensionRuntimeState =
   | "dormant"
@@ -24,6 +31,8 @@ export interface ProtocolFailure {
 export type BrokerMethod =
   | "commands.execute"
   | "configuration.get"
+  | "discordPresence.clearActivity"
+  | "discordPresence.setActivity"
   | "network.request"
   | "processes.execute"
   | "storage.delete"
@@ -62,6 +71,12 @@ export type HostToWorkerMessage =
       readonly storageUri: string;
       readonly bundleUrl: string;
       readonly commandIds: readonly string[];
+      readonly workspaceAccess: WorkspaceAccess;
+      readonly workspaceContext: WorkspaceContext | null;
+    })
+  | (WorkerEnvelope & {
+      readonly kind: "workspaceContextChanged";
+      readonly context: WorkspaceContext;
     })
   | (WorkerEnvelope & {
       readonly kind: "activate";

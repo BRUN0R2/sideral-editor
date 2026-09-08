@@ -1,7 +1,7 @@
 # Sideral Extension SDK
 
 This package contains the versioned compile-time contracts for Sideral manifest
-v1, API v1 and the host/Worker protocol. Install it as a development dependency
+v1, API v1 and host/Worker protocol v2. Install it as a development dependency
 and use `import type`; it contributes zero runtime bytes to an extension bundle.
 Projects created by the official scaffold receive an exact local snapshot of
 this package, so they are immediately installable and buildable outside the
@@ -114,6 +114,31 @@ default is a bare executable name resolved from `PATH`; selected overrides are
 absolute canonical paths. Worker code
 may read a declared value with `api.configuration.get("compiler-path")`, but it
 cannot change user configuration.
+
+Use a `text` configuration property for bounded, trimmed single-line values.
+Capabilities can require the matching type; for example, Discord Presence may
+bind its public Application ID to a text setting and cannot bind it to an
+executable selector.
+
+Workspace metadata is event-driven and excludes content and paths:
+
+```ts
+const current = api.workspace.getContext();
+context.subscriptions.add(
+  api.workspace.onDidChangeContext(async (next) => {
+    await api.discordPresence.setActivity({
+      type: "playing",
+      details: next.activeDocument === null ? "Browsing" : `Editing ${next.activeDocument.name}`,
+      state: next.workspaceName === null ? "No workspace" : `Workspace: ${next.workspaceName}`
+    });
+  })
+);
+void current;
+```
+
+The corresponding manifest needs `workspace: "metadata"` and an explicit
+`discordPresence` grant. The native broker validates and owns the local IPC
+session; the Worker never opens a socket or named pipe directly.
 
 The corresponding manifest argument is an immutable
 `{ kind: "literal", value }`, a validated

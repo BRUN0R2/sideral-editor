@@ -1,4 +1,4 @@
-export type WorkspaceAccess = "none" | "read" | "readWrite";
+export type WorkspaceAccess = "none" | "metadata" | "read" | "readWrite";
 
 export type NetworkMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -9,6 +9,14 @@ export type ProcessPathAccess = "read" | "write";
 export type ProcessExecutable =
   | { readonly kind: "literal"; readonly value: string }
   | { readonly kind: "configuration"; readonly key: string };
+
+export type DiscordApplicationId =
+  | { readonly kind: "literal"; readonly value: string }
+  | { readonly kind: "configuration"; readonly key: string };
+
+export interface DiscordPresencePermission {
+  readonly applicationId: DiscordApplicationId;
+}
 
 export interface LiteralProcessArgument {
   readonly kind: "literal";
@@ -51,6 +59,7 @@ export interface PermissionSet {
   readonly workspace?: WorkspaceAccess;
   readonly network?: readonly NetworkPermission[];
   readonly processes?: readonly ProcessPermission[];
+  readonly discordPresence?: DiscordPresencePermission;
 }
 
 export interface EngineRequirements {
@@ -95,7 +104,16 @@ export interface ExecutableConfigurationProperty {
   readonly default: string;
 }
 
-export type ConfigurationProperty = ExecutableConfigurationProperty;
+export interface TextConfigurationProperty {
+  readonly kind: "text";
+  readonly key: string;
+  readonly title: string;
+  readonly description?: string;
+  readonly placeholder?: string;
+  readonly default: string;
+}
+
+export type ConfigurationProperty = ExecutableConfigurationProperty | TextConfigurationProperty;
 
 export interface ConfigurationContribution {
   readonly title: string;

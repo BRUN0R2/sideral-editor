@@ -4,6 +4,7 @@ import type {
   JsonValue,
   ProtocolFailure,
   WorkerToHostMessage,
+  WorkspaceContext,
 } from "@sideral/extension-sdk";
 import {
   arrayOf,
@@ -24,6 +25,8 @@ import type { HostInstruction } from "../contracts";
 const BROKER_METHODS: readonly BrokerMethod[] = [
   "commands.execute",
   "configuration.get",
+  "discordPresence.clearActivity",
+  "discordPresence.setActivity",
   "network.request",
   "processes.execute",
   "storage.delete",
@@ -129,6 +132,7 @@ export function decodeHostInstruction(value: unknown): HostInstruction {
     "extensionUri",
     "storageUri",
     "commandIds",
+    "workspaceAccess",
     "activationReason",
     "startDeadlineMilliseconds",
     "activationDeadlineMilliseconds",
@@ -163,6 +167,11 @@ export function decodeHostInstruction(value: unknown): HostInstruction {
       required(source, "commandIds", path),
       `${path}.commandIds`,
       (item, itemPath) => boundedString(item, itemPath, 128),
+    ),
+    workspaceAccess: enumeration(
+      required(source, "workspaceAccess", path),
+      ["none", "metadata", "read", "readWrite"],
+      `${path}.workspaceAccess`,
     ),
     activationReason: decodeActivationReason(
       required(source, "activationReason", path),
@@ -218,7 +227,7 @@ export function decodeWorkerToHostMessage(value: unknown): WorkerToHostMessage {
   );
   const protocolVersion = literal(
     required(envelope, "protocolVersion", path),
-    1,
+    2,
     `${path}.protocolVersion`,
   );
   const generation = safeInteger(required(envelope, "generation", path), `${path}.generation`);
@@ -308,12 +317,20 @@ export function decodeHostToWorkerMessage(value: unknown): HostToWorkerMessage {
   const envelope = record(value, path);
   const kind = enumeration(
     required(envelope, "kind", path),
-    ["initialize", "activate", "executeCommand", "brokerResponse", "cancel", "deactivate"],
+    [
+      "initialize",
+      "workspaceContextChanged",
+      "activate",
+      "executeCommand",
+      "brokerResponse",
+      "cancel",
+      "deactivate",
+    ],
     `${path}.kind`,
   );
   const protocolVersion = literal(
     required(envelope, "protocolVersion", path),
-    1,
+    2,
     `${path}.protocolVersion`,
   );
   const generation = safeInteger(required(envelope, "generation", path), `${path}.generation`);
@@ -327,6 +344,8 @@ export function decodeHostToWorkerMessage(value: unknown): HostToWorkerMessage {
       "storageUri",
       "bundleUrl",
       "commandIds",
+      "workspaceAccess",
+      "workspaceContext",
     ]);
     return {
       kind,
@@ -349,6 +368,25 @@ export function decodeHostToWorkerMessage(value: unknown): HostToWorkerMessage {
         `${path}.commandIds`,
         (item, itemPath) => boundedString(item, itemPath, 128),
       ),
+      workspaceAccess: enumeration(
+        required(source, "workspaceAccess", path),
+        ["none", "metadata", "read", "readWrite"],
+        `${path}.workspaceAccess`,
+      ),
+      workspaceContext: nullable(
+        required(source, "workspaceContext", path),
+        `${path}.workspaceContext`,
+        decodeWorkspaceContext,
+      ),
+    };
+  }
+  if (kind === "workspaceContextChanged") {
+    const source = record(value, path, ["kind", "protocolVersion", "generation", "context"]);
+    return {
+      kind,
+      protocolVersion,
+      generation,
+      context: decodeWorkspaceContext(required(source, "context", path), `${path}.context`),
     };
   }
   const requestId = decodeRequestId(required(envelope, "requestId", path), `${path}.requestId`);
@@ -436,6 +474,33 @@ export function decodeHostToWorkerMessage(value: unknown): HostToWorkerMessage {
     requestId,
     ...(result === undefined ? {} : { result }),
     ...(error === undefined ? {} : { error }),
+  };
+}
+
+function decodeWorkspaceContext(value: unknown, path: string): WorkspaceContext {
+  const source = record(value, path, ["workspaceName", "activeDocument"]);
+  const activeDocument = nullable(
+    required(source, "activeDocument", path),
+    `${path}.activeDocument`,
+    (document, documentPath) => {
+      const entry = record(document, documentPath, ["name", "languageId"]);
+      return {
+        name: boundedString(required(entry, "name", documentPath), `${documentPath}.name`, 255),
+        languageId: boundedString(
+          required(entry, "languageId", documentPath),
+          `${documentPath}.languageId`,
+          128,
+        ),
+      };
+    },
+  );
+  return {
+    workspaceName: nullable(
+      required(source, "workspaceName", path),
+      `${path}.workspaceName`,
+      (name, namePath) => boundedString(name, namePath, 255),
+    ),
+    activeDocument,
   };
 }
 

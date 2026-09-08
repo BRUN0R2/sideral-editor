@@ -168,6 +168,7 @@ export type HostInstruction =
       readonly extensionUri: string;
       readonly storageUri: string;
       readonly commandIds: readonly string[];
+      readonly workspaceAccess: WorkspaceAccess;
       readonly activationReason: ActivationReason;
       readonly startDeadlineMilliseconds: number;
       readonly activationDeadlineMilliseconds: number;
@@ -182,6 +183,7 @@ export type HostInstruction =
       readonly extensionUri: string;
       readonly storageUri: string;
       readonly commandIds: readonly string[];
+      readonly workspaceAccess: WorkspaceAccess;
       readonly commandId: string;
       readonly arguments: readonly JsonValue[];
       readonly activeTextDocument: TextDocument | null;
@@ -213,7 +215,7 @@ export type HostInstruction =
 export type HostEvent =
   | {
       readonly kind: "stateChanged";
-      readonly protocolVersion: 1;
+      readonly protocolVersion: 2;
       readonly extensionId: string;
       readonly generation: number;
       readonly state: ExtensionRuntimeState;
@@ -223,7 +225,7 @@ export type HostEvent =
     }
   | {
       readonly kind: "commandResult";
-      readonly protocolVersion: 1;
+      readonly protocolVersion: 2;
       readonly requestId: string;
       readonly extensionId: string;
       readonly generation: number;
@@ -232,7 +234,7 @@ export type HostEvent =
     }
   | {
       readonly kind: "activated";
-      readonly protocolVersion: 1;
+      readonly protocolVersion: 2;
       readonly requestId: string;
       readonly extensionId: string;
       readonly generation: number;
@@ -240,7 +242,7 @@ export type HostEvent =
     }
   | {
       readonly kind: "deactivated";
-      readonly protocolVersion: 1;
+      readonly protocolVersion: 2;
       readonly requestId: string;
       readonly extensionId: string;
       readonly generation: number;
@@ -248,12 +250,12 @@ export type HostEvent =
     }
   | {
       readonly kind: "hostFault";
-      readonly protocolVersion: 1;
+      readonly protocolVersion: 2;
       readonly error: ProtocolFailure;
     };
 
 export interface BrokerRequest {
-  readonly protocolVersion: 1;
+  readonly protocolVersion: 2;
   readonly extensionId: string;
   readonly generation: number;
   readonly requestId: string;
@@ -333,7 +335,20 @@ export interface ExecutableConfigurationView {
   readonly userDefined: boolean;
 }
 
-export type ExtensionConfigurationPropertyView = ExecutableConfigurationView;
+export interface TextConfigurationView {
+  readonly kind: "text";
+  readonly key: string;
+  readonly title: string;
+  readonly description: string | null;
+  readonly placeholder: string | null;
+  readonly defaultValue: string;
+  readonly value: string;
+  readonly userDefined: boolean;
+}
+
+export type ExtensionConfigurationPropertyView =
+  | ExecutableConfigurationView
+  | TextConfigurationView;
 
 export interface ExtensionConfigurationView {
   readonly extensionId: string;

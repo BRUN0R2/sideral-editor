@@ -24,6 +24,8 @@ The first working foundation includes:
 - signed `.sideralx` installation, explicit publisher-key trust, isolated
   Worker runtimes, a native capability broker, command palette, diagnostics,
   rollback, authoring SDK, testkit and packaging CLI;
+- a first-party Discord Work Presence extension driven by workspace metadata
+  events and an owned, capability-gated local Discord RPC session;
 - strict TypeScript, Rust safety lints, Biome checks and focused tests.
 
 This is an original project. The ignored `references/vscode/` checkout is for
@@ -79,4 +81,5 @@ that preview.
 - [Signed updates](docs/UPDATES.md)
 - [Extension authoring](docs/EXTENSIONS.md)
 - [Extension-system decisions](docs/decisions/0001-native-extension-system.md)
+- [Discord presence capability decision](docs/decisions/0003-discord-presence-capability.md)
 - [Next work](docs/TODO.md)

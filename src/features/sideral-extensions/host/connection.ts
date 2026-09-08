@@ -1,3 +1,4 @@
+import type { WorkspaceContext } from "@sideral/extension-sdk";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { voidValue } from "../../../lib/runtime-validation";
 import { decodeHostHandshake } from "../contract-validation";
@@ -6,6 +7,7 @@ import { decodeHostInstruction } from "./protocol-validation";
 import { ExtensionHostSupervisor } from "./supervisor";
 
 export interface ExtensionHostConnection {
+  updateWorkspaceContext(context: WorkspaceContext): void;
   dispose(): Promise<void>;
 }
 
@@ -65,6 +67,9 @@ export async function connectExtensionHost(): Promise<ExtensionHostConnection> {
 
   let disposal: Promise<void> | null = null;
   return {
+    updateWorkspaceContext(context) {
+      supervisor.updateWorkspaceContext(context);
+    },
     dispose() {
       disposal ??= disposeConnection(supervisor, channel, handshake, pendingInstructions);
       return disposal;

@@ -327,9 +327,8 @@ pub(super) fn require_workspace_permission(
     let permitted = match (manifest.permissions.workspace, write) {
         (WorkspaceAccess::Read | WorkspaceAccess::ReadWrite, false)
         | (WorkspaceAccess::ReadWrite, true) => true,
-        (WorkspaceAccess::None | WorkspaceAccess::Read, true) | (WorkspaceAccess::None, false) => {
-            false
-        }
+        (WorkspaceAccess::None | WorkspaceAccess::Metadata | WorkspaceAccess::Read, true)
+        | (WorkspaceAccess::None | WorkspaceAccess::Metadata, false) => false,
     };
     if permitted {
         Ok(())

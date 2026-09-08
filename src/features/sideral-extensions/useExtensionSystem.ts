@@ -1,9 +1,9 @@
-import type { JsonValue } from "@sideral/extension-sdk";
+import type { JsonValue, WorkspaceContext } from "@sideral/extension-sdk";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isDesktopRuntime } from "../../lib/backend";
 import { toApplicationError } from "../../lib/errors";
 import { toExtensionTextDocument } from "../workspace/document-uri";
-import type { EditorDocument } from "../workspace/types";
+import type { EditorDocument, WorkspaceRoot } from "../workspace/types";
 import {
   activateExtensionEvent,
   connectExtensionClient,
@@ -82,7 +82,7 @@ export interface ExtensionSystem {
 }
 
 export function useExtensionSystem(
-  workspaceRootPath: string | null,
+  workspaceRoot: WorkspaceRoot | null,
   activeDocument: EditorDocument | null,
   hostConnection: Promise<ExtensionHostConnection> | null,
   saveDocument: (documentId: string) => Promise<boolean>,
@@ -104,13 +104,22 @@ export function useExtensionSystem(
   const nextNoticeId = useRef(1);
   const latestSnapshotSequence = useRef(0);
   const outputRevealSequences = useRef<ReadonlyMap<string, number>>(new Map());
-  const workspaceRootRef = useRef(workspaceRootPath);
-  workspaceRootRef.current = workspaceRootPath;
+  const workspaceRootRef = useRef(workspaceRoot);
+  workspaceRootRef.current = workspaceRoot;
   const activeDocumentRef = useRef(activeDocument);
   activeDocumentRef.current = activeDocument;
   const saveDocumentRef = useRef(saveDocument);
   saveDocumentRef.current = saveDocument;
   const busyExtensionIds = useMemo(() => new Set(busyCounts.keys()), [busyCounts]);
+  const workspaceName = workspaceRoot?.name ?? null;
+  const activeDocumentName = activeDocument?.name ?? null;
+  const activeDocumentLanguageId = activeDocument?.languageId ?? null;
+  const workspaceContext = useMemo<WorkspaceContext>(
+    () => createWorkspaceContext(workspaceName, activeDocumentName, activeDocumentLanguageId),
+    [activeDocumentLanguageId, activeDocumentName, workspaceName],
+  );
+  const workspaceContextRef = useRef(workspaceContext);
+  workspaceContextRef.current = workspaceContext;
 
   const updateBusyCount = useCallback((extensionId: string, change: 1 | -1): void => {
     setBusyCounts((current) => {
@@ -228,10 +237,11 @@ export function useExtensionSystem(
     let connection: ExtensionClientConnection | null = null;
     setStatus("initializing");
     void (async () => {
-      await hostConnection;
+      const host = await hostConnection;
       if (cancelled) {
         return;
       }
+      host.updateWorkspaceContext(workspaceContextRef.current);
       await initializeExtensionSystem();
       const connected = await connectExtensionClient(acceptInstruction);
       if (cancelled) {
@@ -248,7 +258,7 @@ export function useExtensionSystem(
       );
       setOutputs(connectedOutputs);
       setPreviews(visiblePreviewMap(connected.previews));
-      await setExtensionWorkspace(workspaceRootRef.current);
+      await setExtensionWorkspace(workspaceRootRef.current?.path ?? null);
       setStatus("ready");
       void activateExtensionEvent({ kind: "workbenchReady" }).catch((reason: unknown) => {
         if (!cancelled) {
@@ -272,6 +282,27 @@ export function useExtensionSystem(
   }, [acceptInstruction, applySnapshot, desktop, hostConnection]);
 
   useEffect(() => {
+    if (!desktop || hostConnection === null) {
+      return;
+    }
+    let current = true;
+    void hostConnection
+      .then((host) => {
+        if (current) {
+          host.updateWorkspaceContext(workspaceContext);
+        }
+      })
+      .catch((reason: unknown) => {
+        if (current) {
+          setError(errorMessage(reason));
+        }
+      });
+    return () => {
+      current = false;
+    };
+  }, [desktop, hostConnection, workspaceContext]);
+
+  useEffect(() => {
     const liveOutputIds = new Set(outputs.keys());
     const nextRevealSequences = new Map(
       [...outputRevealSequences.current].filter(([resourceId]) => liveOutputIds.has(resourceId)),
@@ -283,10 +314,10 @@ export function useExtensionSystem(
     if (status !== "ready") {
       return;
     }
-    void setExtensionWorkspace(workspaceRootPath).catch((reason: unknown) => {
+    void setExtensionWorkspace(workspaceRoot?.path ?? null).catch((reason: unknown) => {
       setError(errorMessage(reason));
     });
-  }, [status, workspaceRootPath]);
+  }, [status, workspaceRoot?.path]);
 
   useEffect(() => {
     const activeLanguageId = activeDocument?.languageId ?? null;
@@ -445,4 +476,18 @@ export function useExtensionSystem(
 
 function errorMessage(value: unknown): string {
   return toApplicationError(value).message;
+}
+
+function createWorkspaceContext(
+  workspaceName: string | null,
+  activeDocumentName: string | null,
+  activeDocumentLanguageId: string | null,
+): WorkspaceContext {
+  return {
+    workspaceName,
+    activeDocument:
+      activeDocumentName === null || activeDocumentLanguageId === null
+        ? null
+        : { name: activeDocumentName, languageId: activeDocumentLanguageId },
+  };
 }

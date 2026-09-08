@@ -8,7 +8,8 @@
     "packages/sideral-extension-testkit",
     "examples/hello-sideral",
     "examples/markdown-preview",
-    "extensions/amxx-pawn"
+    "extensions/amxx-pawn",
+    "extensions/discord-presence"
   ],
   "packageManager": "npm@11.18.0",
   "engines": {
@@ -31,7 +32,9 @@
     "extension:markdown:check": "npm run typecheck --workspace sideral.markdown-preview && npm run build --workspace sideral.markdown-preview",
     "extension:amxx:build": "npm run build --workspace sideral.amxx-pawn",
     "extension:amxx:check": "npm run typecheck --workspace sideral.amxx-pawn && npm run test --workspace sideral.amxx-pawn && npm run build --workspace sideral.amxx-pawn && npm run extension:tool -- check extensions/amxx-pawn",
-    "extension:examples:check": "npm run extension:hello:check && npm run extension:markdown:check && npm run extension:amxx:check",
+    "extension:discord:build": "npm run build --workspace sideral.discord-presence",
+    "extension:discord:check": "npm run typecheck --workspace sideral.discord-presence && npm run test --workspace sideral.discord-presence && npm run build --workspace sideral.discord-presence && npm run extension:tool -- check extensions/discord-presence",
+    "extension:examples:check": "npm run extension:hello:check && npm run extension:markdown:check && npm run extension:amxx:check && npm run extension:discord:check",
     "rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
     "rust:check": "cargo check --manifest-path src-tauri/Cargo.toml --workspace",
     "rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings",

@@ -32,7 +32,21 @@ export interface TextDocument {
   readonly content: string;
 }
 
+export interface WorkspaceDocumentContext {
+  readonly name: string;
+  readonly languageId: string;
+}
+
+export interface WorkspaceContext {
+  readonly workspaceName: string | null;
+  readonly activeDocument: WorkspaceDocumentContext | null;
+}
+
+export type WorkspaceContextListener = (context: WorkspaceContext) => void | Promise<void>;
+
 export interface WorkspaceApi {
+  getContext(): WorkspaceContext;
+  onDidChangeContext(listener: WorkspaceContextListener): Disposable;
   readTextDocument(uri: string, signal?: AbortSignal): Promise<TextDocument>;
   writeTextDocument(
     uri: string,
@@ -164,9 +178,32 @@ export interface StorageApi {
   keys(): Promise<readonly string[]>;
 }
 
+export type DiscordActivityType = "playing" | "listening" | "watching" | "competing";
+
+export interface DiscordActivityAssets {
+  readonly largeImage?: string;
+  readonly largeText?: string;
+  readonly smallImage?: string;
+  readonly smallText?: string;
+}
+
+export interface DiscordActivity {
+  readonly type?: DiscordActivityType;
+  readonly details?: string;
+  readonly state?: string;
+  readonly startTimestamp?: number;
+  readonly assets?: DiscordActivityAssets;
+}
+
+export interface DiscordPresenceApi {
+  setActivity(activity: DiscordActivity, signal?: AbortSignal): Promise<void>;
+  clearActivity(signal?: AbortSignal): Promise<void>;
+}
+
 export interface ExtensionApi {
   readonly commands: CommandsApi;
   readonly configuration: ConfigurationApi;
+  readonly discordPresence: DiscordPresenceApi;
   readonly network: NetworkApi;
   readonly processes: ProcessApi;
   readonly storage: StorageApi;

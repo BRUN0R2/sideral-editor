@@ -1,0 +1,53 @@
+{
+  "manifestVersion": 1,
+  "apiVersion": 1,
+  "id": "sideral.discord-presence",
+  "displayName": "Discord Work Presence",
+  "version": "0.1.0",
+  "engines": {
+    "sideral": "^1.0.0"
+  },
+  "description": "Shows the current Sideral workspace and active document on Discord.",
+  "license": "MIT",
+  "runtime": {
+    "kind": "worker",
+    "entry": "dist/extension.mjs"
+  },
+  "activationEvents": ["onWorkbenchReady"],
+  "permissions": {
+    "workspace": "metadata",
+    "discordPresence": {
+      "applicationId": {
+        "kind": "configuration",
+        "key": "application-id"
+      }
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "id": "sideral.discord-presence.toggle",
+        "title": "Toggle Discord Work Presence",
+        "category": "Discord"
+      },
+      {
+        "id": "sideral.discord-presence.refresh",
+        "title": "Refresh Discord Work Presence",
+        "category": "Discord"
+      }
+    ],
+    "configuration": {
+      "title": "Discord Work Presence",
+      "properties": [
+        {
+          "kind": "text",
+          "key": "application-id",
+          "title": "Application ID",
+          "description": "Public application ID from the Discord Developer Portal.",
+          "placeholder": "123456789012345678",
+          "default": ""
+        }
+      ]
+    }
+  }
+}

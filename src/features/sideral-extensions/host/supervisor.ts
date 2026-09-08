@@ -1,4 +1,4 @@
-import type { ProtocolFailure } from "@sideral/extension-sdk";
+import type { ProtocolFailure, WorkspaceContext } from "@sideral/extension-sdk";
 import { invoke } from "@tauri-apps/api/core";
 import { arrayBuffer, voidValue } from "../../../lib/runtime-validation";
 import { decodeBrokerResponse } from "../contract-validation";
@@ -21,7 +21,18 @@ export class ExtensionHostSupervisor {
     { readonly generation: number; readonly controller: AbortController }
   >();
   #handshake: HostHandshake | null = null;
+  #workspaceContext: WorkspaceContext = { workspaceName: null, activeDocument: null };
   #disposed = false;
+
+  updateWorkspaceContext(context: WorkspaceContext): void {
+    if (this.#disposed || sameWorkspaceContext(this.#workspaceContext, context)) {
+      return;
+    }
+    this.#workspaceContext = context;
+    for (const worker of this.#workers.values()) {
+      worker.updateWorkspaceContext(context);
+    }
+  }
 
   connect(handshake: HostHandshake): void {
     if (this.#handshake !== null) {
@@ -328,11 +339,14 @@ export class ExtensionHostSupervisor {
       instruction.generation,
       instruction.bundleSha256,
       bundleUrl,
+      instruction.workspaceAccess,
       (message) => this.#handleWorkerMessage(instruction.extensionId, message),
       (failure) => this.#handleWorkerFault(instruction, failure),
     );
     const abortStartup = () => runtime.terminate();
     cancellationSignal.addEventListener("abort", abortStartup, { once: true });
+    const initialWorkspaceContext =
+      instruction.workspaceAccess === "none" ? null : this.#workspaceContext;
     try {
       await runtime.initialize({
         kind: "initialize",
@@ -343,8 +357,16 @@ export class ExtensionHostSupervisor {
         storageUri: instruction.storageUri,
         bundleUrl,
         commandIds: instruction.commandIds,
+        workspaceAccess: instruction.workspaceAccess,
+        workspaceContext: initialWorkspaceContext,
       });
       throwIfAborted(cancellationSignal);
+      if (
+        initialWorkspaceContext !== null &&
+        !sameWorkspaceContext(initialWorkspaceContext, this.#workspaceContext)
+      ) {
+        runtime.updateWorkspaceContext(this.#workspaceContext);
+      }
       return runtime;
     } catch (error: unknown) {
       runtime.terminate();
@@ -492,6 +514,14 @@ export class ExtensionHostSupervisor {
     }
     return this.#handshake;
   }
+}
+
+function sameWorkspaceContext(left: WorkspaceContext, right: WorkspaceContext): boolean {
+  return (
+    left.workspaceName === right.workspaceName &&
+    left.activeDocument?.name === right.activeDocument?.name &&
+    left.activeDocument?.languageId === right.activeDocument?.languageId
+  );
 }
 
 async function sha256Hex(bytes: ArrayBuffer): Promise<string> {

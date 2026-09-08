@@ -28,7 +28,7 @@ React workbench
 
 Native extension service
   ├─ signed package registry + publisher trust + active/rollback slots
-  └─ capability broker ── canonical workspace, isolated data, pinned network, typed processes
+  └─ capability broker ── workspace, isolated data, pinned network, typed processes, Discord RPC
 ```
 
 The frontend owns presentation state. Rust owns filesystem access, the active
@@ -62,21 +62,30 @@ terminate invalid work and never act as startup coordination. A generation
 invalidated by disable, reload or host failure cannot publish late state.
 
 The native broker is the sole authority for workspace, storage, configuration,
-network, process and window requests. Extension configuration is declared in the
-signed manifest, rendered generically by Settings and mutated only through a
-main-window command that validates and atomically persists the override. Workers
-receive read-only effective values. Every process grant declares either a signed
+network, process, Discord presence and window requests. Extension configuration
+is declared in the signed manifest, rendered generically by Settings and
+mutated only through a main-window command that validates and atomically
+persists the override. Workers
+receive read-only effective values. The supervisor projects workspace and active
+document names into a bounded metadata-only context and sends changes only to
+Workers whose signed manifest grants at least `workspace: metadata`; paths and
+document contents never cross that event boundary. Every process grant declares either a signed
 literal executable or a reference to a declared executable setting, a signed
 sequence of literal or typed workspace-path arguments and its working directory
 as the canonical workspace, isolated extension data or resolved executable
 directory; there is no inherited application directory or shell-string path.
 Declarative language contributions flow through the native snapshot and update
-editor document models without loading extension code.
+editor document models without loading extension code. Discord presence uses a
+separate signed capability and an application ID sourced from a literal or typed
+text setting. The native broker owns the Windows named-pipe framing, handshake,
+payload validation, finite I/O deadlines and generation-scoped connection.
 
 The product boundary and package contract are recorded in
 `docs/decisions/0001-native-extension-system.md`; deterministic runtime
 semantics are recorded in
-`docs/decisions/0002-deterministic-extension-runtime.md`. Both are protected by
+`docs/decisions/0002-deterministic-extension-runtime.md`; the local Discord RPC
+boundary is recorded in
+`docs/decisions/0003-discord-presence-capability.md`. They are protected by
 `npm run architecture`.
 
 ## Modules
@@ -128,7 +137,7 @@ within their own panel through the validated `appearance.scrollbar` contract.
 - `error.rs`: structured operational failures exposed to TypeScript.
 - `sideral_extensions`: signed registry, trust, monotonic runtime snapshots,
   lifecycle coordination and a capability broker split into configuration,
-  network, process, storage, workspace and window domains.
+  Discord presence, network, process, storage, workspace and window domains.
 - `lib.rs`: command boundary and blocking-work isolation.
 
 ### Extension crates and SDK
@@ -174,6 +183,7 @@ within their own panel through the validated `appearance.scrollbar` contract.
 | Worker bundle Blob URL | `ManagedWorker` | Revoked with Worker termination |
 | Broker request | Native capability broker | Bounded semaphore slot plus generation/request cancellation record |
 | Extension process | Native capability broker | Killed and reaped on cancellation, output limit or safety deadline |
+| Discord RPC session | Globally exclusive extension generation in the native capability broker | Activity is cleared explicitly; competing owners are rejected, and the owned task and named pipe are aborted on clear, failure, reload, disable, host loss or shutdown |
 | Output channel | Owning extension | Explicit disposal or bulk release on extension cancellation |
 | Installed package | Extension registry | Registry references only active/rollback archives; uninstall removes both referenced archives |
 
@@ -187,6 +197,9 @@ Locale files are rescanned once when settings open and when the app regains
 focus after a user copies a file. Desktop preference changes remain interactive
 while complete snapshots are persisted in order. Update checks run
 once per application session plus explicit user requests.
+Workspace metadata changes are pushed to authorized extension Workers and
+Discord activities are deduplicated by the owning extension; neither path uses
+a timer or polling loop.
 
 The bottom terminal panel mounts after an explicit shell selection or an
 extension output channel requests revelation. Extension output is rendered in

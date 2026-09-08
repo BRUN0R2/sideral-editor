@@ -161,7 +161,9 @@ function permissionLabels(
 ): string[] {
   const labels: string[] = [];
   const workspace = package_.permissions.workspace ?? "none";
-  if (workspace === "read") {
+  if (workspace === "metadata") {
+    labels.push(t("extensions.workspaceMetadata"));
+  } else if (workspace === "read") {
     labels.push(t("extensions.workspaceRead"));
   } else if (workspace === "readWrite") {
     labels.push(t("extensions.workspaceReadWrite"));
@@ -187,6 +189,9 @@ function permissionLabels(
           .join(" · "),
       }),
     );
+  }
+  if (package_.permissions.discordPresence !== undefined) {
+    labels.push(t("extensions.discordPresence"));
   }
   if (package_.activationEvents.length > 0) {
     labels.push(t("extensions.activation", { value: package_.activationEvents.join(", ") }));

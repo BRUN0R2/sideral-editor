@@ -9,6 +9,7 @@ import {
 } from "../sideral-extensions/backend";
 import type {
   ConfigurationUpdate,
+  ExtensionConfigurationPropertyView,
   ExtensionConfigurationView,
   InstalledExtensionView,
 } from "../sideral-extensions/contracts";
@@ -126,66 +127,120 @@ export function ExtensionConfigurationSettings({
           </span>
         ) : (
           <div className="extension-configurations" aria-busy={loading}>
-            {(configurations ?? []).map((configuration) =>
-              configuration.properties.map((property) => {
-                const operation = `${configuration.extensionId}:${property.key}`;
-                const inputId = `extension-configuration-${configuration.extensionId}-${property.key}`;
-                return (
-                  <div className="extension-configuration" key={operation}>
-                    <div className="extension-configuration__identity">
-                      <label htmlFor={inputId}>
-                        {configuration.title} <span aria-hidden="true">›</span> {property.title}
-                      </label>
-                      {property.description === null ? null : <small>{property.description}</small>}
-                    </div>
-                    <div className="extension-configuration__control">
-                      <input
-                        id={inputId}
-                        className="extension-configuration__path"
-                        readOnly
-                        value={property.value}
-                      />
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        disabled={saving}
-                        onClick={() =>
-                          void selectExecutable(
-                            configuration.extensionId,
-                            configuration.title,
-                            property.key,
-                            property.title,
-                          )
-                        }
-                      >
-                        <Icon name="folderOpen" size={16} />
-                        {t("action.selectExecutable")}
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        disabled={saving || !property.userDefined}
-                        onClick={() =>
-                          void persist(configuration.extensionId, property.key, {
-                            kind: "default",
-                          })
-                        }
-                      >
-                        {t("action.reset")}
-                      </button>
-                    </div>
-                    <small className="extension-configuration__default">
-                      {t("settings.defaultConfigurationValue", {
-                        value: property.defaultValue,
-                      })}
-                    </small>
-                  </div>
-                );
-              }),
+            {(configurations ?? []).flatMap((configuration) =>
+              configuration.properties.map((property) => (
+                <ConfigurationPropertyEditor
+                  key={`${configuration.extensionId}:${property.key}`}
+                  configurationTitle={configuration.title}
+                  extensionId={configuration.extensionId}
+                  property={property}
+                  saving={saving}
+                  onPersist={persist}
+                  onSelectExecutable={selectExecutable}
+                />
+              )),
             )}
           </div>
         )}
       </div>
     </section>
+  );
+}
+
+interface ConfigurationPropertyEditorProps {
+  readonly configurationTitle: string;
+  readonly extensionId: string;
+  readonly property: ExtensionConfigurationPropertyView;
+  readonly saving: boolean;
+  readonly onPersist: (
+    extensionId: string,
+    key: string,
+    update: ConfigurationUpdate,
+  ) => Promise<void>;
+  readonly onSelectExecutable: (
+    extensionId: string,
+    configurationTitle: string,
+    key: string,
+    propertyTitle: string,
+  ) => Promise<void>;
+}
+
+function ConfigurationPropertyEditor({
+  configurationTitle,
+  extensionId,
+  property,
+  saving,
+  onPersist,
+  onSelectExecutable,
+}: ConfigurationPropertyEditorProps) {
+  const { t } = useI18n();
+  const [draft, setDraft] = useState(property.value);
+  const inputId = `extension-configuration-${extensionId}-${property.key}`;
+
+  useEffect(() => {
+    setDraft(property.value);
+  }, [property.value]);
+
+  return (
+    <div className="extension-configuration">
+      <div className="extension-configuration__identity">
+        <label htmlFor={inputId}>
+          {configurationTitle} <span aria-hidden="true">›</span> {property.title}
+        </label>
+        {property.description === null ? null : <small>{property.description}</small>}
+      </div>
+      <form
+        className="extension-configuration__control"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (property.kind === "text" && draft !== property.value) {
+            void onPersist(extensionId, property.key, { kind: "value", value: draft });
+          }
+        }}
+      >
+        <input
+          id={inputId}
+          className="extension-configuration__input"
+          readOnly={property.kind === "executable"}
+          value={property.kind === "executable" ? property.value : draft}
+          placeholder={property.kind === "text" ? (property.placeholder ?? undefined) : undefined}
+          onChange={(event) => setDraft(event.target.value)}
+        />
+        {property.kind === "executable" ? (
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={saving}
+            onClick={() =>
+              void onSelectExecutable(extensionId, configurationTitle, property.key, property.title)
+            }
+          >
+            <Icon name="folderOpen" size={16} />
+            {t("action.selectExecutable")}
+          </button>
+        ) : (
+          <button
+            type="submit"
+            className="secondary-button"
+            disabled={saving || draft === property.value}
+          >
+            {t("action.save")}
+          </button>
+        )}
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={saving || !property.userDefined}
+          onClick={() => void onPersist(extensionId, property.key, { kind: "default" })}
+        >
+          {t("action.reset")}
+        </button>
+      </form>
+      <small className="extension-configuration__default">
+        {t("settings.defaultConfigurationValue", {
+          value: property.defaultValue || t("settings.emptyConfigurationValue"),
+        })}
+      </small>
+    </div>
   );
 }

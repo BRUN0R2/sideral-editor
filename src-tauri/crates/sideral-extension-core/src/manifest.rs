@@ -1,11 +1,11 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ConfigurationContribution, ExtensionSizeBudget, ManifestError, PermissionSet, WorkspaceAccess,
-    budgets::MAX_MANIFEST_BYTES, extension_size_budget,
+    ConfigurationContribution, ConfigurationProperty, ExtensionSizeBudget, ManifestError,
+    PermissionSet, WorkspaceAccess, budgets::MAX_MANIFEST_BYTES, extension_size_budget,
 };
 
 const SUPPORTED_MANIFEST_VERSION: u16 = 1;
@@ -188,13 +188,13 @@ impl ExtensionManifest {
             validate_worker_entry(&runtime.entry)?;
         }
 
-        let executable_configuration_keys = self.validate_configuration()?;
+        let configuration_properties = self.validate_configuration()?;
         let command_ids = self.validate_commands()?;
         self.validate_keybindings(&command_ids)?;
         self.validate_languages()?;
         self.validate_activation_events()?;
         self.permissions
-            .validate(&self.id, &executable_configuration_keys)?;
+            .validate(&self.id, &configuration_properties)?;
         self.validate_runtime_consistency()?;
         Ok(())
     }
@@ -230,7 +230,10 @@ impl ExtensionManifest {
                 });
             }
             if command.invocation == CommandInvocation::ActiveTextDocument
-                && self.permissions.workspace == WorkspaceAccess::None
+                && matches!(
+                    self.permissions.workspace,
+                    WorkspaceAccess::None | WorkspaceAccess::Metadata
+                )
             {
                 return Err(ManifestError::Inconsistent(format!(
                     "command {} requires workspace read permission for active document context",
@@ -249,9 +252,11 @@ impl ExtensionManifest {
         Ok(command_ids)
     }
 
-    fn validate_configuration(&self) -> Result<HashSet<&str>, ManifestError> {
+    fn validate_configuration(
+        &self,
+    ) -> Result<HashMap<&str, &ConfigurationProperty>, ManifestError> {
         let Some(configuration) = &self.contributes.configuration else {
-            return Ok(HashSet::new());
+            return Ok(HashMap::new());
         };
         configuration.validate()
     }
@@ -943,16 +948,61 @@ mod tests {
 
     #[test]
     fn rejects_active_document_commands_without_workspace_read_permission() {
+        for access in ["none", "metadata"] {
+            let source = VALID_MANIFEST
+                .replace(
+                    "\"workspace\": \"read\"",
+                    &format!("\"workspace\": \"{access}\""),
+                )
+                .replace(
+                    "\"title\": \"Run Hello\"",
+                    "\"title\": \"Run Hello\", \"invocation\": \"activeTextDocument\"",
+                );
+
+            assert!(matches!(
+                validate_manifest_json(&source),
+                Err(ManifestError::Inconsistent(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn accepts_metadata_only_discord_presence_with_typed_configuration() {
         let source = VALID_MANIFEST
-            .replace("\"workspace\": \"read\"", "\"workspace\": \"none\"")
+            .replace("\"workspace\": \"read\"", "\"workspace\": \"metadata\"")
             .replace(
-                "\"title\": \"Run Hello\"",
-                "\"title\": \"Run Hello\", \"invocation\": \"activeTextDocument\"",
+                "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }]",
+                "\"network\": [], \"discordPresence\": { \"applicationId\": { \"kind\": \"configuration\", \"key\": \"application-id\" } }",
+            )
+            .replace(
+                "\"commands\": [{ \"id\": \"sample.hello.run\", \"title\": \"Run Hello\" }]",
+                "\"commands\": [{ \"id\": \"sample.hello.run\", \"title\": \"Run Hello\" }], \"configuration\": { \"title\": \"Discord\", \"properties\": [{ \"kind\": \"text\", \"key\": \"application-id\", \"title\": \"Application ID\", \"default\": \"\" }] }",
             );
 
         assert!(matches!(
             validate_manifest_json(&source),
-            Err(ManifestError::Inconsistent(_))
+            Ok(inspection)
+                if inspection.permissions.workspace == WorkspaceAccess::Metadata
+                    && inspection.permissions.discord_presence.is_some()
+        ));
+    }
+
+    #[test]
+    fn rejects_discord_presence_bound_to_non_text_configuration() {
+        let source = VALID_MANIFEST
+            .replace(
+                "\"network\": [{ \"origin\": \"https://api.example.com\", \"methods\": [\"GET\"] }]",
+                "\"network\": [], \"discordPresence\": { \"applicationId\": { \"kind\": \"configuration\", \"key\": \"application-id\" } }",
+            )
+            .replace(
+                "\"commands\": [{ \"id\": \"sample.hello.run\", \"title\": \"Run Hello\" }]",
+                "\"commands\": [{ \"id\": \"sample.hello.run\", \"title\": \"Run Hello\" }], \"configuration\": { \"title\": \"Discord\", \"properties\": [{ \"kind\": \"executable\", \"key\": \"application-id\", \"title\": \"Application ID\", \"default\": \"discord\" }] }",
+            );
+
+        assert!(matches!(
+            validate_manifest_json(&source),
+            Err(ManifestError::Inconsistent(message))
+                if message.contains("undeclared text configuration application-id")
         ));
     }
 
