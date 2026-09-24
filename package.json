@@ -54,30 +54,30 @@
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",
-    "@tauri-apps/plugin-dialog": "2.7.2",
+    "@tauri-apps/plugin-dialog": "2.7.3",
     "@tauri-apps/plugin-process": "2.3.1",
-    "@tauri-apps/plugin-updater": "2.10.1",
+    "@tauri-apps/plugin-updater": "2.12.0",
     "@vscode/codicons": "0.0.46-24",
     "@xterm/addon-fit": "0.11.0",
     "@xterm/xterm": "6.0.0",
     "jsonc-parser": "3.3.1",
-    "marked": "18.0.9",
+    "marked": "18.0.13",
     "monaco-editor": "0.56.0",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
     "@sideral/extension-sdk": "0.2.0",
     "@sideral/extension-testkit": "0.2.0",
-    "@biomejs/biome": "2.5.8",
-    "@tauri-apps/cli": "2.11.4",
-    "@types/node": "26.2.0",
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.4",
-    "@vitejs/plugin-react": "6.0.5",
+    "@biomejs/biome": "2.5.14",
+    "@tauri-apps/cli": "2.11.5",
+    "@types/node": "26.6.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
     "typescript": "7.0.2",
-    "vite": "8.2.1",
-    "vitest": "4.1.10"
+    "vite": "8.3.0",
+    "vitest": "5.0.1"
   },
   "overrides": {
     "dompurify": "3.4.13"
