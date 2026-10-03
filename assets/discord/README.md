@@ -1,22 +1,32 @@
 # Discord artwork
 
-Silver S with white lightning on the editor's graphite palette, generated with
-the built-in image generation tool and assembled into a continuous loop.
+Stationary silver S with white lightning emerging from behind its two open
+terminals, using the editor's graphite palette. The built-in image generation
+tool produced the transparent S; only the separate lightning layer moves.
 
 ![Animated Sideral icon](sideralLightning.gif)
 
 | File | Purpose |
 | --- | --- |
-| `sideralLightning.gif` | Rich Presence animation: 512 × 512, 40 frames, 20 fps, 2-second infinite loop |
+| `sideralLightning.gif` | Rich Presence animation: 512 × 512, 120 frames, 50 fps, 2.4-second infinite loop |
 | `sideralLightning.png` | Static 1024 × 1024 export for the Developer Portal |
-| `sideralLightningFrames.png` | Original 1254 × 1254 source sheet, four keyframes in reading order |
+| `sideralMark.png` | Original transparent, stationary S foreground |
 | `generationPrompt.txt` | Exact generation prompts and provenance |
 
 The palette comes from `src/styles/base.css`: graphite `#282c34`, dark graphite
-`#1e2228`, silver `#aeb4bd` and pale silver `#d0d3d8`. Each 627-pixel source
-tile is cropped by two pixels on each side to exclude grid seams. The GIF is
-downsampled to 512 pixels; the PNG is resampled to 1024 pixels. Crossfades join
-all four keyframes, including the last-to-first transition.
+`#1e2228`, silver `#aeb4bd` and pale silver `#d0d3d8`. Both exports are
+downsampled from the original cutout. Composition has three ordered layers:
+graphite background, animated branching lightning, then the stationary S.
+The generated matte's nearly opaque metal is made fully opaque before
+composition, so the foreground covers the electricity, including its glow. Rays start
+behind the upper-right and lower-left terminals and extend toward the image
+edges. The letter has no morphing, camera motion, zoom or frame interpolation.
+
+Motion is periodic, with a fixed 20 ms frame delay. The authoring script checks
+that every fully opaque foreground pixel remains unchanged throughout the raw
+animation and the decoded GIF, and that the loop's opening and closing images
+match exactly.
+GIF palette reuse and disabled dithering reduce noise in the stationary metal.
 
 ## Discord setup
 
@@ -53,6 +63,7 @@ npm install --prefix build/artworkTools --no-save --ignore-scripts sharp@0.35.5
 node scripts/buildDiscordArtwork.mjs build/artworkTools/node_modules/sharp
 ```
 
-The script keeps the source sheet unchanged and replaces the derived GIF and
-PNG. Dimensions, frame count, duration and infinite looping are checked after
-encoding. All timing and export choices are named in its `settings` object.
+The script keeps the transparent foreground unchanged and replaces the derived
+GIF and PNG. Dimensions, frame count, duration and infinite looping are checked
+after encoding. The `settings` and `lightning` objects contain framing, timing,
+terminal anchors, ray directions and glow parameters.
