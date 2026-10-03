@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { FileTypeIcon } from "../../components/FileTypeIcon";
+import { Icon } from "../../components/Icon";
 import { ProductIcon, type ProductIconName } from "../../components/ProductIcon";
 import { TabCloseButton } from "../../components/TabCloseButton";
 import { useI18n } from "../i18n/I18nProvider";
@@ -62,6 +63,7 @@ export function WorkbenchTabs({
     },
   });
   const dropIndex = drag.feedback?.dropIndex ?? null;
+  const previewTab = drag.feedback?.dragging ? tabsById.get(drag.feedback.tabId) : undefined;
 
   return (
     <>
@@ -114,17 +116,7 @@ export function WorkbenchTabs({
                 }}
                 title={held ? undefined : (document?.path ?? label)}
               >
-                {tab.kind === "document" ? (
-                  <FileTypeIcon name={tab.document.name} />
-                ) : (
-                  <ProductIcon name={tab.resource.icon} />
-                )}
-                <span>{label}</span>
-                {document !== null && savingIds.has(document.id) ? (
-                  <span className="tab-saving" aria-hidden="true" />
-                ) : dirty ? (
-                  <span className="tab-dirty" aria-hidden="true" />
-                ) : null}
+                <WorkbenchTabContent tab={tab} savingIds={savingIds} />
               </button>
               <TabCloseButton
                 label={label}
@@ -146,10 +138,53 @@ export function WorkbenchTabs({
               className="workbench-tab-drag-surface"
               aria-hidden="true"
               data-drop-blocked={drag.feedback.blocked || undefined}
-            />,
+            >
+              {previewTab !== undefined ? (
+                <div
+                  className="workbench-tab workbench-tab-drag-preview"
+                  style={{
+                    width: drag.feedback.preview.width,
+                    height: drag.feedback.preview.height,
+                    transform: `translate3d(${drag.feedback.preview.left}px, ${drag.feedback.preview.top}px, 0)`,
+                  }}
+                >
+                  <div className="workbench-tab__main">
+                    <WorkbenchTabContent tab={previewTab} savingIds={savingIds} />
+                  </div>
+                  <span className="workbench-tab__close">
+                    <Icon name="close" size={18} />
+                  </span>
+                </div>
+              ) : null}
+            </div>,
             document.body,
           )
         : null}
+    </>
+  );
+}
+
+function WorkbenchTabContent({
+  tab,
+  savingIds,
+}: {
+  readonly tab: WorkbenchTab;
+  readonly savingIds: ReadonlySet<string>;
+}) {
+  const document = tab.kind === "document" ? tab.document : null;
+  return (
+    <>
+      {tab.kind === "document" ? (
+        <FileTypeIcon name={tab.document.name} />
+      ) : (
+        <ProductIcon name={tab.resource.icon} />
+      )}
+      <span>{tab.kind === "document" ? tab.document.name : tab.resource.label}</span>
+      {document !== null && savingIds.has(document.id) ? (
+        <span className="tab-saving" aria-hidden="true" />
+      ) : document !== null && isDocumentDirty(document) ? (
+        <span className="tab-dirty" aria-hidden="true" />
+      ) : null}
     </>
   );
 }

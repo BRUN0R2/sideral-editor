@@ -49,7 +49,10 @@ resource, editor models or resource lifetimes.
 [Pointer Events and pointer capture](https://www.w3.org/TR/pointerevents3/#pointer-capture).
 Internal tab movement does not enter the native HTML drag-and-drop path that
 Tauri intercepts on Windows. Pressing a tab closes the grab cursor immediately;
-movement beyond the activation distance starts reordering. Pointer coordinates
+movement beyond the activation distance starts reordering and shows a
+noninteractive tab preview in the gesture overlay. The preview shares the tab's
+icon, label and dirty/saving indicators with the original, retains its measured
+size, and follows the pointer from the original grab point. Pointer coordinates
 must remain inside the visible tab strip for a drop to be accepted. Leaving the
 strip changes only the cursor to `not-allowed`, without a message or additional
 decoration; returning restores the `grabbing` cursor and insertion indicator. A
@@ -58,8 +61,8 @@ completed drag never activates or closes another control.
 Edge scrolling uses one gesture-owned animation frame with a bounded,
 time-based speed. Release, Escape, lost capture, pointer cancellation, window
 blur, hidden document, closed source tab and unmount dispose capture, listeners,
-cursor feedback and the animation frame. Drop coordinates are checked again at
-release, so stale visual feedback cannot allow an outside drop.
+cursor feedback, the preview and the animation frame. Drop coordinates are
+checked again at release, so stale visual feedback cannot allow an outside drop.
 
 ## Extension system
 

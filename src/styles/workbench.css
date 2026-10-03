@@ -591,6 +591,19 @@
   min-width: 176px;
 }
 
+.workbench-tab-drag-preview {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-color: var(--border-strong);
+  color: var(--text);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-lg);
+  opacity: 0.9;
+  pointer-events: none;
+  transition: none;
+}
+
 .workbench-tab__main {
   display: flex;
   min-width: 0;
@@ -655,6 +668,7 @@
 
 .workbench-tab:hover .workbench-tab__close,
 .workbench-tab--active .workbench-tab__close,
+.workbench-tab-drag-preview .workbench-tab__close,
 .workbench-tab__close:focus-visible {
   opacity: 1;
 }

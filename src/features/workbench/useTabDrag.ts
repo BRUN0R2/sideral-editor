@@ -18,6 +18,7 @@ interface TabDragSession {
   readonly pointerId: number;
   readonly target: HTMLButtonElement;
   readonly start: TabPointerPosition;
+  readonly previewBounds: DOMRectReadOnly;
   pointer: TabPointerPosition;
   dragging: boolean;
   previousFrameTime: number | null;
@@ -28,6 +29,12 @@ interface TabDragFeedback {
   readonly dragging: boolean;
   readonly blocked: boolean;
   readonly dropIndex: number | null;
+  readonly preview: {
+    readonly left: number;
+    readonly top: number;
+    readonly width: number;
+    readonly height: number;
+  };
 }
 
 interface TabDragOptions {
@@ -81,6 +88,12 @@ export function useTabDrag({ tabIds, onReorder }: TabDragOptions) {
       dragging: session.dragging,
       blocked,
       dropIndex: session.dragging && !blocked ? tabInsertionIndex(strip, session.pointer.x) : null,
+      preview: {
+        left: session.previewBounds.left + session.pointer.x - session.start.x,
+        top: session.previewBounds.top + session.pointer.y - session.start.y,
+        width: session.previewBounds.width,
+        height: session.previewBounds.height,
+      },
     });
   }, []);
 
@@ -124,12 +137,17 @@ export function useTabDrag({ tabIds, onReorder }: TabDragOptions) {
     if (!event.isPrimary || event.button !== primaryMouseButton || sessionRef.current !== null) {
       return;
     }
+    const tab = event.currentTarget.closest<HTMLElement>("[data-workbench-tab]");
+    if (tab === null) {
+      return;
+    }
     const pointer = { x: event.clientX, y: event.clientY };
     sessionRef.current = {
       tabId,
       pointerId: event.pointerId,
       target: event.currentTarget,
       start: pointer,
+      previewBounds: tab.getBoundingClientRect(),
       pointer,
       dragging: false,
       previousFrameTime: null,
