@@ -10,6 +10,11 @@ const DOWNLOAD_BUTTON = {
   label: "Download",
   url: "https://github.com/BRUN0R2/sideral-editor/releases/latest",
 } as const;
+const presenceArtwork = {
+  largeImage:
+    "https://raw.githubusercontent.com/BRUN0R2/sideral-editor/main/assets/discord/sideralLightning.gif",
+  largeText: "Sideral Editor",
+} as const;
 
 export function createWorkActivity(
   context: WorkspaceContext,
@@ -31,6 +36,7 @@ export function createWorkActivity(
     details: truncateUtf8(details, MAX_DISCORD_TEXT_BYTES),
     state: truncateUtf8(state, MAX_DISCORD_TEXT_BYTES),
     startTimestamp,
+    assets: presenceArtwork,
     buttons: [DOWNLOAD_BUTTON],
   };
 }

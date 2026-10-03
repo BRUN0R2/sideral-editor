@@ -24,6 +24,8 @@ Presence** from the command palette for explicit control.
   without window interaction, `Stopped for a coffee ☕`.
 - Shows one `Download` button that opens the latest official Sideral Editor
   release on GitHub.
+- Shows a silver `S` with animated lightning on a graphite background using
+  the project's [Discord artwork](../../assets/discord/README.md).
 - Restores the document activity immediately after keyboard, pointer, wheel, or
   window-focus activity; no input content leaves the editor.
 - Deduplicates identical activities and keeps a stable session start time.
@@ -37,6 +39,18 @@ The native broker implements Discord's documented local RPC framing and
 
 Discord shows Rich Presence buttons to other users; it does not show the owner
 their own button in their profile preview.
+
+The artwork uses a public HTTPS URL in `assets.largeImage`. Its source is
+`assets/discord/sideralLightning.gif` on the repository's `main` branch.
+Discord must be able to fetch that file anonymously: it stays unavailable while
+the repository is private or the artwork has not been published to `main`.
+After publication, use **Discord: Refresh Discord Work Presence** with a build
+of this extension that includes the artwork. Discord fetches and animates the
+GIF; the extension does not download images or publish per-frame RPC updates.
+
+For a static Developer Portal application icon or Rich Presence art asset, use
+`assets/discord/sideralLightning.png`. Uploaded Rich Presence art assets do not
+support animation; the GIF must remain available at its external URL.
 
 Protocol references: [Discord RPC](https://github.com/discord/discord-api-docs/blob/main/developers/topics/rpc.mdx)
 and [Setting Rich Presence](https://docs.discord.com/developers/discord-social-sdk/development-guides/setting-rich-presence).

@@ -23,6 +23,11 @@ describe("Discord Work Presence", () => {
       type: "playing",
       details: "🧑‍💻 main.rs",
       state: "📁 sideral-editor",
+      assets: {
+        largeImage:
+          "https://raw.githubusercontent.com/BRUN0R2/sideral-editor/main/assets/discord/sideralLightning.gif",
+        largeText: "Sideral Editor",
+      },
       buttons: [
         {
           label: "Download",
