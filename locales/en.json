@@ -53,6 +53,7 @@
     "editor.dirty": "Unsaved changes",
     "editor.readOnly": "Read only",
     "editor.closeDirty": "Save or discard the changes before closing this tab.",
+    "editor.tabDropBlocked": "Tabs can only be dropped inside the tab bar.",
     "editor.schemaTrustTitle": "Trust JSON schema?",
     "editor.schemaTrustDescription": "This document references a JSON schema from a location that Sideral Editor does not trust yet.",
     "editor.schemaTrustSafety": "Schemas are downloaded over HTTPS and used only as validation data. Trust the exact URL unless you know and trust the entire origin.",

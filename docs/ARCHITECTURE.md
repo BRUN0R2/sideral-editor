@@ -37,6 +37,29 @@ preferences cross one explicit save command; Rust owns autostart registration,
 the tray icon and the main-window close policy, while the workspace owns the
 auto-save timer. Each Tauri command is small and describes one effect.
 
+## Workbench tab interaction
+
+`WorkbenchTabs` owns one visual order for documents, Settings and extension
+details. Document and resource identifiers are namespaced to avoid collisions.
+Opening a tab appends it, closing a tab removes it, and document-content updates
+preserve the visual order. Reordering never changes the active document or
+resource, editor models or resource lifetimes.
+
+`useTabDrag` owns the gesture through standard
+[Pointer Events and pointer capture](https://www.w3.org/TR/pointerevents3/#pointer-capture).
+Internal tab movement does not enter the native HTML drag-and-drop path that
+Tauri intercepts on Windows. Pressing a tab closes the grab cursor immediately;
+movement beyond the activation distance starts reordering. Pointer coordinates
+must remain inside the visible tab strip for a drop to be accepted. Leaving the
+strip shows a blocked cursor and a localized notice; returning restores the
+insertion indicator. A completed drag never activates or closes another control.
+
+Edge scrolling uses one gesture-owned animation frame with a bounded,
+time-based speed. Release, Escape, lost capture, pointer cancellation, window
+blur, hidden document, closed source tab and unmount dispose capture, listeners,
+cursor feedback and the animation frame. Drop coordinates are checked again at
+release, so stale visual feedback cannot allow an outside drop.
+
 ## Extension system
 
 Sideral has one native extension system. Its strict manifest, frontend

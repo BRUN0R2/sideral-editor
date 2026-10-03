@@ -395,7 +395,6 @@ function Workbench({ extensionHostConnection }: AppProps) {
               }
               onCloseDocument={workspace.requestCloseDocument}
               onCloseResource={(resourceId) => navigate({ kind: "closeResource", resourceId })}
-              onReorderDocument={workspace.reorderDocument}
             />
           ) : null}
           <div className="workspace-surfaces">

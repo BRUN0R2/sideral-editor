@@ -12,7 +12,6 @@ import {
 import type { AutoSaveMode, DirectoryEntry, WorkspaceSnapshot } from "../../lib/contracts";
 import { ApplicationError, toApplicationError } from "../../lib/errors";
 import { AUTO_SAVE_DELAY_MS, autoSaveDocuments } from "./auto-save";
-import { reorderDocumentAt } from "./document-order";
 import { type LanguageAssociation, languageForFile } from "./language";
 import {
   type CursorPosition,
@@ -311,10 +310,6 @@ export function useWorkspace(autoSave: AutoSaveMode) {
     );
   }, []);
 
-  const reorderDocument = useCallback((id: string, insertionIndex: number) => {
-    setDocuments((current) => reorderDocumentAt(current, id, insertionIndex));
-  }, []);
-
   const saveDocument = useCallback(
     async (id: string, forceSaveAs = false) => {
       const existingRequest = saveRequests.current.get(id);
@@ -485,7 +480,6 @@ export function useWorkspace(autoSave: AutoSaveMode) {
     openFolder,
     toggleDirectory,
     updateDocumentContent,
-    reorderDocument,
     setActiveDocumentId,
     requestCloseDocument,
     discardPendingDocument,

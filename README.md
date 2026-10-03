@@ -15,6 +15,7 @@ The first working foundation includes:
 - secure JSON schema validation with real file URIs, native resolution,
   bounded caching and revocable remote trust;
 - a lazy workspace explorer that does not crawl an entire project up front;
+- freely reorderable document, Settings and extension tabs in one tab strip;
 - an on-demand integrated terminal backed by the native Windows PTY, with an
   explicit PowerShell 7/Command Prompt selection rule, bounded transport and
   deterministic process shutdown;
