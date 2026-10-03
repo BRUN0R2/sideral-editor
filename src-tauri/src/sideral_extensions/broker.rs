@@ -62,7 +62,7 @@ pub(crate) struct CapabilityBroker {
 struct BrokerShared {
     data_root: PathBuf,
     network_client: Client,
-    workspace_root: RwLock<Option<PathBuf>>,
+    workspace_scope: RwLock<WorkspaceScope>,
     document_versions: Mutex<HashMap<PathBuf, TrackedDocument>>,
     outputs: Mutex<HashMap<String, OutputResource>>,
     next_output_id: AtomicU64,
@@ -75,6 +75,12 @@ struct BrokerShared {
     storage_gate: AsyncMutex<()>,
     configuration_gate: AsyncMutex<()>,
     discord_presence: DiscordPresenceSessions,
+}
+
+#[derive(Default)]
+struct WorkspaceScope {
+    roots: Vec<PathBuf>,
+    active: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -273,7 +279,7 @@ impl CapabilityBroker {
             shared: Arc::new(BrokerShared {
                 data_root,
                 network_client,
-                workspace_root: RwLock::new(None),
+                workspace_scope: RwLock::new(WorkspaceScope::default()),
                 document_versions: Mutex::new(HashMap::new()),
                 outputs: Mutex::new(HashMap::new()),
                 next_output_id: AtomicU64::new(1),
@@ -571,8 +577,18 @@ impl CapabilityBroker {
         self.shared.discord_presence.cancel_all();
     }
 
-    pub fn set_workspace_root(&self, root: Option<PathBuf>) -> Result<(), ExtensionError> {
-        let canonical = root
+    pub fn set_workspace_folders(
+        &self,
+        roots: Vec<PathBuf>,
+        active: Option<PathBuf>,
+    ) -> Result<(), ExtensionError> {
+        if roots.len() > crate::workspace_session::MAX_WORKSPACE_ROOTS {
+            return Err(ExtensionError::InvalidRequest(
+                "too many workspace folders".to_owned(),
+            ));
+        }
+        let canonical: Vec<PathBuf> = roots
+            .into_iter()
             .map(|path| {
                 let canonical = fs::canonicalize(&path).map_err(|error| {
                     ExtensionError::io(
@@ -588,13 +604,31 @@ impl CapabilityBroker {
                 }
                 Ok(canonical)
             })
-            .transpose()?;
-        *write_lock(&self.shared.workspace_root, "extension workspace")? = canonical;
-        lock(
-            &self.shared.document_versions,
-            "extension document versions",
-        )?
-        .clear();
+            .collect::<Result<_, _>>()?;
+        let active = active
+            .map(fs::canonicalize)
+            .transpose()
+            .map_err(|error| ExtensionError::io("could not resolve active workspace", error))?;
+        if active
+            .as_ref()
+            .is_some_and(|path| !canonical.contains(path))
+        {
+            return Err(ExtensionError::InvalidRequest(
+                "active workspace must belong to the open folders".to_owned(),
+            ));
+        }
+        let mut scope = write_lock(&self.shared.workspace_scope, "extension workspace")?;
+        if scope.roots != canonical {
+            lock(
+                &self.shared.document_versions,
+                "extension document versions",
+            )?
+            .retain(|path, _| canonical.iter().any(|root| path.starts_with(root)));
+        }
+        *scope = WorkspaceScope {
+            roots: canonical,
+            active,
+        };
         Ok(())
     }
 
@@ -952,9 +986,9 @@ mod tests {
         fs::create_dir(&nested)?;
         let broker = CapabilityBroker::new(directory.path().join("extensions"))?;
 
-        broker.set_workspace_root(Some(nested.clone()))?;
+        broker.set_workspace_folders(vec![nested.clone()], Some(nested.clone()))?;
         assert_eq!(broker.workspace_root()?, fs::canonicalize(nested)?);
-        broker.set_workspace_root(None)?;
+        broker.set_workspace_folders(vec![], None)?;
         assert!(broker.workspace_root().is_err());
         assert_eq!(StoreKind::Storage.file_name(), "storage.json");
         Ok(())
@@ -986,7 +1020,7 @@ mod tests {
         let document = workspace.join("sample.txt");
         fs::write(&document, "first")?;
         let broker = CapabilityBroker::new(directory.path().join("extensions"))?;
-        broker.set_workspace_root(Some(workspace))?;
+        broker.set_workspace_folders(vec![workspace.clone()], Some(workspace))?;
         let uri = file_uri(&document)?;
 
         let first = broker.read_workspace_document_blocking(&uri, &[])?;
@@ -1022,7 +1056,7 @@ mod tests {
         fs::write(&first, "a")?;
         fs::write(workspace.join("b.txt"), "b")?;
         let broker = CapabilityBroker::new(directory.path().join("extensions"))?;
-        broker.set_workspace_root(Some(workspace))?;
+        broker.set_workspace_folders(vec![workspace.clone()], Some(workspace))?;
 
         let matches = broker.find_workspace_files_blocking(
             FindFilesPayload {
@@ -1033,6 +1067,102 @@ mod tests {
         )?;
 
         assert_eq!(matches, serde_json::json!([file_uri(&first)?]));
+        Ok(())
+    }
+
+    #[test]
+    fn grants_all_open_roots_and_revokes_removed_roots_without_resetting_other_versions()
+    -> TestResult {
+        let directory = tempdir()?;
+        let api = directory.path().join("api");
+        let web = directory.path().join("web");
+        fs::create_dir(&api)?;
+        fs::create_dir(&web)?;
+        let api_file = api.join("main.txt");
+        let web_file = web.join("main.txt");
+        let outside = directory.path().join("outside.txt");
+        fs::write(&api_file, "first")?;
+        fs::write(&web_file, "web")?;
+        fs::write(&outside, "outside")?;
+        let broker = CapabilityBroker::new(directory.path().join("extensions"))?;
+        let roots = vec![api.clone(), web.clone()];
+        broker.set_workspace_folders(roots.clone(), Some(api.clone()))?;
+        let api_uri = file_uri(&api_file)?;
+        let web_uri = file_uri(&web_file)?;
+        assert!(
+            broker
+                .read_workspace_document_blocking(&web_uri, &[])
+                .is_ok()
+        );
+        assert!(
+            broker
+                .read_workspace_document_blocking(&file_uri(&outside)?, &[])
+                .is_err()
+        );
+        broker.read_workspace_document_blocking(&api_uri, &[])?;
+        fs::write(&api_file, "second")?;
+        assert_eq!(
+            broker.read_workspace_document_blocking(&api_uri, &[])?["version"],
+            2
+        );
+        broker.set_workspace_folders(roots, Some(web.clone()))?;
+        assert_eq!(broker.workspace_root()?, fs::canonicalize(&web)?);
+        assert_eq!(
+            broker.read_workspace_document_blocking(&api_uri, &[])?["version"],
+            2
+        );
+        broker.set_workspace_folders(vec![api.clone()], Some(api))?;
+        assert!(
+            broker
+                .read_workspace_document_blocking(&web_uri, &[])
+                .is_err()
+        );
+        assert_eq!(
+            broker.read_workspace_document_blocking(&api_uri, &[])?["version"],
+            2
+        );
+        assert!(broker.set_workspace_folders(vec![], Some(web)).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn searches_each_root_with_one_global_limit_and_no_duplicate_results() -> TestResult {
+        let directory = tempdir()?;
+        let api = directory.path().join("api");
+        let nested = api.join("nested");
+        let web = directory.path().join("web");
+        fs::create_dir_all(&nested)?;
+        fs::create_dir(&web)?;
+        let first = nested.join("api.txt");
+        let second = web.join("web.txt");
+        fs::write(&first, "api")?;
+        fs::write(&second, "web")?;
+        let broker = CapabilityBroker::new(directory.path().join("extensions"))?;
+        broker.set_workspace_folders(vec![api.clone(), nested, web], Some(api))?;
+        let result = broker.find_workspace_files_blocking(
+            FindFilesPayload {
+                pattern: "**/*.txt".to_owned(),
+                limit: None,
+            },
+            &Cancellation::default(),
+        )?;
+        let mut expected = vec![file_uri(&first)?, file_uri(&second)?];
+        expected.sort();
+        assert_eq!(result, serde_json::json!(expected));
+        let limited = broker.find_workspace_files_blocking(
+            FindFilesPayload {
+                pattern: "**/*.txt".to_owned(),
+                limit: Some(1),
+            },
+            &Cancellation::default(),
+        )?;
+        assert_eq!(
+            limited
+                .as_array()
+                .ok_or("search returned a nonarray")?
+                .len(),
+            1
+        );
         Ok(())
     }
 }

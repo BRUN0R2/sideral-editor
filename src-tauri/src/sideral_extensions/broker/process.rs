@@ -495,7 +495,7 @@ mod tests {
         fs::create_dir(&include)?;
         fs::write(&source, "fixture")?;
         let broker = CapabilityBroker::new(directory.path().join("extensions"))?;
-        broker.set_workspace_root(Some(workspace))?;
+        broker.set_workspace_folders(vec![workspace.clone()], Some(workspace))?;
         let source_uri = Url::from_file_path(&source)
             .map_err(|()| "source path has no file URI")?
             .to_string();
@@ -560,7 +560,7 @@ mod tests {
         let outside = directory.path().join("outside.input");
         fs::write(&outside, "fixture")?;
         let broker = CapabilityBroker::new(directory.path().join("extensions"))?;
-        broker.set_workspace_root(Some(workspace))?;
+        broker.set_workspace_folders(vec![workspace.clone()], Some(workspace))?;
         let declaration = [ProcessArgument::WorkspaceFile {
             name: "source".to_owned(),
             access: ProcessPathAccess::Read,

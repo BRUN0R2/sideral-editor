@@ -161,8 +161,12 @@ within their own panel through the validated `appearance.scrollbar` contract.
   system tray and main-window lifecycle policy.
 - `i18n.rs`: strict locale schema, discovery, matching and validation.
 - `settings.rs`: versioned settings with atomic persistence.
+- `workspace.rs`: ordered multi-root membership, direct-child discovery,
+  availability and per-root configuration diagnostics.
+- `project_settings.rs`: bounded, strictly validated project configuration,
+  workspace markers and bundled JSON schemas.
 - `workspace_session.rs`: bounded, versioned and atomic persistence of the
-  active workspace root.
+  open workspace folder collection.
 - `updater.rs`: official updater registration and configuration detection.
 - `error.rs`: structured operational failures exposed to TypeScript.
 - `sideral_extensions`: signed registry, trust, monotonic runtime snapshots,
@@ -205,7 +209,7 @@ within their own panel through the validated `appearance.scrollbar` contract.
 | Workspace restoration | `useWorkspace` request generation | Shared only while in flight; stale or unmounted results are ignored |
 | xterm.js instance and resize observer | `IntegratedTerminal` | Disposed on panel owner cleanup |
 | Terminal connection and IPC channels | `IntegratedTerminal` lifecycle queue | Closed before replacement or owner cleanup |
-| Native PTY, shell and worker threads | `IntegratedTerminalState` session registry | Killed, reaped and joined on stop, workspace replacement, window exit, updater restart or application exit |
+| Native PTY, shell and worker threads | `IntegratedTerminalState` session registry | Killed, reaped and joined on stop, explicit terminal restart, window exit, updater restart or application exit |
 | Temporary files | Rust RAII | Closed automatically; persisted atomically |
 | Extension client channels | Native extension service | Removed by connection ID; failed channels are pruned |
 | Extension supervisor session | Main document | Session-scoped disconnect on document teardown; native invalidation on main-window destruction |
@@ -220,10 +224,17 @@ within their own panel through the validated `appearance.scrollbar` contract.
 
 There is no polling loop. Auto Save owns one cancellable 1-second timeout per
 dirty named document and never opens a save dialog for an untitled buffer.
-Opening a folder validates and lists it before atomically replacing the
-versioned session file; only that completed native snapshot becomes visible.
-Startup restores the active root and its first directory level without
-retaining editor models or expanded tree nodes.
+Adding folders validates their canonical paths before atomically persisting the
+ordered collection in the version 2 session file; only the completed snapshot
+becomes visible. Membership is serialized by the native state mutex and the
+frontend operation queue. A failed write never changes the in-memory collection.
+Missing restored roots remain visible with an availability diagnostic. Removing
+a root changes membership without deleting files or closing document buffers.
+Startup restores the collection and lazily loads the first available root; other
+roots and descendant directories load only when expanded. Tree generations
+prevent an old directory response from populating a removed and re-added root.
+`useWorkspaceFolders` owns membership, tree requests and the focus listener;
+`useWorkspace` owns document buffers, saving and auto-save timers.
 Locale files are rescanned once when settings open and when the app regains
 focus after a user copies a file. Desktop preference changes remain interactive
 while complete snapshots are persisted in order. Update checks run
@@ -251,8 +262,11 @@ is the final candidate. Every skipped or failed attempt is retained in the
 successful session snapshot, and the terminal tab marks the selected shell as a
 fallback with the reason available to the user. If every candidate fails, one
 aggregated terminal error preserves all attempt diagnostics.
-A workspace replacement serially disposes the previous PTY before creating
-another. Input and resize requests share one bounded native control queue,
+Changing the selected workspace or removing a root preserves an existing PTY.
+Creation and explicit restart capture the selected root; restart serially
+disposes the previous PTY before creating another. The multi-root selector
+chooses the next session's directory, while the terminal tab continues to show
+the running session's actual directory. Input and resize requests share one bounded native control queue,
 output uses a raw ordered Tauri channel, the xterm scrollback is bounded, and
 every close path kills and reaps the shell before joining its workers. The Tauri
 exit event owns the same shutdown path, including updater-triggered restarts. No
@@ -291,13 +305,19 @@ relative `$schema`, `$id` and `$ref` values have a real base; untitled buffers
 use an isolated `untitled:` URI.
 
 Rust owns all schema I/O. Workspace-local references are canonicalized and must
-remain inside the active workspace (or the saved document directory when no
-folder is open). Remote references require HTTPS, reject credentials and local
+remain inside the document's owning workspace (the longest canonical root path
+match), or the saved document directory for files outside the open roots.
+Remote references require HTTPS, reject credentials and local
 network destinations, follow a bounded number of independently validated
 redirects, and enforce per-document and graph-wide size limits. The resolver
 preloads transitive `$ref`, `$dynamicRef` and `$recursiveRef` resources before
 returning plain JSON data to the WebView, so the CSP does not need a general
 network exception.
+
+The `.sideral/settings.json` and `.sideral/workspace.json` schemas are bundled
+and resolved locally through `sideral://schemas/` URIs. Monaco registers them by
+filename as well as `$schema`, so completion and diagnostics work without a
+network request or a trust prompt.
 
 A small set of established schema providers is trusted by the application.
 Every other remote URL pauses resolution until the user trusts either that
@@ -305,6 +325,40 @@ exact URL or its origin. Additional trust is versioned and written atomically;
 Settings exposes every user-added entry for explicit revocation. Remote schema
 content is cached in memory with a short TTL and HTTP validators, never treated
 as executable code, and discarded when the application exits.
+
+## Independent project workspaces
+
+A `.sideral/workspace.json` marker identifies and names a root, which may itself
+contain several projects. Opening an unmarked parent discovers marked direct
+children, in deterministic directory order. A marked parent takes precedence;
+without marked direct children the selected directory is an ordinary root.
+Discovery never scans grandchildren or follows directory symlinks. Opening a
+folder creates no project configuration; the explicit root configuration action
+creates missing settings first and publishes the marker last, without replacing
+existing files. Configurations are bounded to 64 KiB and membership to 128 roots.
+
+Each root may override `editor.tabSize`, `editor.insertSpaces`, `editor.wordWrap`
+and `files.autoSave` in its `.sideral/settings.json`. Undefined editor settings
+inherit the editor defaults; auto-save inherits the user preference. Monaco
+models and auto-save decisions use each document's owning root, with path
+boundaries and the most specific root taking precedence. Saving a configuration
+or regaining window focus reloads effective settings while preserving loaded
+trees and document models. Invalid configurations report their exact file in
+the Explorer and use inherited defaults until corrected.
+
+The native extension broker atomically updates all allowed canonical roots and
+the selected process directory. Read, write and typed process path operations
+accept any open root while keeping canonical containment checks. File searches
+apply one global result/traversal budget and deduplicate overlapping roots.
+Switching selection preserves tracked document versions; removed roots revoke
+future access. The owning extension hook serializes scope changes, deduplicates
+identical updates and awaits them before metadata delivery, activation or
+command execution. Project configuration is shareable in Git. Session membership,
+user preferences, credentials and runtime state remain in the user profile.
+The current session format is version 2 and does not load version 1 sessions.
+
+See [the workspace file reference](WORKSPACES.md) and the official
+[VS Code multi-root model](https://code.visualstudio.com/docs/editing/workspaces/multi-root-workspaces).
 
 ## WebView shortcut boundary
 

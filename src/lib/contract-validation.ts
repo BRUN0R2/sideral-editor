@@ -2,30 +2,38 @@ import type {
   ApplicationBootstrap,
   DesktopPreferences,
   DirectoryEntry,
+  InitializedWorkspace,
   JsonSchemaResolution,
   JsonSchemaTrustSettings,
   LocaleBundle,
   LocaleCatalog,
   LocaleIssue,
   LocaleSelection,
+  ProjectSettings,
   ResolvedJsonSchema,
   SavedDocumentPayload,
   TextDocumentPayload,
+  WorkspaceFolderSnapshot,
   WorkspaceSnapshot,
 } from "./contracts";
 import {
   arrayOf,
+  BoundaryValidationError,
   booleanValue,
   enumeration,
   jsonValue,
   literal,
   nullable,
+  optional,
   record,
   required,
   safeInteger,
   stringRecord,
   stringValue,
 } from "./runtime-validation";
+
+const minProjectTabSize: number = 1;
+const maxProjectTabSize: number = 8;
 
 export function decodeApplicationBootstrap(value: unknown): ApplicationBootstrap {
   const path = "bootstrap_application response";
@@ -89,6 +97,15 @@ export function decodeNullableWorkspaceResponse(value: unknown): WorkspaceSnapsh
 
 export function decodeWorkspaceResponse(value: unknown): WorkspaceSnapshot {
   return decodeWorkspace(value, "workspace response");
+}
+
+export function decodeInitializedWorkspaceResponse(value: unknown): InitializedWorkspace {
+  const path = "initialized workspace response";
+  const source = record(value, path, ["snapshot", "settingsPath"]);
+  return {
+    snapshot: decodeWorkspace(required(source, "snapshot", path), `${path}.snapshot`),
+    settingsPath: stringValue(required(source, "settingsPath", path), `${path}.settingsPath`),
+  };
 }
 
 export function decodeJsonSchemaResolutionResponse(value: unknown): JsonSchemaResolution {
@@ -227,10 +244,88 @@ function decodeTextDocument(value: unknown, path: string): TextDocumentPayload {
 }
 
 function decodeWorkspace(value: unknown, path: string): WorkspaceSnapshot {
-  const source = record(value, path, ["root", "entries"]);
+  const source = record(value, path, ["folders", "issues"]);
   return {
-    root: stringValue(required(source, "root", path), `${path}.root`),
-    entries: arrayOf(required(source, "entries", path), `${path}.entries`, decodeDirectoryEntry),
+    folders: arrayOf(required(source, "folders", path), `${path}.folders`, decodeWorkspaceFolder),
+    issues: arrayOf(required(source, "issues", path), `${path}.issues`, (value, issuePath) => {
+      const issue = record(value, issuePath, ["path", "message"]);
+      return {
+        path: stringValue(required(issue, "path", issuePath), `${issuePath}.path`),
+        message: stringValue(required(issue, "message", issuePath), `${issuePath}.message`),
+      };
+    }),
+  };
+}
+
+function decodeWorkspaceFolder(value: unknown, path: string): WorkspaceFolderSnapshot {
+  const source = record(value, path, ["path", "name", "available", "workspaceFile", "settings"]);
+  return {
+    path: stringValue(required(source, "path", path), `${path}.path`),
+    name: stringValue(required(source, "name", path), `${path}.name`),
+    available: booleanValue(required(source, "available", path), `${path}.available`),
+    workspaceFile: nullable(
+      required(source, "workspaceFile", path),
+      `${path}.workspaceFile`,
+      stringValue,
+    ),
+    settings: decodeProjectSettings(required(source, "settings", path), `${path}.settings`),
+  };
+}
+
+function decodeProjectSettings(value: unknown, path: string): ProjectSettings {
+  const source = record(value, path, ["$schema", "schemaVersion", "editor", "files"]);
+  const schema = optional(source, "$schema");
+  const editorValue = optional(source, "editor");
+  const filesValue = optional(source, "files");
+  const editor =
+    editorValue === undefined
+      ? undefined
+      : record(editorValue, `${path}.editor`, ["tabSize", "insertSpaces", "wordWrap"]);
+  const files =
+    filesValue === undefined ? undefined : record(filesValue, `${path}.files`, ["autoSave"]);
+  const tabSizeValue = editor === undefined ? undefined : optional(editor, "tabSize");
+  const tabSize =
+    tabSizeValue === undefined
+      ? undefined
+      : safeInteger(tabSizeValue, `${path}.editor.tabSize`, minProjectTabSize);
+  if (tabSize !== undefined && tabSize > maxProjectTabSize) {
+    throw new BoundaryValidationError(
+      `${path}.editor.tabSize`,
+      `must not exceed ${maxProjectTabSize}`,
+    );
+  }
+  const insertSpaces = editor === undefined ? undefined : optional(editor, "insertSpaces");
+  const wordWrap = editor === undefined ? undefined : optional(editor, "wordWrap");
+  const autoSave = files === undefined ? undefined : optional(files, "autoSave");
+  return {
+    schemaVersion: literal(required(source, "schemaVersion", path), 1, `${path}.schemaVersion`),
+    ...(schema === undefined
+      ? {}
+      : { $schema: literal(schema, "sideral://schemas/project-settings", `${path}.$schema`) }),
+    ...(editor === undefined
+      ? {}
+      : {
+          editor: {
+            ...(tabSize === undefined ? {} : { tabSize }),
+            ...(insertSpaces === undefined
+              ? {}
+              : { insertSpaces: booleanValue(insertSpaces, `${path}.editor.insertSpaces`) }),
+            ...(wordWrap === undefined
+              ? {}
+              : { wordWrap: enumeration(wordWrap, ["off", "on"], `${path}.editor.wordWrap`) }),
+          },
+        }),
+    ...(files === undefined
+      ? {}
+      : {
+          files: {
+            ...(autoSave === undefined
+              ? {}
+              : {
+                  autoSave: enumeration(autoSave, ["off", "afterDelay"], `${path}.files.autoSave`),
+                }),
+          },
+        }),
   };
 }
 

@@ -14,7 +14,8 @@ The first working foundation includes:
   save flows;
 - secure JSON schema validation with real file URIs, native resolution,
   bounded caching and revocable remote trust;
-- a lazy workspace explorer that does not crawl an entire project up front;
+- a multi-root explorer with lazy trees, independent `.sideral` project settings,
+  workspace discovery from a common parent and ordered session restoration;
 - freely reorderable document, Settings and extension tabs in one tab strip;
 - an on-demand integrated terminal backed by the native Windows PTY, with an
   explicit PowerShell 7/Command Prompt selection rule, bounded transport and

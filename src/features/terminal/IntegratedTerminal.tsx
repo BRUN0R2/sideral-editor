@@ -8,6 +8,7 @@ import type {
 } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { IconButton } from "../../components/IconButton";
+import type { WorkspaceFolderSnapshot } from "../../lib/contracts";
 import { toApplicationError } from "../../lib/errors";
 import { useI18n } from "../i18n/I18nProvider";
 import type { OutputChannelView } from "../sideral-extensions/contracts";
@@ -36,6 +37,8 @@ interface IntegratedTerminalProps {
   readonly shellVisible: boolean;
   readonly view: TerminalPanelView;
   readonly workspaceRoot: string | null;
+  readonly workspaceFolders: readonly WorkspaceFolderSnapshot[];
+  readonly onSelectWorkspace: (path: string) => void;
   readonly onClose: () => void;
   readonly onCloseView: (view: TerminalPanelView) => void;
   readonly onSelectView: (view: TerminalPanelView) => void;
@@ -63,6 +66,8 @@ export function IntegratedTerminal({
   shellVisible,
   view,
   workspaceRoot,
+  workspaceFolders,
+  onSelectWorkspace,
   onClose,
   onCloseView,
   onSelectView,
@@ -73,6 +78,8 @@ export function IntegratedTerminal({
   const lifecycleQueue = useRef<Promise<void>>(Promise.resolve());
   const panelResizeRef = useRef<PanelResize | null>(null);
   const translateRef = useRef(t);
+  const workspaceRootRef = useRef(workspaceRoot);
+  workspaceRootRef.current = workspaceRoot;
   const [connected, setConnected] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [panelHeight, setPanelHeight] = useState(DEFAULT_PANEL_HEIGHT);
@@ -163,6 +170,7 @@ export function IntegratedTerminal({
     }
     let cancelled = false;
     let release: (() => void) | null = null;
+    const requestedWorkspaceRoot = workspaceRootRef.current;
 
     const runLifecycle = async (): Promise<void> => {
       if (cancelled) {
@@ -240,7 +248,7 @@ export function IntegratedTerminal({
       try {
         connection = await connectIntegratedTerminal(
           {
-            workspaceRoot,
+            workspaceRoot: requestedWorkspaceRoot,
             columns: runtime.terminal.cols,
             rows: runtime.terminal.rows,
           },
@@ -309,7 +317,7 @@ export function IntegratedTerminal({
       cancelled = true;
       release?.();
     };
-  }, [reportFailure, runtime, sessionRequest, workspaceRoot]);
+  }, [reportFailure, runtime, sessionRequest]);
 
   useEffect(() => {
     if (!active || !shellSelected || !connected || runtime === null) {
@@ -392,6 +400,23 @@ export function IntegratedTerminal({
         <div className="terminal-panel__actions">
           {shellSelected ? (
             <>
+              {workspaceFolders.filter((folder) => folder.available).length > 1 ? (
+                <select
+                  className="terminal-panel__workspace"
+                  aria-label={t("terminal.nextWorkspace")}
+                  title={t("terminal.workspaceDescription")}
+                  value={workspaceRoot ?? ""}
+                  onChange={(event) => onSelectWorkspace(event.target.value)}
+                >
+                  {workspaceFolders
+                    .filter((folder) => folder.available)
+                    .map((folder) => (
+                      <option key={folder.path} value={folder.path}>
+                        {folder.name}
+                      </option>
+                    ))}
+                </select>
+              ) : null}
               <IconButton
                 className="terminal-panel__action"
                 label={t("terminal.clear")}

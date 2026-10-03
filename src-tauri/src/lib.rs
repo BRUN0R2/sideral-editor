@@ -10,9 +10,11 @@ mod i18n;
 mod integrated_terminal;
 mod json_schemas;
 mod network_security;
+mod project_settings;
 mod settings;
 mod sideral_extensions;
 mod updater;
+mod workspace;
 mod workspace_session;
 
 use std::path::PathBuf;
@@ -28,7 +30,6 @@ use serde::Serialize;
 use sideral_extensions::SideralExtensionState;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_opener::OpenerExt;
-use workspace_session::WorkspaceSession;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -38,13 +39,6 @@ struct ApplicationBootstrap {
     updater_enabled: bool,
     desktop_preferences: DesktopPreferences,
     localization: LocaleSelection,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WorkspaceSnapshot {
-    root: String,
-    entries: Vec<DirectoryEntry>,
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -118,45 +112,6 @@ async fn write_text_file(path: String, content: String) -> CommandResult<SavedDo
 #[tauri::command(rename_all = "camelCase")]
 async fn list_directory(path: String) -> CommandResult<Vec<DirectoryEntry>> {
     run_blocking(move || documents::list_directory(PathBuf::from(path))).await
-}
-
-#[tauri::command]
-async fn restore_workspace(app: AppHandle) -> CommandResult<Option<WorkspaceSnapshot>> {
-    let session_path = workspace_session_path(&app)?;
-    run_blocking(move || {
-        let Some(session) = workspace_session::read(&session_path)? else {
-            return Ok(None);
-        };
-        let entries = documents::list_directory(PathBuf::from(session.root()))?;
-        Ok(Some(WorkspaceSnapshot {
-            root: session.into_root(),
-            entries,
-        }))
-    })
-    .await
-}
-
-#[tauri::command(rename_all = "camelCase")]
-async fn open_workspace(app: AppHandle, root: String) -> CommandResult<WorkspaceSnapshot> {
-    let session_path = workspace_session_path(&app)?;
-    run_blocking(move || {
-        let session = WorkspaceSession::from_root(root)?;
-        let entries = documents::list_directory(PathBuf::from(session.root()))?;
-        workspace_session::write(&session_path, &session)?;
-        Ok(WorkspaceSnapshot {
-            root: session.into_root(),
-            entries,
-        })
-    })
-    .await
-}
-
-fn workspace_session_path(app: &AppHandle) -> error::AppResult<PathBuf> {
-    let config_directory = app
-        .path()
-        .app_config_dir()
-        .map_err(|error| AppError::InvalidPath(error.to_string()))?;
-    Ok(workspace_session::file_path(&config_directory))
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -241,6 +196,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     builder
         .setup(|app| {
+            if !app.manage(workspace::state_for_app(app.handle())?) {
+                return Err(
+                    AppError::Runtime("workspace state is already managed".to_owned()).into(),
+                );
+            }
             let desktop_preferences = DesktopPreferencesState::load(app.handle())?;
             if !app.manage(desktop_preferences) {
                 return Err(AppError::Runtime(
@@ -289,8 +249,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             create_text_file,
             write_text_file,
             list_directory,
-            restore_workspace,
-            open_workspace,
+            workspace::restore_workspace,
+            workspace::add_workspace_folders,
+            workspace::remove_workspace_folder,
+            workspace::refresh_workspace,
+            workspace::initialize_workspace_folder,
             validate_sideral_extension_manifest,
             resolve_json_schema,
             json_schema_trust_settings,
@@ -311,7 +274,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             sideral_extensions::extension_host_bundle,
             sideral_extensions::extension_broker_request,
             sideral_extensions::cancel_extension_broker_request,
-            sideral_extensions::set_extension_workspace,
+            sideral_extensions::set_extension_workspaces,
             sideral_extensions::dismiss_extension_preview,
             sideral_extensions::update_extension_keybinding,
             sideral_extensions::extension_configurations,

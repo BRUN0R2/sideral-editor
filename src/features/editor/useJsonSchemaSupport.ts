@@ -1,8 +1,13 @@
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isDesktopRuntime, resolveJsonSchema, trustJsonSchemaLocation } from "../../lib/backend";
-import type { JsonSchemaResolution, JsonSchemaTrustScope } from "../../lib/contracts";
+import type {
+  JsonSchemaResolution,
+  JsonSchemaTrustScope,
+  WorkspaceFolderSnapshot,
+} from "../../lib/contracts";
 import { toApplicationError } from "../../lib/errors";
 import { useI18n } from "../i18n/I18nProvider";
+import { workspaceFolderForPath } from "../workspace/project-settings";
 import type { EditorDocument } from "../workspace/types";
 import { findJsonSchemaReference, type JsonSchemaReference } from "./json-schema-reference";
 import { jsonSchemaRegistry } from "./json-schema-registry";
@@ -49,7 +54,7 @@ export interface JsonSchemaSupportController {
 interface JsonSchemaSupportOptions {
   readonly active: boolean;
   readonly documents: readonly EditorDocument[];
-  readonly workspaceRootPath: string | null;
+  readonly workspaceFolders: readonly WorkspaceFolderSnapshot[];
   readonly trustRevision: number;
   readonly models: RefObject<Map<string, monaco.editor.ITextModel>>;
   readonly onTrustChange: () => void;
@@ -58,7 +63,7 @@ interface JsonSchemaSupportOptions {
 export function useJsonSchemaSupport({
   active,
   documents,
-  workspaceRootPath,
+  workspaceFolders,
   trustRevision,
   models,
   onTrustChange,
@@ -150,6 +155,8 @@ export function useJsonSchemaSupport({
     }
 
     for (const descriptor of currentDocuments.values()) {
+      const workspaceRootPath =
+        workspaceFolderForPath(workspaceFolders, descriptor.path)?.path ?? null;
       const key = JSON.stringify([
         descriptor.reference.uri,
         descriptor.path,
@@ -194,7 +201,7 @@ export function useJsonSchemaSupport({
     setMarker,
     t,
     trustRevision,
-    workspaceRootPath,
+    workspaceFolders,
   ]);
 
   const cancelTrust = useCallback((): void => {

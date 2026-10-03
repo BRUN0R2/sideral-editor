@@ -269,17 +269,65 @@
 
 .workspace-root {
   display: flex;
-  height: 26px;
+  min-height: 30px;
   align-items: center;
-  gap: 5px;
+  gap: 2px;
   border-block: 1px solid var(--border);
-  padding: 0 8px;
-  color: #b8bdc5;
-  background: #262a31;
+  padding: 0 4px;
+  color: var(--text);
+  background: var(--bg-tab-bar);
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.045em;
-  text-transform: uppercase;
+}
+
+.workspace-root--selected {
+  background: var(--bg-active);
+}
+
+.workspace-root__toggle {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.workspace-root__toggle:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.workspace-root__toggle[aria-expanded="true"] .workspace-root__chevron {
+  transform: rotate(90deg);
+}
+.workspace-root__toggle > .icon {
+  flex-shrink: 0;
+}
+.workspace-root__actions {
+  display: flex;
+  flex-shrink: 0;
+  opacity: 0;
+}
+.workspace-root:is(:hover, :focus-within) .workspace-root__actions {
+  opacity: 1;
+}
+.workspace-root__actions .icon-button {
+  width: 24px;
+  height: 24px;
+}
+.workspace-folder__issue {
+  margin: 0;
+  padding: 7px 10px;
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .workspace-root span {

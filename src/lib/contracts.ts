@@ -65,9 +65,38 @@ export interface SavedDocumentPayload {
   readonly bytesWritten: number;
 }
 
+export interface ProjectSettings {
+  readonly $schema?: string;
+  readonly schemaVersion: 1;
+  readonly editor?: {
+    readonly tabSize?: number;
+    readonly insertSpaces?: boolean;
+    readonly wordWrap?: "off" | "on";
+  };
+  readonly files?: { readonly autoSave?: AutoSaveMode };
+}
+
+export interface WorkspaceFolderSnapshot {
+  readonly path: string;
+  readonly name: string;
+  readonly available: boolean;
+  readonly workspaceFile: string | null;
+  readonly settings: ProjectSettings;
+}
+
+export interface WorkspaceIssue {
+  readonly path: string;
+  readonly message: string;
+}
+
 export interface WorkspaceSnapshot {
-  readonly root: string;
-  readonly entries: readonly DirectoryEntry[];
+  readonly folders: readonly WorkspaceFolderSnapshot[];
+  readonly issues: readonly WorkspaceIssue[];
+}
+
+export interface InitializedWorkspace {
+  readonly snapshot: WorkspaceSnapshot;
+  readonly settingsPath: string;
 }
 
 export type JsonValue =

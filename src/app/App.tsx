@@ -84,7 +84,8 @@ function Workbench({ extensionHostConnection }: AppProps) {
   );
   const workspace = useWorkspace(desktopPreferences.preferences.autoSave);
   const extensions = useExtensionSystem(
-    workspace.workspaceRoot,
+    workspace.folders,
+    workspace.selectedFolder,
     workspace.activeDocument,
     extensionHostConnection,
     workspace.saveDocument,
@@ -344,11 +345,12 @@ function Workbench({ extensionHostConnection }: AppProps) {
             hidden={primarySidebar !== "explorer"}
           >
             <Explorer
-              root={workspace.workspaceRoot}
-              entries={workspace.entries}
+              folders={workspace.folders}
+              issues={workspace.issues}
+              selectedFolderPath={workspace.selectedFolder?.path ?? null}
               restoring={workspace.restoringWorkspace}
-              onCreateFile={async (name) => {
-                await workspace.createWorkspaceFile(name);
+              onCreateFile={async (path, name) => {
+                await workspace.createWorkspaceFile(path, name);
                 navigate({ kind: "showEditor" });
               }}
               onOpenFile={() => {
@@ -364,6 +366,13 @@ function Workbench({ extensionHostConnection }: AppProps) {
                 void workspace.openFile(path);
               }}
               onToggleDirectory={(path) => void workspace.toggleDirectory(path)}
+              onToggleFolder={workspace.toggleFolder}
+              onSelectFolder={workspace.selectFolder}
+              onRemoveFolder={(path) => void workspace.removeFolder(path)}
+              onConfigureFolder={(path) => {
+                navigate({ kind: "showEditor" });
+                void workspace.configureFolder(path);
+              }}
             />
           </div>
           <ExtensionsSidebar
@@ -410,7 +419,8 @@ function Workbench({ extensionHostConnection }: AppProps) {
                         documents={workspace.documents}
                         activeDocumentId={workspace.activeDocument.id}
                         active={navigation.surface.kind === "editor"}
-                        workspaceRootPath={workspace.workspaceRoot?.path ?? null}
+                        workspaceFolders={workspace.folders}
+                        selectedFolderPath={workspace.selectedFolder?.path ?? null}
                         jsonSchemaTrustRevision={jsonSchemaTrustRevision}
                         onContentChange={workspace.updateDocumentContent}
                         onCursorChange={workspace.setCursor}
@@ -471,7 +481,9 @@ function Workbench({ extensionHostConnection }: AppProps) {
                 outputs={visibleTerminalOutputs}
                 shellVisible={terminalPanel.shellVisible}
                 view={terminalPanel.view}
-                workspaceRoot={workspace.workspaceRoot?.path ?? null}
+                workspaceRoot={workspace.selectedFolder?.path ?? null}
+                workspaceFolders={workspace.folders}
+                onSelectWorkspace={workspace.selectFolder}
                 onClose={() => updateTerminalPanel({ kind: "close" })}
                 onCloseView={(view) =>
                   updateTerminalPanel({

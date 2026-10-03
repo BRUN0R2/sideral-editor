@@ -5,6 +5,7 @@ import {
   decodeApplicationBootstrap,
   decodeDesktopPreferencesResponse,
   decodeDirectoryEntriesResponse,
+  decodeInitializedWorkspaceResponse,
   decodeJsonSchemaResolutionResponse,
   decodeJsonSchemaTrustSettingsResponse,
   decodeLocaleSelectionResponse,
@@ -17,6 +18,7 @@ import type {
   ApplicationBootstrap,
   DesktopPreferences,
   DirectoryEntry,
+  InitializedWorkspace,
   JsonSchemaResolution,
   JsonSchemaTrustScope,
   JsonSchemaTrustSettings,
@@ -132,9 +134,24 @@ export function restoreWorkspace(): Promise<WorkspaceSnapshot | null> {
   return workspaceRestoreRequest;
 }
 
-export function openWorkspace(root: string): Promise<WorkspaceSnapshot> {
+export function addWorkspaceFolders(paths: readonly string[]): Promise<WorkspaceSnapshot> {
   assertDesktopRuntime();
-  return invokeDecoded("open_workspace", { root }, decodeWorkspaceResponse);
+  return invokeDecoded("add_workspace_folders", { paths }, decodeWorkspaceResponse);
+}
+
+export function removeWorkspaceFolder(path: string): Promise<WorkspaceSnapshot> {
+  assertDesktopRuntime();
+  return invokeDecoded("remove_workspace_folder", { path }, decodeWorkspaceResponse);
+}
+
+export function refreshWorkspace(): Promise<WorkspaceSnapshot> {
+  assertDesktopRuntime();
+  return invokeDecoded("refresh_workspace", undefined, decodeWorkspaceResponse);
+}
+
+export function initializeWorkspaceFolder(path: string): Promise<InitializedWorkspace> {
+  assertDesktopRuntime();
+  return invokeDecoded("initialize_workspace_folder", { path }, decodeInitializedWorkspaceResponse);
 }
 
 export function resolveJsonSchema(
