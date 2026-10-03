@@ -1,0 +1,26 @@
+Generation method: built-in image_gen (no API/CLI fallback).
+
+Initial exploration prompt:
+Use case: logo-brand / animated icon sprite sheet.
+Create the FINAL ARTWORK for a high-quality animated Discord Rich Presence icon for Sideral Editor. The deliverable is ONE square 4 by 4 sprite sheet, exactly 16 square animation frames, read left-to-right top-to-bottom. Render at 4096 by 4096 if supported (each tile 1024 square); otherwise use the highest available square resolution.
+Subject in every tile: one identical, perfectly centered, large capital "S", occupying about 58 percent of tile height, smooth thick rounded monoline letterform, sculpted satin silver metal with clean luminous edges and restrained dimensional depth. Straight-on locked camera. A handsome premium software brand mark that remains clearly readable at 64px.
+Palette MUST match the actual editor UI: graphite background #282c34, deeper shadows #1e2228, raised charcoal #373c45, silver #aeb4bd, highlights #d0d3d8 and near-white. Cool-neutral monochrome only. No blue, purple, cyan, gold, warm tones or colored neon.
+Backdrop: opaque charcoal/graphite, slight radial illumination behind the S, clean dark corners, no border or badge.
+Animation: delicate branching white/silver electrical lightning filaments flicker and travel around and in front of the S, with beautiful restrained volumetric bloom and a few micro sparks. Letter, background, lighting and camera remain stationary and IDENTICAL across ALL 16 frames. ONLY lightning shape and subtle electrical glow evolve. Frame 1 has lightning at upper-left, which travels around the S over the next frames and returns near the upper-left in frame 16 for a seamless loop. Always keep the S legible, avoid full-screen flashes.
+Grid constraints: perfect 4x4 equal-size tiles, edge-to-edge, NO gutters, NO grid lines, NO labels, NO frame numbers, NO typography except the single S within each tile, NO watermark. Each tile is exactly the same composition, scale, center and letter shape. All effects safely contained within their tile with at least 10 percent blank margin. No contact-sheet styling, only raw production sprite frames.
+Quality: exceptionally crisp refined metal edges, beautiful detailed physically plausible fine branching lightning, sophisticated restrained high contrast, no grunge, no smoke clouds, no other symbols, no sparkle star logo, no extra letters.
+
+Final source-sheet edit prompt (the initial exploration was used as a visual reference):
+Use case: logo-brand animated icon.
+EDIT TARGET: the attached sprite sheet of silver S and lightning on graphite.
+Create a NEW production sprite sheet of EXACTLY TWO COLUMNS AND TWO ROWS (2x2), four square keyframes, using the same refined silver S design and charcoal composition from the supplied image. Use highest possible resolution. Entire output square, four equal tiles edge-to-edge with NO grid line, border, gutter, labels, or numbers.
+Each tile contains ONE large perfectly identical silver-metal capital S with soft dimensional bevel, centered at EXACTLY the same normalized coordinates and same scale. Fixed camera. Let the S occupy 58% of each tile height. A clean dark #282c34 graphite background with #1e2228 edge vignette and silver #d0d3d8 highlights. Absolutely NO blue, purple, or colored light. Premium high-quality software icon, readable small.
+Keep every invariant: identical S geometry, S position, S size, lighting of the metal, and backdrop in all four tiles. There is no zoom, rotation, deformation, or movement of the letter.
+Change ONLY delicate, very detailed branching silver-white electrical lightning and its bloom around the letter, like the reference.
+Top-left tile: electrical arc on the upper-left and top edge.
+Top-right tile: electrical arc on the upper-right and right edge.
+Bottom-left tile: electrical arc on the lower-right and bottom edge.
+Bottom-right tile: electrical arc on the lower-left and left edge.
+Keep all lightning inside the frame with 8% safety margin. No full white flashes. The four tiles will be assembled into an animated loop, so consistency of the stationary S is absolutely essential.
+Render every tile with crisp photographic detail. Preserve the attractive restrained metallic style of the reference. The sole text is "S", once in every tile. No new symbols or decorative shapes.
+
