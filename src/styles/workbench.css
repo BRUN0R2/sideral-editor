@@ -523,10 +523,6 @@
   background: var(--bg-tab-bar);
 }
 
-.editor-tabs[data-drop-blocked="true"] {
-  border-bottom-color: var(--danger);
-}
-
 .workbench-tab-drag-surface {
   position: fixed;
   z-index: 45;
@@ -537,29 +533,6 @@
 
 .workbench-tab-drag-surface[data-drop-blocked="true"] {
   cursor: not-allowed;
-}
-
-.workbench-tab-drop-notice {
-  position: fixed;
-  z-index: 50;
-  display: flex;
-  max-width: calc(100vw - 32px);
-  align-items: center;
-  gap: 8px;
-  transform: translateX(-50%);
-  border: 1px solid var(--danger);
-  border-radius: var(--radius-sm);
-  padding: 10px 14px;
-  color: var(--text);
-  background: var(--bg-raised);
-  box-shadow: var(--shadow-lg);
-  font-size: 13px;
-  pointer-events: none;
-}
-
-.workbench-tab-drop-notice svg {
-  flex-shrink: 0;
-  color: var(--danger);
 }
 
 .workbench-tab {

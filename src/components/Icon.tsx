@@ -2,7 +2,6 @@ import type { SVGProps } from "react";
 
 export type IconName =
   | "alert"
-  | "blocked"
   | "chevronDown"
   | "chevronRight"
   | "close"
@@ -43,13 +42,6 @@ export function Icon({ name, size = 18, ...props }: IconProps) {
 
 function IconPath({ name }: { readonly name: IconName }) {
   switch (name) {
-    case "blocked":
-      return (
-        <>
-          <circle cx="12" cy="12" r="9" />
-          <path d="m5.6 5.6 12.8 12.8" />
-        </>
-      );
     case "alert":
       return (
         <>

@@ -1,7 +1,6 @@
-import { useId, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { FileTypeIcon } from "../../components/FileTypeIcon";
-import { Icon } from "../../components/Icon";
 import { ProductIcon, type ProductIconName } from "../../components/ProductIcon";
 import { TabCloseButton } from "../../components/TabCloseButton";
 import { useI18n } from "../i18n/I18nProvider";
@@ -43,7 +42,6 @@ export function WorkbenchTabs({
   onCloseResource,
 }: WorkbenchTabsProps) {
   const { t } = useI18n();
-  const blockedNoticeId = useId();
   const [tabOrder, setTabOrder] = useState<readonly string[]>([]);
   const tabsById = new Map<string, WorkbenchTab>();
   for (const document of documents) {
@@ -67,12 +65,7 @@ export function WorkbenchTabs({
 
   return (
     <>
-      <div
-        {...drag.stripProps}
-        className="editor-tabs"
-        role="tablist"
-        data-drop-blocked={drag.feedback?.blocked || undefined}
-      >
+      <div {...drag.stripProps} className="editor-tabs" role="tablist">
         {orderedTabIds.map((tabId, index) => {
           const tab = tabsById.get(tabId);
           if (tab === undefined) {
@@ -107,7 +100,6 @@ export function WorkbenchTabs({
                 role="tab"
                 aria-selected={active}
                 aria-label={`${label}${dirty ? ` — ${t("editor.dirty")}` : ""}`}
-                aria-describedby={held && drag.feedback?.blocked ? blockedNoticeId : undefined}
                 style={
                   held ? { cursor: drag.feedback?.blocked ? "not-allowed" : "grabbing" } : undefined
                 }
@@ -150,24 +142,11 @@ export function WorkbenchTabs({
       </div>
       {drag.feedback !== null
         ? createPortal(
-            <>
-              <div
-                className="workbench-tab-drag-surface"
-                aria-hidden="true"
-                data-drop-blocked={drag.feedback.blocked || undefined}
-              />
-              {drag.feedback.blocked ? (
-                <div
-                  id={blockedNoticeId}
-                  className="workbench-tab-drop-notice"
-                  role="status"
-                  style={{ left: drag.feedback.noticeLeft, top: drag.feedback.noticeTop }}
-                >
-                  <Icon name="blocked" size={16} />
-                  <span>{t("editor.tabDropBlocked")}</span>
-                </div>
-              ) : null}
-            </>,
+            <div
+              className="workbench-tab-drag-surface"
+              aria-hidden="true"
+              data-drop-blocked={drag.feedback.blocked || undefined}
+            />,
             document.body,
           )
         : null}

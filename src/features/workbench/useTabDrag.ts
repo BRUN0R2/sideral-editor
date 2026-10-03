@@ -28,8 +28,6 @@ interface TabDragFeedback {
   readonly dragging: boolean;
   readonly blocked: boolean;
   readonly dropIndex: number | null;
-  readonly noticeLeft: number;
-  readonly noticeTop: number;
 }
 
 interface TabDragOptions {
@@ -39,7 +37,6 @@ interface TabDragOptions {
 
 const dragScrollSpeed: number = 480;
 const maximumScrollFrameDuration: number = 50;
-const blockedNoticeGap: number = 8;
 const primaryMouseButton: number = 0;
 const primaryMouseButtonMask: number = 1;
 
@@ -84,8 +81,6 @@ export function useTabDrag({ tabIds, onReorder }: TabDragOptions) {
       dragging: session.dragging,
       blocked,
       dropIndex: session.dragging && !blocked ? tabInsertionIndex(strip, session.pointer.x) : null,
-      noticeLeft: bounds.left + bounds.width / 2,
-      noticeTop: bounds.bottom + blockedNoticeGap,
     });
   }, []);
 

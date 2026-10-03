@@ -53,7 +53,6 @@
     "editor.dirty": "Alterações não salvas",
     "editor.readOnly": "Somente leitura",
     "editor.closeDirty": "Salve ou descarte as alterações antes de fechar esta aba.",
-    "editor.tabDropBlocked": "Você só pode soltar as abas dentro da barra superior.",
     "editor.schemaTrustTitle": "Confiar no schema JSON?",
     "editor.schemaTrustDescription": "Este documento referencia um schema JSON de um local em que o Sideral Editor ainda não confia.",
     "editor.schemaTrustSafety": "Os schemas são baixados por HTTPS e usados apenas como dados de validação. Confie na URL exata, a menos que você conheça e confie em toda a origem.",

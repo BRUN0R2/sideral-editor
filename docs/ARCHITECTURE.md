@@ -51,8 +51,9 @@ Internal tab movement does not enter the native HTML drag-and-drop path that
 Tauri intercepts on Windows. Pressing a tab closes the grab cursor immediately;
 movement beyond the activation distance starts reordering. Pointer coordinates
 must remain inside the visible tab strip for a drop to be accepted. Leaving the
-strip shows a blocked cursor and a localized notice; returning restores the
-insertion indicator. A completed drag never activates or closes another control.
+strip changes only the cursor to `not-allowed`, without a message or additional
+decoration; returning restores the `grabbing` cursor and insertion indicator. A
+completed drag never activates or closes another control.
 
 Edge scrolling uses one gesture-owned animation frame with a bounded,
 time-based speed. Release, Escape, lost capture, pointer cancellation, window
