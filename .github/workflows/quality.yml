@@ -34,7 +34,7 @@ jobs:
         run: npm install --global npm@11.18.0
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@1.97.1
+        uses: dtolnay/rust-toolchain@1.120.0
         with:
           components: clippy, rustfmt
 
