@@ -1,57 +1,38 @@
-# AMXX Pawn Compiler for Sideral
+# AMXX Pawn Compiler
 
-This is a standalone Sideral extension. It contributes the `amxxpawn` language
-association for `.sma` and `.inc` files and compiles the active saved `.sma`
-file into an adjacent `.amxx` file.
+Adds the `amxxpawn` language for `.sma`/`.inc` and compiles the active saved
+`.sma` document into an adjacent `.amxx` file.
 
-When the workspace has a top-level `include` directory containing `.inc`
-files, the extension passes it to `amxxpc` as a validated `-i` argument. The
-compiler's own standard includes continue to resolve beside its executable.
+## Use
 
-## Requirements
+1. Install the AMX Mod X compiler separately; this extension ships no compiler.
+2. Install the signed extension package.
+3. In **Settings → AMXX Pawn → Compiler Path**, select `amxxpc.exe`, or make
+   `amxxpc` available on `PATH` for the signed default.
+4. Keep standard includes beside the compiler. Open a project containing the
+   source file, then run **AMXX Pawn: Compile active plugin** or `Ctrl+Shift+B`.
 
-- Install the AMX Mod X compiler for your platform.
-- Select `amxxpc` (`amxxpc.exe` on Windows) under
-  **Settings › AMXX Pawn › Compiler Path**. The signed default also resolves
-  `amxxpc` from `PATH`.
-- Keep the compiler's standard include directory beside the executable. Sideral
-  intentionally starts the compiler from that directory.
+The compiler starts from its executable directory. A top-level project `include/`
+with `.inc` files becomes a validated `-i` argument. Output and native exit status
+appear in the extension's output channel; negative Windows statuses also include
+their hexadecimal form.
 
-No compiler binary is redistributed by this package.
+## Develop and package
 
-Compiler output and the native exit status are written to the extension's output
-channel. Negative native statuses include their hexadecimal representation, so
-Windows status codes can be looked up without manually converting the signed
-decimal value.
-
-## Develop
-
-From this directory:
+From the repository root:
 
 ```powershell
-npm install
-npm run typecheck
-npm test
-npm run build
+npm ci
+npm run sdk:build
+npm run extension:amxx:check
+npm run extensions:package:dev
 ```
 
-The extension uses only `@sideral/extension-sdk`. Its worker has no Node.js,
-filesystem, shell or Tauri access. The signed manifest contributes the compiler
-selector and grants that declared configuration as the executable source plus
-typed workspace-path arguments: a readable `.sma` source, an optional readable
-project include directory and a writable `.amxx` target.
+For a focused build use `npm run extension:amxx:build`. Package validation/signing
+uses `build/extensions/amxx-pawn`. Follow [the authoring guide](../../docs/EXTENSIONS.md#sign-and-install)
+for production keys and individual packages.
 
-## Package and install
-
-From the Sideral repository root, after building the extension:
-
-```powershell
-npm run extension:tool -- check extensions\amxx-pawn
-npm run extension:tool -- keygen D:\private\sideral-amxx-key.json
-npm run extension:tool -- pack extensions\amxx-pawn D:\private\sideral-amxx-key.json D:\packages\sideral-amxx-pawn.sideralx
-npm run extension:tool -- inspect D:\packages\sideral-amxx-pawn.sideralx
-```
-
-Install the resulting `.sideralx` from the Sideral Extensions view. Open a
-saved `.sma` file and run **AMXX Pawn: Compile active plugin** from the command
-palette or press `Ctrl+Shift+B` (`Cmd+Shift+B` on macOS).
+The [manifest](manifest.json) declares workspace read/write access, the executable
+setting and typed source/include/output grants. The Worker has no direct
+filesystem, shell or Tauri access. [API contracts](../../docs/EXTENSION-API.md#configuration-and-native-processes)
+explain how those grants are enforced.

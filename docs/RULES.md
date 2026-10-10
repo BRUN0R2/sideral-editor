@@ -1,345 +1,128 @@
-# Constituicao do Projeto - SIDERAL EDITOR
-
-## Regra Suprema
-
-O Codex / IA deve seguir todas as regras do projeto rigorosamente e sem excecao.
-
-Nenhuma implementacao, otimizacao, abstracao, refatoracao, dependencia, atalho
-ou decisao arquitetural pode violar as regras definidas neste documento.
-
-Quando existir conflito, a ordem de prioridade deve ser sempre:
-
-1. Regras do projeto
-2. Integridade da arquitetura
-3. Manutenibilidade
-4. Previsibilidade
-5. Seguranca
-6. Performance
-7. Velocidade de desenvolvimento
-
-Velocidade nunca justifica degradacao arquitetural.
-
----
-
-# Filosofia Central
-
-O projeto deve permanecer:
-
-* Limpo
-* Previsivel
-* Minimalista
-* Modular
-* Explicito
-* Facil de manter
-* Escalavel
-* Pronto para producao
-
-A base do codigo deve evoluir continuamente em direcao a simplicidade, nunca a
-complexidade.
-
-Toda implementacao deve resolver problemas reais usando a menor complexidade
-necessaria.
-
-Evitar:
-
-* Overengineering
-* Abstracoes prematuras
-* Solucoes temporarias
-* Comportamentos ocultos
-* Fluxos implicitos
-* Caos defensivo
-* Inconsistencia arquitetural
-
-O sistema deve continuar compreensivel meses depois sem depender de contexto
-historico.
-
----
-
-# Regras do Repositorio
-
-* Manter um repositorio Git local desde o inicio.
-* Comitar toda mudanca logica concluida.
-* Mensagens de commit devem:
-
-  * estar em ingles
-  * ser curtas
-  * usar verbo no imperativo
-  * descrever claramente mudancas reais
-* Manter `docs/TODO.md` minimalista, atualizado e acionavel.
-* Nunca versionar segredos, credenciais, tokens ou dados privados.
-* Versionar arquivos de texto com finais de linha LF por meio do
-  `.gitattributes`; somente scripts Batch usam CRLF explicitamente.
-* Evitar arquivos, dependencias, assets, logs ou ferramentas sem necessidade
-  real.
-* Preferir uma base limpa e funcional ao inves de preservar compatibilidade
-  obsoleta.
-* Evitar acumular divida tecnica intencionalmente.
-
----
-
-# Stack Oficial
-
-* Rust 2024 Edition e toolchain estavel atual.
-* Tauri 2 para shell desktop nativo.
-* TypeScript estrito no frontend.
-* Vite como empacotador frontend.
-* Windows e o alvo operacional inicial.
-* Nao criar adaptadores, aliases, migracoes ou caminhos de retrocompatibilidade.
-
-Qualquer tecnologia nova deve ter motivo claro, escopo isolado e custo de
-manutencao proporcional ao beneficio.
-
----
-
-# Regras de Arquitetura
-
-## Estrutura
-
-* Organizar sistemas em modulos pequenos e coesos.
-* Cada modulo deve possuir responsabilidade clara.
-* Preferir composicao ao inves de heranca.
-* Preferir contratos explicitos ao inves de comportamento implicito.
-* Preferir fluxos deterministicos ao inves de magica dinamica.
-* Preferir abstracoes simples ao inves de camadas profundas de abstracao.
-* Evitar objetos gigantes e acumulo centralizado de logica.
-* Regras de negocio nao devem se espalhar de forma imprevisivel.
-
-## Design
-
-* APIs devem permanecer pequenas e explicitas.
-* Entradas, saidas, efeitos colaterais e falhas devem ser sempre visiveis.
-* Nenhum fallback silencioso.
-* Fallback operacional e permitido somente quando possuir ordem deterministica,
-  escopo limitado e contrato explicito.
-* Toda opcao ignorada ou tentativa que falhar antes de um fallback bem-sucedido
-  deve permanecer observavel para o usuario e para o diagnostico.
-* Nenhum caminho oculto de recuperacao de inicializacao ou falsa resiliencia
-  escondendo falhas reais.
-* Erros devem aparecer de forma clara e previsivel.
-* Transicoes de estado devem ser rastreaveis.
-
-## Evolucao
-
-* Sistemas devem ser preparados para expansao futura sem reescritas
-  destrutivas.
-* Refatoracoes devem simplificar o projeto, nao reorganizar complexidade.
-* Reduzir fragmentacao sempre que possivel.
-* Remover continuamente codigo morto, obsoleto ou duplicado.
-
----
-
-# Regras de Codigo
-
-## Modernidade tecnica
-
-* Usar somente versoes estaveis, atuais, suportadas e nao depreciadas das
-  linguagens, ferramentas e APIs adotadas pelo projeto.
-* Verificar documentacao oficial, notas de versao e compatibilidade antes de
-  adicionar ou atualizar uma tecnologia.
-* Nao manter codigo legado, shims, polyfills ou retrocompatibilidade sem uma
-  necessidade de produto atual e documentada.
-* Recursos modernos devem ser usados quando reduzirem complexidade, risco ou
-  custo operacional; novidade sem beneficio mensuravel nao e justificativa.
-
-## Rust
-
-* Usar Rust estavel moderno com `edition = "2024"`.
-* Ativar tipagem forte, ownership explicito e erros estruturados.
-* Evitar `unsafe`; quando inevitavel, isolar em modulo pequeno, documentar
-  invariantes e validar em runtime.
-* Preferir tipos de dominio a strings soltas quando houver regra semantica.
-* Usar `Result` para falhas recuperaveis; nenhum erro operacional deve ser
-  escondido.
-* Evitar `panic!`, `unwrap` e `expect` fora da inicializacao irrecuperavel.
-* Modulos e arquivos Rust devem seguir convencoes idiomaticas da linguagem.
-
-## TypeScript
-
-* Usar TypeScript estrito.
-* Manter tipos de fronteira sincronizados com os contratos expostos pelo Rust.
-* Evitar estado global mutavel sem dono claro.
-* UI deve chamar comandos Tauri pequenos, explicitos e rastreaveis.
-
-## Nomeacao
-
-* Usar nomes claros e descritivos.
-* Evitar abreviacoes, salvo quando universalmente conhecidas.
-* Evitar prefixos e sufixos artificiais.
-* Respeitar a convencao nativa de cada linguagem e ferramenta.
-* Snake case e kebab case sao permitidos quando forem convencoes do ecossistema.
-
-## Logica
-
-Aplicar:
-
-* Single Responsibility Principle
-* DRY
-* Ownership explicito
-* Gerenciamento explicito de lifetime
-
-Evitar:
-
-* Numeros magicos
-* Codigo morto
-* Codigo comentado obsoleto
-* Mutacao oculta de estado
-* Ownership implicito
-* Manipulacao insegura de recursos
-
-Cada acao deve atravessar uma unica fronteira publica quando uma unica chamada
-for suficiente. Chamadas duplicadas, requisicoes concorrentes equivalentes,
-polling desnecessario e efeitos colaterais repetidos sao proibidos. Operacoes
-simultaneas inevitaveis devem possuir deduplicacao, ownership e cancelamento
-explicitos.
-
-Constantes devem sempre possuir:
-
-* significado semantico
-* tipo explicito
-* clareza contextual
-
----
-
-# Regras de Runtime e Confiabilidade
-
-* Validacao em runtime e a principal fonte de confianca.
-* Preferir validacao live ao inves de excesso de testes automatizados.
-* Criar testes apenas quando entregarem valor real e mensuravel.
-* Evitar testes barulhentos, redundantes ou caros de manter.
-* Logs devem existir apenas quando operacionalmente uteis.
-* Evitar poluicao de debug.
-
-O sistema deve validar continuamente:
-
-* seguranca de memoria
-* lifetime de recursos
-* correcao de ownership
-* ordem de inicializacao
-* visibilidade de falhas
-
-## Recursos e vazamentos de memoria
-
-* Todo listener, watcher, timer, worker, stream, arquivo, processo e tarefa
-  assincrona deve possuir um owner e um ponto de descarte deterministico.
-* Rust deve usar RAII e concorrencia estruturada; tarefas soltas sem estrategia
-  de cancelamento e encerramento sao proibidas.
-* TypeScript deve remover listeners, cancelar requisicoes e destruir instancias
-  imperativas no cleanup do ciclo de vida que as criou.
-* Modelos, buffers e recursos nativos nao podem sobreviver ao workspace ou a
-  janela que os possui.
-* Fluxos de longa duracao devem ser observados em desenvolvimento quanto a
-  crescimento de heap, handles, threads e tarefas.
-* Qualquer crescimento continuo de recursos sem owner identificado bloqueia a
-  entrega ate ser corrigido.
-
-Operacoes que alteram configuracoes ou arquivos devem ser explicitas, reversiveis
-quando possivel e precedidas por validacao de alvo.
-
----
-
-# Regras de Performance
-
-* Otimizar com responsabilidade.
-* Nunca sacrificar manutencao por micro-otimizacoes.
-* Evitar alocacoes desnecessarias.
-* Evitar overhead desnecessario em runtime.
-* Priorizar performance estavel e previsivel.
-* Medir antes de otimizar agressivamente.
-
-Performance deve ser intencional, nunca acidental.
-
----
-
-# Regras de Dependencias
-
-* Toda dependencia deve justificar sua existencia.
-* Preferir solucoes internas quando a complexidade for baixa.
-* Evitar excesso de dependencias.
-* Manter integracoes externas isoladas.
-* Atualizar dependencias regularmente para versoes modernas e seguras.
-
-## Prioridade de solucoes oficiais
-
-* Priorizar sempre APIs, plugins, SDKs, bibliotecas e fluxos mantidos
-  oficialmente pela plataforma ou tecnologia proprietaria da integracao.
-* Consultar a documentacao oficial atual antes de implementar ou alterar uma
-  integracao externa.
-* Solucoes manuais, comunitarias ou de terceiros so podem ser adotadas quando
-  nao existir alternativa oficial capaz de atender ao requisito real.
-* Quando uma alternativa nao oficial for inevitavel, isolar sua responsabilidade
-  e registrar de forma explicita o motivo tecnico da escolha.
-
----
-
-# Regras de UI e UX
-
-* Interfaces devem permanecer limpas, diretas e funcionais.
-* Nenhuma complexidade visual sem valor pratico.
-* Evitar estados, opcoes ou controles sem utilidade real.
-* Menus e fluxos devem minimizar atrito.
-* A densidade de informacao deve permanecer organizada e intencional.
-
----
-
-# Regras Operacionais da IA
-
-A IA deve:
-
-* Pensar antes de implementar.
-* Preservar consistencia arquitetural.
-* Detectar riscos futuros de manutencao.
-* Alertar violacoes arquiteturais antes de prosseguir.
-* Evitar implementacoes especulativas.
-* Nunca inventar APIs, sistemas ou comportamentos inexistentes.
-* Evitar solucoes parciais e inacabadas.
-* Preferir implementacoes completas e funcionais.
-
-Antes de finalizar qualquer mudanca, sempre revisar:
-
-* duplicacao
-* codigo morto
-* ambiguidade
-* ownership inseguro
-* impacto de manutencao
-* consistencia arquitetural
-
----
-
-# Padroes Proibidos
-
-Evitar explicitamente:
-
-* Abuso de Singleton
-* Abuso de Service Locator
-* Globais ocultos
-* Dependencias circulares
-* Arvores profundas de heranca
-* Mutacao de estado sem ownership claro
-* God Classes
-* Abuso de reflection em runtime
-* Ownership implicito de recursos
-
----
-
-# Regras de Decisao de Engenharia
-
-Quando multiplas solucoes existirem, preferir sempre a que:
-
-1. Reduz manutencao futura
-2. Melhora previsibilidade
-3. Reduz complexidade oculta
-4. Minimiza acoplamento
-5. Facilita debugging
-6. Possui menos partes moveis
-7. Preserva consistencia arquitetural
-
----
-
-# Diretiva Final
-
-Todas as futuras instrucoes devem ser interpretadas atraves desta constituicao.
-
-Caso uma solicitacao entre em conflito com estas regras, o conflito deve ser
-explicitamente informado antes da implementacao continuar.
-
-A integridade de longo prazo do projeto e obrigatoria e inegociavel.
+# Project rules
+
+These rules govern implementation and architectural decisions. A proposed change
+that conflicts with them must identify the conflict before implementation
+continues. Long-term project integrity is mandatory.
+
+When weighing a decision, prioritize project rules, architecture, maintainability,
+predictability, security, performance, then development speed. Speed never
+justifies architectural degradation.
+
+## Design principles
+
+Keep the project clean, minimal, modular, explicit, predictable and maintainable.
+Solve real problems with the least necessary complexity. Prepare modules for
+growth without speculative features or destructive rewrites.
+
+- Give each small, cohesive module one clear responsibility.
+- Prefer composition, explicit contracts and deterministic flows.
+- Keep APIs small; expose inputs, outputs, side effects, failures and state changes.
+- Resolve root causes. Avoid temporary fixes, premature abstractions and hidden
+  recovery paths that conceal broken initialization.
+- Refactoring must simplify the code. Remove dead, obsolete and duplicated logic.
+- Prefer the solution with lower future maintenance, clearer debugging, less
+  coupling and fewer moving parts.
+
+## Technology and integration
+
+Use supported current stable languages, tools and APIs. The stack is Rust edition
+2024, Tauri 2, strict TypeScript and Vite; Windows is the initial operational target.
+A new dependency or technology needs a clear purpose, isolated scope and
+maintenance cost proportional to its benefit.
+
+Consult current official documentation, release notes and compatibility before
+adding or changing an integration. Prefer the platform's official APIs, plugins,
+SDKs and libraries. Use a nonofficial implementation only when no official option
+meets the real requirement; isolate it and document the technical reason.
+
+Do not add adapters, aliases, migrations or alternate compatibility paths.
+Do not preserve obsolete behavior or accumulate intentional technical debt.
+Avoid legacy shims and polyfills without a current documented product need.
+Modern features should reduce complexity, risk or operating cost; novelty alone
+is insufficient.
+
+## Code and naming
+
+- Use strong types, domain types where semantics matter, and structured errors.
+- Rust uses explicit ownership and `Result` for recoverable failures. Avoid
+  `panic!`, `unwrap` and `expect` outside irrecoverable initialization.
+- Avoid unsafe code. If unavoidable, isolate it, document invariants and validate
+  them at runtime; the current native workspace forbids project-owned unsafe code.
+- TypeScript stays strict. Keep boundary types synchronized with Rust.
+- UI calls must use small, explicit, traceable native commands.
+- Use descriptive names and camelCase where appropriate. Follow native language
+  conventions, including idiomatic Rust names; ecosystem-required snake_case and
+  kebab-case are permitted.
+- Avoid artificial prefixes, obscure abbreviations, magic numbers, obsolete
+  commented code and hidden mutation. Constants need semantic meaning, an
+  explicit type and clear context.
+- Apply single responsibility, DRY, explicit ownership and explicit lifetimes.
+
+An action crosses one public boundary when one call suffices. Duplicate requests,
+equivalent concurrent work, unnecessary polling and repeated effects are
+prohibited. Unavoidable simultaneous work needs explicit deduplication,
+ownership and cancellation.
+
+## Failure and resource ownership
+
+No silent fallback. An operational fallback is allowed only with deterministic
+ordering, bounded scope and an explicit contract. Ignored options and failed
+attempts must remain observable even when a later candidate succeeds.
+
+Every listener, watcher, timer, Worker, stream, file, process and asynchronous task
+needs an owner and deterministic disposal. Rust uses RAII and structured
+concurrency; detached tasks without cancellation and shutdown are prohibited.
+TypeScript removes listeners, aborts requests and destroys imperative instances
+in the lifecycle that created them.
+
+Resources must not outlive the workspace, document or window that owns them.
+Observe long-running heap, handles, threads and tasks during development.
+Continuous growth without an identified owner blocks delivery until fixed.
+Configuration and file changes must validate their target and be explicit and
+reversible where possible.
+
+## Validation and performance
+
+Runtime validation is the primary reliability boundary. Continuously validate
+memory safety, ownership, lifetime, initialization order and visible failures.
+Prefer meaningful live checks over excessive automated tests. Tests must provide
+real value; avoid redundant, noisy or costly tests and debug logging.
+
+Measure before aggressive optimization. Avoid unnecessary allocations and runtime
+overhead without trading maintainability for micro-optimizations. Favor stable,
+predictable performance. Every dependency must justify its existence; prefer a
+small internal solution when its complexity is low. Keep external integrations
+isolated and dependencies current and secure.
+
+## Repository and documentation
+
+- Maintain Git history and commit every completed logical change.
+- Write short English imperative commit messages describing the actual change.
+- Create new branches from `main`.
+- Keep documentation current, clear and in English. Keep [TODO](TODO.md) minimal
+  and actionable.
+- Never commit secrets, credentials, tokens or private data.
+- Use LF for text and CRLF only for Batch scripts, as declared in
+  [`.gitattributes`](../.gitattributes).
+- Avoid unnecessary files, dependencies, assets, logs and tools.
+
+On Windows, background builds, tests, benchmarks, diagnostics and helpers must
+run without visible consoles. Use `CreateNoWindow=true` with
+`UseShellExecute=false`, or Python `CREATE_NO_WINDOW`, and redirect output and
+errors to logs. `WindowStyle Hidden` alone is insufficient. Scheduled helpers
+that would expose PowerShell must use a windowless launcher such as `pythonw.exe`.
+Show an interactive terminal only when the user requests it.
+
+## UI and automated contributions
+
+Keep UI direct, functional and organized. Controls, visual complexity and
+information density need practical value; minimize friction in menus and flows.
+
+Automated contributors must preserve architectural consistency, identify future
+maintenance risks and flag rule violations before proceeding. Do not invent APIs
+or behavior, implement speculative systems, or leave partial work as completed.
+
+Before finishing, review duplication, dead code, ambiguity, resource ownership,
+maintenance impact and architectural consistency. Avoid singleton/service-locator
+abuse, hidden globals, circular dependencies, deep inheritance, oversized classes,
+runtime-reflection abuse and state mutation without an owner.

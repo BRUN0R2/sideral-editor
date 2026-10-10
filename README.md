@@ -1,118 +1,50 @@
 # Sideral Editor
 
-Sideral Editor is a new, focused desktop code editor built with Rust, Tauri and
-strict TypeScript. It takes product and architecture references from modern
-editors while keeping its own small, explicit codebase.
+Sideral is an open-source desktop code editor for Windows. It combines Monaco
+editing with a Rust backend and a Tauri 2 desktop shell.
 
-[Download the latest Windows release](https://github.com/BRUN0R2/sideral-editor/releases/latest).
+Open several project folders, edit and reorder tabs, use an integrated terminal,
+and install signed extensions. Windows file opening sends documents to the
+existing editor window, including files launched through **Open with**.
+English and Brazilian Portuguese are included; community translations use JSON.
 
-The first working foundation includes:
+The project is under active development. Windows is the supported operational
+target. Published installers belong on
+[GitHub Releases](https://github.com/BRUN0R2/sideral-editor/releases); you can also
+[build an installer locally](docs/DEVELOPMENT.md#build-a-windows-installer).
 
-- a native Tauri 2 shell for Windows;
-- Windows **Open with** and Explorer context-menu integration, default-app
-  discovery and ordered file opening in the existing editor window;
-- Monaco editing with explicit model and listener disposal;
-- native open-folder, versioned workspace restoration, open-file and atomic
-  save flows;
-- secure JSON schema validation with real file URIs, native resolution,
-  bounded caching and revocable remote trust;
-- a multi-root explorer with lazy trees, independent `.sideral` project settings,
-  workspace discovery from a common parent and ordered session restoration;
-- freely reorderable document, Settings and extension tabs in one tab strip;
-- an on-demand integrated terminal backed by the native Windows PTY, with an
-  explicit PowerShell 7/Command Prompt selection rule, bounded transport and
-  deterministic process shutdown;
-- English as the primary language and automatic system-language detection;
-- drop-in JSON translations discovered from the app's locale directory;
-- manual language selection with persisted native settings;
-- a signed-update state machine with availability indicator, download progress,
-  transfer percentage, ETA, install stage and restart action;
-- signed `.sideralx` installation, explicit publisher-key trust, isolated
-  Worker runtimes, a native capability broker, command palette, diagnostics,
-  rollback, authoring SDK, testkit and packaging CLI;
-- a first-party Discord Work Presence extension driven by workspace metadata
-  events, privacy-preserving active/idle window transitions and an owned,
-  capability-gated local Discord RPC session;
-- strict TypeScript, Rust safety lints, Biome checks and focused tests.
+## Start developing
 
-This is an original project. The ignored `references/vscode/` checkout is for
-research only and is never a build or runtime dependency.
-
-## Toolchain
-
-- Rust 1.97.1, edition 2024
-- Node.js 24 and npm 11.18
-- Tauri 2.12
-- TypeScript 7.0
-- Vite 8.2
-- Vitest 5.0
-- React 19.2
-- Monaco Editor 0.56
-
-The package manifest accepts Node.js 22.12 or newer; CI uses Node.js 24 and the
-pinned npm version. Install scripts are denied unless explicitly allowlisted.
-Use the current stable MSVC Rust toolchain.
-
-## Run
+Install the [Windows prerequisites](docs/DEVELOPMENT.md#prerequisites), then run
+these commands from the repository root:
 
 ```powershell
-npm install
+npm ci
 npm run tauri dev
 ```
 
-On Windows, run `sideral.cmd` from the project root for a small menu that starts
-the Tauri development mode, compiles a release, cleans build artifacts or exits.
-Before development starts, the launcher reclaims port `1420` only from a stale
-Vite process whose command line belongs to this project; unrelated listeners are
-reported and left untouched. A local release also creates installable,
-development-signed `.sideralx` files under `build/extensions/packages`; the
-development publisher key is generated once outside the repository under the
-current user's local application-data directory and reused on later builds.
+Use `npm run check` for the complete project gate. The optional `sideral.cmd`
+launcher offers development, local release and cleanup actions.
 
-Useful validation commands:
+## Find your guide
 
-```powershell
-npm run check
-npm run build
-npm run extensions:package:dev
-```
+| I want to… | Guide |
+| --- | --- |
+| Use the editor | [Getting started](docs/USAGE.md) |
+| Open files from Explorer | [Windows file opening](docs/FILE-OPENING.md) |
+| Configure several projects | [Project workspaces](docs/WORKSPACES.md) |
+| Build or debug the application | [Development](docs/DEVELOPMENT.md) |
+| Contribute a change | [Contributing](CONTRIBUTING.md) |
+| Create an extension | [Extension authoring](docs/EXTENSIONS.md) |
+| Understand the code | [Architecture](docs/ARCHITECTURE.md) |
 
-`npm run check` is the complete local and CI gate: architecture contracts,
-format/lint, strict type checking, SDK and extensions, TypeScript and Rust tests,
-Clippy, production bundle budgets and deterministic dependency-advisory checks.
+The [documentation index](docs/README.md) includes API contracts, translations,
+release setup, engineering rules and architecture decisions.
 
-All application build artifacts are rooted at `build/`: Cargo and Tauri use
-`build/cargo`, Vite uses `build/frontend`, and first-party extension staging uses
-`build/extensions`. Compiled SDK packages use `build/packages`. This layout is
-enforced by `npm run architecture`; do not introduce a project-level `target/`
-or source-local `dist/` output. `npm run clean` removes the complete generated
-tree after validating that the deletion target is exactly the root `build/`
-directory.
-
-Extension implementations live under `extensions/` and use the public SDK.
-The repository shares one npm installation and lockfile, with build tools
-pinned at the root to avoid duplicate toolchains. `npm run build` type-checks the
-editor, builds the SDK packages, stages every first-party extension and bundles
-the frontend before Tauri compiles the native application. See
-[the extension directory](extensions/README.md) for development and packaging
-commands.
-
-`npm run dev` opens an explicit browser-only visual preview. Native file,
-translation-folder and updater operations intentionally remain unavailable in
-that preview.
-
-## Documentation
-
-- [Architecture](docs/ARCHITECTURE.md)
-- [Opening files from Windows](docs/FILE-OPENING.md)
-- [Project rules](docs/RULES.md)
-- [Creating a translation](docs/TRANSLATING.md)
-- [Signed updates](docs/UPDATES.md)
-- [Extension authoring](docs/EXTENSIONS.md)
-- [Extension-system decisions](docs/decisions/0001-native-extension-system.md)
-- [Discord presence capability decision](docs/decisions/0003-discord-presence-capability.md)
-- [Next work](docs/TODO.md)
+Sideral has its own extension format and runtime. The ignored `references/vscode/`
+checkout is research material and is never a build or runtime dependency.
 
 ## License
 
-Sideral Editor is open-source software released under the [MIT License](LICENSE).
+[MIT](LICENSE). Bundled third-party artwork retains its
+[original notices](assets/vscode-theme-seti/THIRD_PARTY_NOTICES.txt).

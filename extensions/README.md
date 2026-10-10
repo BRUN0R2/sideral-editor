@@ -1,20 +1,15 @@
-# Sideral extensions
+# First-party extensions
 
-Every extension lives in `extensions/<name>`. Each directory owns its manifest,
-package manifest, source, focused tests and Worker bundle. Application code never
-imports an extension implementation; extensions use the public SDK and run in
-isolated Workers.
+These are independent signed packages. Source in this directory does not install
+or enable an extension in the running editor.
 
-Repository extensions share npm workspaces, one root lockfile and one hoisted
-installation. TypeScript, Vitest and Rolldown are pinned once at the root.
-Each extension declares its own runtime dependencies, which npm deduplicates
-when versions are compatible. A local `node_modules` directory is generated
-installation state, not part of an extension's required source structure.
+| Extension | Purpose | Focused check |
+| --- | --- | --- |
+| [Markdown Preview](markdown-preview/README.md) | Live preview of unsaved Markdown | `npm run extension:markdown:check` |
+| [AMXX Pawn](amxx-pawn/README.md) | Compile saved `.sma` files with an external compiler | `npm run extension:amxx:check` |
+| [Discord Work Presence](discord-presence/README.md) | Share workspace/document names with desktop Discord | `npm run extension:discord:check` |
 
-The repository currently contains Markdown Preview, AMXX Pawn and Discord
-Work Presence. Extensions are installed in the running editor only through
-reviewed, signed `.sideralx` packages; their presence in this directory does
-not install or enable them.
+## Build and install locally
 
 From the repository root:
 
@@ -22,26 +17,33 @@ From the repository root:
 npm ci
 npm run sdk:build
 npm run extensions:check
+npm run extensions:package:dev
 ```
 
-For one extension, use `npm run build --workspace <package-name>` or its named
-root script, such as `npm run extension:markdown:build`. Repository builds stage
-the manifest, optional assets and Worker bundle in
-`build/extensions/<name>`; package checks and signing use that staged directory.
-The public SDK and testkit are development packages under `packages/`;
-extensions do not depend on `src` or `src-tauri`. The SDK contributes types
-only. Tests, the testkit and `node_modules` never enter production extension
-packages.
+Install the resulting `build/extensions/packages/*.sideralx` files through the
+Extensions view after reviewing publisher trust and capabilities. The development
+key is retained outside the repository; see [authoring](../docs/EXTENSIONS.md).
 
-`npm run build` and the release launcher rebuild every first-party extension
-before the frontend and native application. Tests and package checks remain
-explicit verification commands. New repository extensions follow this
-structure, register their staging name in `scripts/buildExtension.mjs` and
-update the root lockfile with `npm install`. Generated dependencies and build
-output remain ignored.
+For one build, use `extension:markdown:build`, `extension:amxx:build` or
+`extension:discord:build`. Manifest, optional assets and Worker bundle are staged
+under `build/extensions/<name>/`. Pass that directory to `extension:tool check`
+or `pack`, rather than the source directory.
 
-`npm run extensions:package:dev` creates installable local packages in
-`build/extensions/packages` with a persistent development key stored outside
-the repository. Production package generation uses `npm run extensions:package`
-and an absolute `SIDERAL_EXTENSION_SIGNING_KEY` path; it never falls back to a
-development identity.
+## Repository structure
+
+Each extension owns its manifest, package declaration, source and focused tests.
+It uses the public SDK/testkit and never imports `src` or `src-tauri`. The
+application never imports extension implementations.
+
+npm workspaces share one lockfile and installation. Runtime dependencies are
+declared by each extension; compatible versions can be deduplicated. Build tools
+are pinned at the root. Tests and dependencies are not shipped in signed packages.
+
+When adding a repository extension, register its name in
+[`buildExtension.mjs`](../scripts/buildExtension.mjs) and
+[`packageExtensions.mjs`](../scripts/packageExtensions.mjs), add root build/check
+scripts and update the lockfile. Keep outputs under `build/`.
+
+Production packaging uses `npm run extensions:package` with an absolute existing
+`SIDERAL_EXTENSION_SIGNING_KEY` path. For complete manifest/capability contracts,
+use [the API reference](../docs/EXTENSION-API.md).

@@ -1,37 +1,62 @@
-# Sideral Extension Test Kit
+# Sideral Extension Testkit
 
-`createExtensionHarness` activates an extension module against deterministic,
-in-memory implementations of the Sideral API. Tests can execute registered
-commands, push serialized workspace metadata and window activity changes, and inspect Discord
-activity history, messages, output, read-only configuration and storage without
-starting the desktop application. Native capabilities are unavailable unless a
-test provides an explicit handler.
+`createExtensionHarness` runs an extension against deterministic in-memory host
+APIs. Tests can invoke commands, deliver events and inspect messages, output,
+previews, configuration, storage and Discord activity without starting Tauri.
 
-The harness mirrors the production lifecycle where it matters to unit tests:
-activation is idempotent, commands and workspace callbacks share one serial
-operation lane, nested local commands cannot deadlock, cancellation precedes
-cleanup, and every subscription is attempted in reverse order. Stored JSON is
-cloned at the boundary.
+Native file, process and network behavior needs an explicit test handler.
+The harness does not validate real signatures, native path containment or
+operating-system behavior.
+
+## Test an extension
+
+In this repository, run `npm ci` and `npm run sdk:build` at the root.
+Standalone scaffolds include the matching local testkit snapshot.
+
+For the hello command in [the authoring example](../../docs/EXTENSIONS.md#implement-and-own-resources),
+place a test beside the extension module:
 
 ```ts
-const harness = createExtensionHarness(extension, {
-  activationReason: { kind: "workbenchReady" },
-  configuration: { "compiler-path": "D:\\Tools\\compiler.exe" },
-  workspaceContext: {
-    workspaceName: "fixture",
-    activeDocument: { name: "sample.txt", languageId: "text" }
-  },
-  readTextDocument: async (uri) => ({
-    uri,
-    languageId: "text",
-    version: 1,
-    content: "fixture"
-  })
-});
+import { createExtensionHarness } from "@sideral/extension-testkit";
+import { expect, test } from "vitest";
+import * as extension from "./extension";
 
-await harness.updateWorkspaceContext({
-  workspaceName: "fixture",
-  activeDocument: { name: "next.txt", languageId: "text" }
+test("shows the declared greeting", async () => {
+  const harness = createExtensionHarness(extension);
+  try {
+    await harness.activate();
+    await harness.executeCommand("acme.sample.hello");
+    expect(harness.messages.map(({ message }) => message)).toEqual([
+      "Hello from Acme Sample.",
+    ]);
+  } finally {
+    await harness.dispose();
+  }
 });
-await harness.updateWindowActivityState("idle");
 ```
+
+Activate explicitly before running commands. Dispose in cleanup even when an
+assertion fails.
+
+## Drive events and capabilities
+
+Options include `activeTextDocument`, `workspaceContext`, `configuration` and initial
+`storage`. Native handlers include `readTextDocument`, `writeTextDocument`,
+`findFiles`, `requestNetwork`, `executeProcess` and Discord activity handlers.
+
+| Method or property | Purpose |
+| --- | --- |
+| `updateWorkspaceContext` | Deliver a serialized metadata change |
+| `updateWindowActivityState` | Deliver `active` or `idle` |
+| `updatePreviewSource` | Deliver unsaved source content to a bound panel |
+| `messages` / `outputs` / `previews` | Inspect owned UI resources |
+| `discordActivityUpdates` | Inspect activity and clear history |
+| `storage` / `configuration` | Inspect cloned stored JSON and effective settings |
+
+The harness mirrors production lifecycle contracts: idempotent activation,
+one serial command/event lane, nested local command handling, cancellation before
+cleanup and reverse-order subscription disposal. It attempts remaining cleanup
+after a failure.
+
+See [exported types](src/index.ts) for complete options and
+[the API reference](../../docs/EXTENSION-API.md) for production enforcement.

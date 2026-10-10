@@ -27,6 +27,7 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "architecture": "node scripts/checkBuildLayout.mjs && node scripts/check-extension-boundaries.mjs && node scripts/check-scrollbar-contract.mjs && node --test scripts/fileAssociations.test.mjs",
+    "docs:check": "node scripts/checkDocumentation.mjs",
     "desktop:associations": "node scripts/buildFileAssociations.mjs",
     "sdk:build": "npm run build --workspace @sideral/extension-sdk && npm run build --workspace @sideral/extension-testkit",
     "extension:tool": "cargo run --quiet --manifest-path src-tauri/Cargo.toml -p sideral-extension-tool --",
@@ -50,7 +51,7 @@
     "runtime:observe": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/observe-runtime-resources.ps1",
     "release:local": "npm run tauri build && npm run extensions:package:dev",
     "release:config": "node scripts/create-release-config.mjs",
-    "check": "npm run architecture && npm run lint && npm run typecheck && npm run sdk:build && npm run extensions:check && npm run test && npm run rust:fmt && npm run rust:clippy && npm run rust:test && npm run frontend:bundle && npm run security",
+    "check": "npm run architecture && npm run docs:check && npm run lint && npm run typecheck && npm run sdk:build && npm run extensions:check && npm run test && npm run rust:fmt && npm run rust:clippy && npm run rust:test && npm run frontend:bundle && npm run security",
     "tauri": "tauri"
   },
   "dependencies": {

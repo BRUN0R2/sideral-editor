@@ -1,18 +1,17 @@
 # Project workspaces
 
 Use the Explorer's **Add folders to workspace** action to select one or several
-folders. Adding folders preserves those already open. Each root has its own
-expandable tree and configuration action. The remove action removes only the
-root from the current session; project files and open editor tabs are preserved.
+folders. Each root has an independent tree and settings. Adding folders preserves
+the existing collection; removing a root preserves its files and open tabs.
 
-The gear beside a root opens `.sideral/settings.json`. On first use it creates
-that file and `.sideral/workspace.json`, without replacing existing files. Both
-files use strict JSON, schema version 1, and bundled JSON Schema validation and
-completion in the editor. They can be committed to Git.
+## Create project configuration
 
-## Workspace identity
+The gear beside a root opens `.sideral/settings.json`. First use creates that file
+and `.sideral/workspace.json` without replacing existing files. Both are strict JSON
+with bundled schema validation and completion. Commit them when the settings
+should be shared.
 
-Place this marker in each folder that should be recognized as a workspace:
+The workspace marker gives a folder its display name:
 
 ```json
 {
@@ -22,32 +21,23 @@ Place this marker in each folder that should be recognized as a workspace:
 }
 ```
 
-Its path is `.sideral/workspace.json`. `name` is a trimmed, nonempty label of up
-to 128 characters. Canonical folder paths identify open roots; copied projects
-do not share a persistent UUID.
+`name` must be trimmed, nonempty and at most 128 characters. Canonical paths
+identify roots; copying a project does not reuse a persistent workspace UUID.
 
-For example:
+## Open a parent containing projects
 
-```text
-work/
-  api/
-    .sideral/workspace.json
-    .sideral/settings.json
-    src/
-  website/
-    .sideral/workspace.json
-    .sideral/settings.json
-    src/
-  shared-assets/
-```
+When opening a folder:
 
-Opening `work` adds `api` and `website` separately. `shared-assets` is not added
-automatically, but can be added explicitly. Discovery examines direct children
-only. If `work` has its own marker, it opens as one workspace containing its
-projects; if no direct children have markers, it opens as one ordinary folder.
-Opening or discovering folders does not create `.sideral` files.
+1. Its own marker takes precedence: the folder opens as one root.
+2. Otherwise, marked direct children open as independent roots in sorted order.
+3. Without marked direct children, the folder opens as an ordinary root.
 
-## Project settings
+For example, opening `work/` with marked `api/` and `website/` children adds both
+projects. An unmarked `shared-assets/` child is not added automatically; add it
+explicitly if needed. Discovery does not recurse into grandchildren or directory
+symlinks, and opening folders does not create configuration files.
+
+## Set project preferences
 
 Example `.sideral/settings.json`:
 
@@ -60,46 +50,39 @@ Example `.sideral/settings.json`:
     "insertSpaces": true,
     "wordWrap": "on"
   },
-  "files": {
-    "autoSave": "afterDelay"
-  }
+  "files": { "autoSave": "afterDelay" }
 }
 ```
 
-| Setting | Values | Inherited value |
+| Setting | Values | Value when omitted |
 | --- | --- | --- |
-| `editor.tabSize` | Integer from 1 to 8 | 4 |
-| `editor.insertSpaces` | `true` or `false` | `true` |
-| `editor.wordWrap` | `"off"` or `"on"` | `"off"` |
-| `files.autoSave` | `"off"` or `"afterDelay"` | User's Auto Save preference |
+| `editor.tabSize` | Integer 1–8 | 4 |
+| `editor.insertSpaces` | Boolean | `true` |
+| `editor.wordWrap` | `"off"` / `"on"` | `"off"` |
+| `files.autoSave` | `"off"` / `"afterDelay"` | User Auto Save preference |
 
-Every setting except `schemaVersion` is optional. An empty `editor` or `files`
-object inherits its settings. `null`, unsupported keys and future schema
-versions are errors. The optional `$schema` must match the bundled schema URI.
-Configuration files have a 64 KiB limit.
+Only `schemaVersion` is required. Empty settings objects inherit defaults.
+Unknown keys, `null` and unsupported versions fail; optional `$schema` must match
+the bundled URI. Each configuration file is limited to 64 KiB.
 
-Settings apply to files within that root. For nested open roots, the longest
-matching root wins. Files outside open roots use user/editor defaults. Saving
-configuration or returning focus to Sideral reloads effective settings. Errors
-appear beside the affected root; valid neighboring workspaces keep working.
+The most specific matching open root supplies a document's settings. Files
+outside open roots use user/editor defaults. Saving configuration or returning
+focus reloads effective settings. Invalid configuration produces a root diagnostic;
+valid neighboring roots keep working with their own settings.
 
 ## Session and terminal
 
-The user profile stores the ordered folder collection in `workspace-session.json`
-(schema version 2, up to 128 roots). Session files are not project configuration
-and need not be committed. The current version does not load version 1 session
-files; an unsupported session produces an error, and explicitly adding folders
-creates a new current-format session. Missing folders remain listed for removal
-or recovery.
+The profile's `workspace-session.json` stores up to 128 ordered roots using
+schema version 2. It is runtime state, not shareable project configuration.
+Unsupported older sessions fail visibly; explicitly adding folders creates a
+current-format session. Missing roots remain available for removal or recovery.
 
-Selecting a root or activating one of its files selects its context for new
-files and terminal sessions. Switching selection preserves an existing terminal
-and its current working directory. With several available roots, the terminal
-selector chooses the directory used on explicit restart. The shell tab's path
-always describes the running session. Closing the shell tab stops that process;
-hiding the panel preserves it.
+Selecting a root or one of its files sets the context for new files and terminal
+sessions. It preserves a running shell's directory. With several roots, the
+terminal selector chooses the next restart directory; the shell tab describes
+the running session. Closing the tab stops the process, while hiding the panel
+preserves it.
 
-Do not put secrets, credentials or runtime state in shareable workspace files.
-The format follows the per-folder configuration approach of
-[VS Code multi-root workspaces](https://code.visualstudio.com/docs/editing/workspaces/multi-root-workspaces)
-and uses [JSON Schema 2020-12](https://json-schema.org/specification).
+Keep secrets, credentials and runtime state out of shared configuration.
+See [using the editor](USAGE.md) for everyday actions and
+[architecture](ARCHITECTURE.md#documents-and-workspaces) for ownership.

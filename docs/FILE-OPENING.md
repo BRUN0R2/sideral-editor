@@ -1,144 +1,94 @@
 # Opening files from Windows
 
-The Windows NSIS installer registers Sideral Editor as an available editor for
-the extensions in `config/fileTypes.json`. It adds **Open with Sideral Editor**
-to their Explorer context menu and advertises the same types in **Open with**
-and Windows default-app settings. Existing default applications are preserved.
+The Windows NSIS installer registers Sideral as an available editor for supported
+file types. It adds **Open with Sideral Editor**, **Open with** discovery and
+Windows default-app entries. It preserves existing defaults.
 
-## Use
+## Set up Explorer opening
 
-Install a build containing this feature. Registration happens during installation,
-including an upgrade; running the development executable alone does not register
-Explorer integration.
+1. [Build](DEVELOPMENT.md#build-a-windows-installer) or obtain an installer
+   containing this feature, then install it. Development executables do not
+   register Explorer commands.
+2. Right-click a supported file and select **Open with Sideral Editor** or
+   **Open with → Sideral Editor**. Windows 11 may put the static command under
+   **Show more options**.
+3. For double-click, choose Sideral for that extension in **Open with** or
+   **Settings → Apps → Default apps**. This remains your Windows preference.
 
-- Right-click a supported file and choose **Open with Sideral Editor**, or choose
-  **Open with → Sideral Editor**. Windows 11 can place the direct static command
-  under **Show more options**.
-- To use double-click, choose Sideral Editor as the default application for the
-  desired extension in Windows **Open with** or **Settings → Apps → Default apps**.
-  This remains a Windows user preference.
-- Select multiple supported files to open them in the existing editor. The
-  Windows `Document` selection model launches each file individually, with the
-  usual Explorer selection limits; the single-instance plugin forwards each
-  launch to the same window.
-- A window hidden in the tray or minimized is shown and focused for an explicit
-  file launch. Automatic minimized startup keeps its existing behavior.
+Multiple selected files are forwarded to the existing editor window. Windows
+launches each individually through its `Document` selection model, with Explorer's
+usual selection limits. A minimized or tray-hidden window is revealed and focused.
+Reopening an existing document selects its tab and preserves unsaved edits.
 
-The catalog includes source and configuration extensions, Markdown, plain `.txt`
-files, `.gitignore`, `.editorconfig`, and the named files `Dockerfile` and
-`Makefile`. Windows context-menu queries support those extensionless names;
-Windows default associations are registered by extension, not by filename.
-Unknown text files can still be opened through the editor's native file dialog.
+The [catalog](../config/fileTypes.json) covers source/configuration files,
+Markdown, plain text and special filenames. `Dockerfile` and `Makefile` have
+filename-filtered context commands; Windows default associations use extensions.
+Other text files remain openable through the editor's file dialog.
 
-The executable also accepts one or more paths, resolved against the launching
-process's working directory:
+## Open from a command
 
 ```powershell
 & 'C:\path\to\sideral-editor.exe' -- 'C:\project with spaces\ação.ts' 'C:\other\README.md'
 ```
 
-`--` ends option parsing, including for filenames that begin with `-`.
-`--windows-startup-minimized` is the only startup option. Unknown options, invalid
-paths, unreadable files, binary files and invalid UTF-8 produce visible errors.
-One failed file does not prevent the other files in a request from opening.
+Paths resolve relative to the launching process's directory. `--` ends option
+parsing, including for a filename starting with `-`.
+`--windows-startup-minimized` is the only startup option. Invalid options, missing
+or unreadable files, binary content and invalid UTF-8 produce visible errors.
+A failed file does not prevent the rest of the batch from opening.
 
-## Build and installation
+## If another empty window opens
 
-Build from a checkout containing this integration, using `npm run tauri build`,
-then install the NSIS package reported by the build. Compiling another branch or
-only building the frontend does not update the executable registered with Windows.
-Close existing editor processes before replacing the installed application;
-an already-running process continues using its old executable code.
+Check which executable Windows actually launches. An old installed executable
+continues using old code even when a newer checkout has been built.
 
-For a portable copy, close the application and replace the executable at the path
-Windows already launches. This updates file launch handling while preserving
-existing associations. Registering the Explorer commands and supported file types
-still requires the NSIS installer.
+Close the editor, install the NSIS build from the integrated checkout, and launch
+the installed application again. Building only the frontend does not update it.
 
-If Explorer creates another editor window and ignores the file, check which
-executable its association launches. An installed build without the native launch
-commands and the single-instance plugin cannot open forwarded files, even when
-the source changes exist in a separate worktree. Reinstall a build from the
-integrated checkout and launch the installed executable again.
+For a portable copy, close the application and replace the executable at the
+registered path. This preserves existing associations and updates file handling.
+New Explorer registrations still require the installer. See
+[portable updates](UPDATES.md#update-a-portable-copy).
 
-## Runtime ownership
+## Implementation boundaries
 
-The feature has three boundaries:
+| Owner | Responsibility |
+| --- | --- |
+| [Native launch parser](../src-tauri/src/file_opening/launch.rs) | Parse bounded arguments, preserve order and resolve paths without filesystem I/O |
+| [Native queue](../src-tauri/src/file_opening/queue.rs) | Retain bounded requests until attempted-file acknowledgement |
+| [Frontend feature](../src/features/file-opening) | Own one validated, serial Tauri `Channel` through `openFile` and `reportError` callbacks |
+| [Workspace](../src/features/workspace) | Read files and own documents, models, tabs and unsaved changes |
 
-1. `src-tauri/src/file_opening/launch.rs` parses startup and forwarded arguments
-   without filesystem I/O. It preserves order, resolves absolute paths, removes
-   duplicate paths within a launch and bounds argument count and bytes.
-2. `queue.rs` and the Tauri adapter in `mod.rs` own pending requests. The official
-   single-instance plugin is registered before the other plugins. A request stays
-   queued until the frontend acknowledges that all files have been attempted.
-   Queue capacity is bounded, and overflow is reported instead of silently dropped.
-3. `src/features/file-opening` owns one validated, ordered Tauri `Channel`
-   connection. The workbench connects after workspace restoration, supplies
-   `openFile` and `reportError`, and switches to the editor when files arrive.
-   The feature depends on those callbacks instead of the workspace implementation.
+The official single-instance plugin starts before other plugins. The workbench
+connects after workspace restoration. An interrupted connection retains its
+request; owner identifiers reject stale cleanup. Unmount, `pagehide` and window
+destruction release channels and listeners. There are no startup delays or
+polling loops. Queue overflow is an explicit error.
 
-An interrupted connection leaves the request available for the next owner. Client
-identifiers prevent stale cleanup from disconnecting a replacement connection.
-Unmount, `pagehide` and native window destruction release their listeners and
-channels. React StrictMode's discarded effect never registers a native connection.
-There are no startup timers, polling loops or global file-opening events.
+## Installer ownership and validation
 
-Document reads and model ownership remain with the workspace. Opening an existing
-document selects its tab and preserves unsaved edits. Opening external files does
-not replace the workspace or the other open documents. Filesystem reads retain the
-existing UTF-8, binary and size validation.
+[`config/fileTypes.json`](../config/fileTypes.json) drives both language selection
+and installer registration. `npm run desktop:associations` generates ignored
+`build/windows/fileAssociations.nsh` from the
+[source template](../src-tauri/windows/fileAssociations.nsh) before bundling.
 
-## Installer ownership
+Hooks use Tauri's install scope and own ProgIDs, OpenWith entries, static verbs,
+supported types and registered-application capabilities. Uninstall checks command
+ownership against the installation path, removes only owned entries and leaves
+extension defaults and `UserChoice` unchanged.
 
-`config/fileTypes.json` is the source for Monaco language selection and installer
-registration. Add a format there instead of maintaining two lists.
+Custom NSIS hooks are necessary because Tauri's built-in Windows file-association
+registration writes extension defaults. The VS Code research checkout supplies
+behavioral context; its code is not a dependency.
 
-Tauri's `beforeBundleCommand` runs `npm run desktop:associations` and generates
-`build/windows/fileAssociations.nsh` from the catalog and the small source template
-`src-tauri/windows/fileAssociations.nsh`. The build validates identifiers and fails
-if a required template marker is missing or duplicated. Generated hooks are ignored
-by Git and regenerated for each bundle.
+Architecture, frontend and Rust checks cover generation, request validation,
+ordered delivery, failure isolation and queue limits. Validate installer hooks
+with an actual NSIS build. For a live check, use an isolated application identity
+and installation directory; compare defaults before/after install and uninstall,
+open paths with spaces/accents, mix a missing file with valid files, reopen an
+unsaved document, and launch a file while the window is hidden in the tray.
 
-The hooks use Tauri's `SHCTX` installation scope and register:
-
-- an application-owned ProgID with a quoted executable and quoted `%1` argument;
-- per-extension `OpenWithProgids` entries and `SystemFileAssociations` verbs;
-- an `Applications` entry with `SupportedTypes`;
-- `Capabilities` and `RegisteredApplications` for Windows default-app discovery;
-- a filename-filtered static verb for `Dockerfile` and `Makefile`.
-
-Uninstallation removes only Sideral-owned entries and empty parent keys. Command
-ownership is checked against the installation path, so an old installation cannot
-remove registrations pointing at a newer path. Neither installation nor removal
-writes an extension's default value or Windows `UserChoice`.
-
-The supported NSIS hooks are used because Tauri's built-in Windows
-`bundle.fileAssociations` implementation writes extension defaults. The feature
-needs registration as an available editor while preserving existing defaults.
-The VS Code reference checkout supplied behavioral context; its code is neither
-copied nor a dependency.
-
-## Validation
-
-`npm run architecture` validates catalog generation and rejects installer/query
-injection. `npm test` exercises IPC validation, serial batch processing, per-file
-failure and interrupted owners. Rust tests cover launch parsing, minimized startup,
-request ordering and queue budgets. Build an NSIS bundle to verify the generated
-hook with the actual Windows installer compiler.
-
-For a live Windows smoke test, use a temporary `productName`, `identifier` and
-`mainBinaryName`, then install into a separate directory. Compare extension defaults
-and `UserChoice` before and after registration. Open a batch containing valid and missing files,
-including paths with spaces and accents. Reopen an edited document through a second
-process and check that its tab and unsaved content are preserved. Hide the window
-in the tray and launch another file to check restoration. Finally uninstall the
-temporary product and verify that its registrations are removed and the original
-defaults remain unchanged.
-
-Primary integration references:
-
-- [Tauri single-instance plugin](https://v2.tauri.app/plugin/single-instance/)
-- [Tauri NSIS installer hooks](https://v2.tauri.app/distribute/windows-installer/#installer-hooks)
-- [Microsoft application and default-program registration](https://learn.microsoft.com/en-us/windows/win32/shell/default-programs)
-- [Microsoft static context-menu verbs](https://learn.microsoft.com/en-us/windows/win32/shell/context)
-- [Microsoft canonical property queries](https://learn.microsoft.com/en-us/windows/win32/search/-search-3x-advancedquerysyntax)
+Primary references: [Tauri single-instance](https://v2.tauri.app/plugin/single-instance/),
+[Tauri NSIS hooks](https://v2.tauri.app/distribute/windows-installer/#installer-hooks),
+[Microsoft application registration](https://learn.microsoft.com/en-us/windows/win32/shell/default-programs)
+and [static context-menu verbs](https://learn.microsoft.com/en-us/windows/win32/shell/context).

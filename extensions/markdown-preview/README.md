@@ -1,15 +1,19 @@
 # Markdown Preview
 
-`sideral.markdown-preview` owns Markdown parsing, GFM structures, link resolution,
-inert HTML and image placeholders, PowerShell code-block presentation and all
-document styling. Its only Sideral dependency is the public extension SDK.
+Previews Markdown through an extension-owned parser and visual tree. It handles
+GFM structures, links, inert HTML/image placeholders and code-block presentation.
 
-The Worker sends a typed visual tree to the generic preview API. The preview
-host does not parse Markdown or import this extension's parser or source.
-Opening a Markdown document and running **Toggle Markdown Preview**, or
-pressing `Ctrl+Shift+V`, creates or toggles one source-bound panel. Source
-document events refresh unsaved changes without polling. Closing, disabling
-or reloading releases the owned panel and listeners.
+## Use
+
+Install its signed package, open a Markdown document, then run
+**Markdown: Toggle Markdown Preview** or `Ctrl+Shift+V`. Unsaved source changes
+update the bound preview through events, without polling.
+
+Changing documents hides a bound panel while preserving its resource. Disabling
+or reloading the extension releases panels and listeners. The generic host renders
+validated elements; it never imports the Markdown parser.
+
+## Develop and package
 
 From the repository root:
 
@@ -17,12 +21,10 @@ From the repository root:
 npm ci
 npm run sdk:build
 npm run extension:markdown:check
+npm run extensions:package:dev
 ```
 
-Run `npm run extension:markdown:build` to build only the extension. This directory
-declares the Markdown parser; build tools and the lockfile are shared at the
-repository root. The existing rendering and lifecycle tests live beside the
-implementation and are not part of the editor's release build.
-
-Use the signing and packaging workflow in `docs/EXTENSIONS.md` with
-`extensions/markdown-preview` as the project directory to install it in Sideral.
+For a focused build use `npm run extension:markdown:build`. Validate or sign
+`build/extensions/markdown-preview`, not this source directory. See
+[authoring](../../docs/EXTENSIONS.md) for signing and installation, and
+[preview contracts](../../docs/EXTENSION-API.md#output-and-previews) for API limits.

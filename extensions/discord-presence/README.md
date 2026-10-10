@@ -1,70 +1,55 @@
 # Discord Work Presence
 
-First-party Sideral extension that publishes the active workspace and document names to the local Discord desktop client. It never receives document contents or full filesystem paths.
-
-Requires Sideral Editor `^0.1.1`.
+Publishes workspace/document names and language metadata to desktop Discord.
+It never receives source content or full paths. Requires Sideral `^0.1.1` and
+the running Windows Discord desktop client.
 
 ## Use
 
-Install the signed `.sideralx` package and keep the Discord desktop client
-running. The extension includes its public Discord Application ID in the signed
-manifest, activates automatically and requires no user configuration, bot,
-token or OAuth flow.
+Install the signed package. Its public Application ID is in the manifest;
+there is no token, bot, OAuth flow or user configuration.
 
-Use **Discord: Toggle Discord Work Presence** or **Discord: Refresh Discord Work
-Presence** from the command palette for explicit control.
+It activates at workbench readiness and updates from events. Activity shows
+`📁 <workspace>`, `🧑‍💻 <document>` and, after five idle minutes,
+`Stopped for a coffee ☕`. Keyboard, pointer, wheel or focus activity restores the
+document state without sharing input contents. The explicit toggle is persisted.
 
-## Behavior
+Use these command-palette actions:
 
-- Activates once the workbench is ready.
-- Starts native Discord synchronization in a controller-owned background queue,
-  so external IPC latency never blocks Worker activation.
-- Updates on workspace, active document, or language changes without polling.
-- Shows `📁 <workspace>`, `🧑‍💻 <document>` and, after five minutes
-  without window interaction, `Stopped for a coffee ☕`.
-- Shows one `Download` button that opens the latest official Sideral Editor
-  release on GitHub.
-- Shows a silver `S` with animated lightning on a graphite background using
-  the project's [Discord artwork](../../assets/discord/README.md).
-- Restores the document activity immediately after keyboard, pointer, wheel, or
-  window-focus activity; no input content leaves the editor.
-- Deduplicates identical activities and keeps a stable session start time.
-- Persists the explicit toggle state.
-- Clears and closes its owned IPC session when disabled, reloaded, or shut down.
-- Reports recoverable connectivity failures in the **Discord Work Presence** output channel.
+- **Discord: Toggle Discord Work Presence**
+- **Discord: Refresh Discord Work Presence**
 
-The native broker implements Discord's documented local RPC framing and
-`SET_ACTIVITY` command. The extension has only `workspace: metadata` and
-`discordPresence` capabilities.
+Connectivity failures appear in **Discord Work Presence** output. Refresh retries
+after Discord becomes available. Disable, reload and shutdown clear the activity
+and close its owned IPC session.
 
-Discord shows Rich Presence buttons to other users; it does not show the owner
-their own button in their profile preview.
+## Artwork and integration
 
-The artwork uses a public HTTPS URL in `assets.largeImage`. Its source is
-`assets/discord/sideralLightning.gif` on the repository's `main` branch.
-Discord must be able to fetch that file anonymously: it stays unavailable while
-the repository is private or the artwork has not been published to `main`.
-After publication, use **Discord: Refresh Discord Work Presence** with a build
-of this extension that includes the artwork. Discord fetches and animates the
-GIF; the extension does not download images or publish per-frame RPC updates.
+The activity uses the [animated Sideral artwork](../../assets/discord/README.md)
+and one Download button linked to the latest GitHub release. External artwork must
+be anonymously accessible; Discord fetches and animates it without per-frame RPC
+updates. Static Developer Portal icons use the PNG export.
 
-For a static Developer Portal application icon or Rich Presence art asset, use
-`assets/discord/sideralLightning.png`. Uploaded Rich Presence art assets do not
-support animation; the GIF must remain available at its external URL.
+The native broker owns the documented Discord RPC session. The manifest grants
+only workspace metadata and Discord presence. The controller serializes updates,
+deduplicates identical payloads and keeps a stable session timestamp. Its queue
+starts after synchronous activation, so IPC latency does not delay activation.
 
-Protocol references: [Discord RPC](https://github.com/discord/discord-api-docs/blob/main/developers/topics/rpc.mdx)
-and [Setting Rich Presence](https://docs.discord.com/developers/discord-social-sdk/development-guides/setting-rich-presence).
-The [Discord Flatpak packaging example](https://github.com/flathub/com.discordapp.Discord)
-is useful context for IPC socket exposure on Linux, but Sideral's current
-operational target uses the native Windows named pipe directly.
+References: [Discord RPC](https://github.com/discord/discord-api-docs/blob/main/developers/topics/rpc.mdx)
+and [Rich Presence](https://docs.discord.com/developers/discord-social-sdk/development-guides/setting-rich-presence).
 
-## Develop
+## Develop and package
+
+From the repository root:
 
 ```powershell
 npm ci
 npm run sdk:build
-npm run typecheck --workspace sideral.discord-presence
-npm run test --workspace sideral.discord-presence
-npm run build --workspace sideral.discord-presence
-npm run extension:tool -- check build/extensions/discord-presence
+npm run extension:discord:check
+npm run extensions:package:dev
 ```
+
+For a focused build use `npm run extension:discord:build`. Package checks/signing
+use `build/extensions/discord-presence`. See
+[authoring](../../docs/EXTENSIONS.md) and the
+[capability decision](../../docs/decisions/0003-discord-presence-capability.md).
