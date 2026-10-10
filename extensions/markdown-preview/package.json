@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "marked": "18.1.0"
+    "marked": "18.0.9"
   },
   "devDependencies": {
     "@sideral/extension-sdk": "0.2.0",
