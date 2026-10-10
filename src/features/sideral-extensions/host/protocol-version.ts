@@ -1,1 +1,1 @@
-export const EXTENSION_PROTOCOL_VERSION: 3 = 3;
+export const EXTENSION_PROTOCOL_VERSION: 4 = 4;

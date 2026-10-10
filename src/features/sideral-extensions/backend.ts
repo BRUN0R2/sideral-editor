@@ -71,8 +71,11 @@ export async function connectExtensionClient(
   };
 }
 
-export function setExtensionWorkspace(root: string | null): Promise<void> {
-  return invokeVoid("set_extension_workspace", { root });
+export function setExtensionWorkspaces(
+  roots: readonly string[],
+  activeRoot: string | null,
+): Promise<void> {
+  return invokeVoid("set_extension_workspaces", { roots, activeRoot });
 }
 
 export function activateExtensionEvent(reason: ActivationReason): Promise<void> {

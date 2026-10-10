@@ -75,7 +75,92 @@ export interface OutputChannel extends Disposable {
   flush(): Promise<void>;
 }
 
-export type PreviewFormat = "markdown";
+export type PreviewFormat = "tree";
+
+export type PreviewTag =
+  | "a"
+  | "blockquote"
+  | "br"
+  | "code"
+  | "del"
+  | "div"
+  | "em"
+  | "figcaption"
+  | "figure"
+  | "h1"
+  | "h2"
+  | "h3"
+  | "h4"
+  | "h5"
+  | "h6"
+  | "hr"
+  | "li"
+  | "ol"
+  | "p"
+  | "pre"
+  | "span"
+  | "strong"
+  | "table"
+  | "tbody"
+  | "td"
+  | "th"
+  | "thead"
+  | "tr"
+  | "ul";
+
+export type PreviewStyleProperty =
+  | "backgroundColor"
+  | "border"
+  | "borderBottom"
+  | "borderInlineStart"
+  | "borderRadius"
+  | "borderCollapse"
+  | "borderSpacing"
+  | "color"
+  | "display"
+  | "fontFamily"
+  | "fontSize"
+  | "fontWeight"
+  | "height"
+  | "letterSpacing"
+  | "lineHeight"
+  | "listStyleType"
+  | "margin"
+  | "marginTop"
+  | "marginBottom"
+  | "maxWidth"
+  | "overflow"
+  | "overflowX"
+  | "padding"
+  | "paddingBottom"
+  | "paddingInlineStart"
+  | "textAlign"
+  | "textDecoration"
+  | "whiteSpace"
+  | "width";
+
+/** Inline presentation only: no selectors, scripts, positioning or resource URLs. */
+export type PreviewStyle = Readonly<Partial<Record<PreviewStyleProperty, string>>>;
+
+export interface PreviewAttributes {
+  readonly href?: string;
+  readonly title?: string;
+  readonly start?: number;
+  readonly language?: string;
+}
+
+/** Extensions produce the tree; the host never interprets a document language. */
+export type PreviewNode = string | PreviewElement;
+
+export interface PreviewElement {
+  readonly key: string;
+  readonly tag: PreviewTag;
+  readonly children: readonly PreviewNode[];
+  readonly attributes?: PreviewAttributes;
+  readonly style?: PreviewStyle;
+}
+
+export type PreviewSourceDocumentListener = (document: TextDocument) => void | Promise<void>;
 
 export interface PreviewScrollbarAppearance {
   /** Track width/height in integer pixels, from 8 through 32. Defaults to 14. */
@@ -115,13 +200,15 @@ export interface PreviewAppearance {
 export interface PreviewDocument {
   readonly title: string;
   readonly format: PreviewFormat;
-  readonly content: string;
+  readonly content: readonly PreviewNode[];
   readonly sourceUri?: string;
   /** Scoped visual overrides. Omit this to inherit the Sideral host theme. */
   readonly appearance?: PreviewAppearance;
 }
 
 export interface PreviewPanel extends Disposable {
+  /** Changes to this panel's open source document, including unsaved edits. Requires workspace read access. */
+  onDidChangeSourceDocument(listener: PreviewSourceDocumentListener): Disposable;
   update(document: PreviewDocument): Promise<void>;
   show(): Promise<void>;
   hide(): Promise<void>;

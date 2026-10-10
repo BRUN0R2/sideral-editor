@@ -43,6 +43,11 @@ export class ManagedWorker {
   readonly #onFault: WorkerFaultHandler;
   #terminated = false;
   #failed = false;
+  #lastPreviewSource: {
+    readonly resourceId: string;
+    readonly uri: string;
+    readonly version: number;
+  } | null = null;
   active = false;
 
   constructor(
@@ -163,6 +168,26 @@ export class ManagedWorker {
         requestId,
       });
     }
+  }
+
+  updatePreviewSource(resourceId: string, document: TextDocument): void {
+    if (this.#terminated || !this.active || !["read", "readWrite"].includes(this.workspaceAccess))
+      return;
+    const previous = this.#lastPreviewSource;
+    if (
+      previous?.resourceId === resourceId &&
+      previous.uri === document.uri &&
+      previous.version === document.version
+    )
+      return;
+    this.#lastPreviewSource = { resourceId, uri: document.uri, version: document.version };
+    this.#post({
+      kind: "previewSourceChanged",
+      protocolVersion: PROTOCOL_VERSION,
+      generation: this.generation,
+      resourceId,
+      document,
+    });
   }
 
   updateWorkspaceContext(context: WorkspaceContext): void {

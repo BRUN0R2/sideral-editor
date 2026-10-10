@@ -264,6 +264,14 @@ impl JsonSchemaState {
         document_path: Option<String>,
         workspace_root: Option<String>,
     ) -> AppResult<JsonSchemaResolution> {
+        if let Some(schema) = crate::project_settings::schema(&schema_uri)? {
+            return Ok(JsonSchemaResolution::Resolved {
+                schemas: vec![ResolvedJsonSchema {
+                    uri: schema_uri,
+                    schema,
+                }],
+            });
+        }
         let result = self
             .resolve_graph(
                 &schema_uri,

@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 const { TAURI_DEV_HOST: developmentHost } = process.env;
+const frontendOutputDirectory = "build/frontend";
 
 export default defineConfig({
   plugins: [react()],
@@ -12,6 +13,7 @@ export default defineConfig({
     entries: ["index.html"],
   },
   build: {
+    outDir: frontendOutputDirectory,
     // Monaco's language workers are intentionally lazy and have very different
     // size profiles. The post-build budget check keeps strict per-asset limits.
     chunkSizeWarningLimit: 7_600,

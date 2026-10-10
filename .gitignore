@@ -1,11 +1,9 @@
-# JavaScript
-node_modules/
-dist/
-*.tsbuildinfo
+# Canonical project build output
+build/
 
-# Rust
-target/
-src-tauri/target/
+# JavaScript dependencies and compiler state
+node_modules/
+*.tsbuildinfo
 
 # Local configuration and secrets
 .env
@@ -21,7 +19,6 @@ Thumbs.db
 
 # Logs and generated output
 *.log
-build/
 src-tauri/gen/
 
 # External source used only for architecture research

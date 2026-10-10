@@ -7,18 +7,29 @@ use crate::{
 
 const MAIN_WINDOW_LABEL: &str = "main";
 
-pub fn apply_initial_window_state(window: &WebviewWindow) -> AppResult<()> {
+pub fn apply_initial_window_state(window: &WebviewWindow, reveal_requested: bool) -> AppResult<()> {
     let preferences = window
         .app_handle()
         .state::<DesktopPreferencesState>()
         .current()?;
-    let should_start_hidden = preferences.start_minimized && startup::is_minimized_launch();
+    let should_start_hidden =
+        preferences.start_minimized && startup::is_minimized_launch() && !reveal_requested;
 
     if should_start_hidden {
         window.hide().map_err(runtime_error)?;
         return Ok(());
     }
 
+    window.show().map_err(runtime_error)?;
+    window.unminimize().map_err(runtime_error)?;
+    window.set_focus().map_err(runtime_error)?;
+    Ok(())
+}
+
+pub fn show_main_window(app: &AppHandle) -> AppResult<()> {
+    let window = app
+        .get_webview_window(MAIN_WINDOW_LABEL)
+        .ok_or_else(|| AppError::Runtime("main window is unavailable".to_owned()))?;
     window.show().map_err(runtime_error)?;
     window.unminimize().map_err(runtime_error)?;
     window.set_focus().map_err(runtime_error)?;

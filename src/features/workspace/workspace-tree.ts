@@ -76,7 +76,17 @@ export function updateWorkspaceNode(
 }
 
 export function workspacePathKey(path: string): string {
-  return path.replaceAll("/", "\\").toLowerCase();
+  const displayPath = path.startsWith("\\\\?\\UNC\\")
+    ? `\\\\${path.slice(8)}`
+    : path.startsWith("\\\\?\\")
+      ? path.slice(4)
+      : path;
+  const key = displayPath.replaceAll("/", "\\");
+  return /^[a-z]:[\\/]/i.test(displayPath) ||
+    displayPath.startsWith("\\\\") ||
+    displayPath.startsWith("//")
+    ? key.toLowerCase()
+    : key;
 }
 
 export function workspaceFileName(path: string): string {

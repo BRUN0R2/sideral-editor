@@ -13,7 +13,7 @@ import "./styles/workbench.css";
 import "./styles/settings.css";
 import "./styles/dialogs.css";
 import "./styles/extensions.css";
-import "./styles/markdown-preview.css";
+import "./styles/extension-preview.css";
 
 const rootElement = document.getElementById("root");
 if (rootElement === null) {

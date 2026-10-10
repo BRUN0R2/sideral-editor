@@ -2,7 +2,7 @@ import { readdir, stat } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 
 const KILOBYTE = 1_000;
-const assetsDirectory = resolve("dist", "assets");
+const assetsDirectory = resolve("build", "frontend", "assets");
 
 const defaultBudget = {
   name: "application chunk",

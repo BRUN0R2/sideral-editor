@@ -2,76 +2,53 @@
 
 ## Status
 
-Accepted.
+Accepted. This decision introduced protocol 3; [ADR 0004](0004-extension-owned-previews.md)
+subsequently advanced the runtime to protocol 4.
 
 ## Context
 
-An editor presence extension needs current work context and a durable local
-connection to Discord. Giving a Worker document snapshots or filesystem paths
-would exceed that need. Letting it open native IPC directly would bypass the
-signed capability boundary. A bundled helper process, legacy `discord-rpc`
-library or proprietary SDK DLL would add another executable or dependency and a
-separate lifecycle without improving the two fields this feature publishes.
+Presence needs workspace/document names and local Discord IPC. Document snapshots,
+full paths and direct Worker IPC would exceed that need. A helper executable or
+legacy RPC dependency would add another lifecycle.
 
-Discord documents desktop IPC framing, its handshake and `SET_ACTIVITY`. The
-Discord desktop client and a valid public Application ID are still runtime
-requirements. The first-party extension owns that public ID; users do not
-configure it.
+Discord documents native RPC framing and `SET_ACTIVITY`. The desktop client and
+a valid public Application ID remain required.
 
 ## Decision
 
-- Manifest v1 gains `workspace: metadata`, which exposes only workspace name,
-  active document name and language ID through a synchronous snapshot plus a
-  serialized change event. File APIs continue to require `read` or
-  `readWrite`.
-- Configuration gains a strict `text` property. The
-  `discordPresence.applicationId` grant accepts a signed literal or a reference
-  to a text property declared by the same manifest. It cannot reference an
-  executable property.
-- API v1 exposes typed `setActivity` and `clearActivity` methods. Rust validates
-  the capability again, resolves the effective Application ID and accepts only
-  the supported activity types and bounded text, timestamp, asset and action
-  button fields. Buttons are limited to Discord's two-button, 32-character
-  label and 512-character URL bounds, and Sideral narrows URLs to
-  credential-free absolute HTTPS links.
-- API v1 exposes only `active` and `idle` window states. A host-owned five-minute
-  timer observes interaction categories without forwarding keystrokes, pointer
-  coordinates or input contents, and sends only state transitions to Workers.
-- The native broker implements Discord's documented little-endian RPC frames
-  over the ten deterministic Windows named-pipe candidates. It performs a
-  version-1 handshake, answers ping frames and sends `SET_ACTIVITY`; every frame
-  and unrelated response sequence is bounded and every I/O operation has a
-  finite deadline and cancellation path.
-- One bounded actor and pipe belong to one globally exclusive extension
-  generation. A competing extension receives an explicit conflict instead of
-  silently replacing the activity. Replacing the owner's Application ID
-  replaces its session. Clear, failure, disable, reload, host loss and
-  application shutdown remove and abort the owner. There is no polling loop or
-  detached helper.
-- `extensions/discord-presence` is a thin first-party client. It derives an
-  activity from metadata, preserves one session start timestamp, deduplicates
-  identical payloads, persists its explicit toggle and starts synchronization
-  on a controller-owned serialized queue after synchronous Worker activation.
-  External Discord latency therefore does not inflate activation time, while
-  failures remain observable through the owned output channel. Its English
-  activity lines use folder, developer and coffee emojis for workspace,
-  document and idle states. It includes one `Download` button linked to the
-  latest official GitHub release.
-- The internal host/Worker protocol moves atomically to version 3. No legacy
-  protocol decoder or compatibility branch is retained.
+Add metadata-only workspace snapshots/events, typed Discord activity methods and
+`active`/`idle` window transitions. A host-owned five-minute timer sends no
+keystrokes, coordinates or input contents to Workers.
+
+A Discord grant uses a signed Application ID literal or a declared text property.
+Configuration type checks prevent binding it to an executable setting. Rust
+validates bounded activity fields and up to two HTTPS buttons with 32-character
+labels and 512-character credential-free URLs.
+
+The native broker implements documented little-endian version-1 RPC frames over
+ten deterministic Windows named-pipe candidates. Frames, responses and I/O have
+bounds, deadlines and cancellation. One actor/session belongs exclusively to one
+extension generation; competing owners fail explicitly.
+
+Clear, failure, disable, reload, host loss and shutdown remove the owner and close
+its session. There is no detached helper or polling loop. This isolated native
+implementation avoids adding an SDK DLL or helper for a small local RPC contract.
+
+The [first-party extension](../../extensions/discord-presence/README.md) owns its
+public Application ID and publishes metadata through a serialized controller
+queue after synchronous activation. It deduplicates payloads, retains a session
+timestamp, persists the explicit toggle, reports connection failures to output
+and supplies a Download button.
 
 ## Consequences
 
-- Source text and full paths never reach the Discord extension or Discord.
-- Raw window input never reaches an extension; only an `active` or `idle`
-  transition crosses the isolated Worker boundary.
-- The named pipe inherits Discord RPC's same-desktop-session trust boundary;
-  only public application and activity metadata are sent through it.
-- Installation review shows both metadata and Discord authorities explicitly.
-- The first-party extension signs its public Application ID as a literal. A
-  stopped Discord client is recoverable with the Refresh command; it does not
-  require configuration or a Worker restart.
-- Closing a generation closes its pipe, so presence cannot outlive its owner.
-- The current transport is supported on Windows, the project's declared
-  operational target. A future platform must implement and validate its native
-  IPC path before support is claimed.
+- Source text and full paths never reach the presence extension or Discord.
+- Installation review shows metadata and Discord grants.
+- External IPC latency does not block Worker activation.
+- A stopped desktop client can recover through Refresh.
+- Presence cannot outlive its owning generation.
+- Windows is the validated transport. Other platforms need their own implemented
+  and validated IPC path before support is claimed.
+
+References: [Discord RPC](https://github.com/discord/discord-api-docs/blob/main/developers/topics/rpc.mdx)
+and [Rich Presence](https://docs.discord.com/developers/discord-social-sdk/development-guides/setting-rich-presence).

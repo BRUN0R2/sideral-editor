@@ -1,69 +1,55 @@
 # Discord artwork
 
-Stationary silver S with white lightning emerging from behind its two open
-terminals, using the editor's graphite palette. The built-in image generation
-tool produced the transparent S; only the separate lightning layer moves.
+A stationary silver S sits above animated white lightning on the editor's graphite
+background. The image-generation tool produced the transparent S; only the
+separate lightning layer moves.
 
 ![Animated Sideral icon](sideralLightning.gif)
 
 | File | Purpose |
 | --- | --- |
-| `sideralLightning.gif` | Rich Presence animation: 512 × 512, 120 frames, 50 fps, 2.4-second infinite loop |
-| `sideralLightning.png` | Static 1024 × 1024 export for the Developer Portal |
-| `sideralMark.png` | Original transparent, stationary S foreground |
-| `generationPrompt.txt` | Exact generation prompts and provenance |
+| [`sideralLightning.gif`](sideralLightning.gif) | 512 × 512 animation, 120 frames, 50 fps, 2.4-second infinite loop |
+| [`sideralLightning.png`](sideralLightning.png) | 1024 × 1024 static Developer Portal export |
+| [`sideralMark.png`](sideralMark.png) | Original transparent S foreground |
+| [`generationPrompt.txt`](generationPrompt.txt) | Exact prompts and provenance |
 
-The palette comes from `src/styles/base.css`: graphite `#282c34`, dark graphite
-`#1e2228`, silver `#aeb4bd` and pale silver `#d0d3d8`. Both exports are
-downsampled from the original cutout. Composition has three ordered layers:
-graphite background, animated branching lightning, then the stationary S.
-The generated matte's nearly opaque metal is made fully opaque before
-composition, so the foreground covers the electricity, including its glow. Rays start
-behind the upper-right and lower-left terminals and extend toward the image
-edges. The letter has no morphing, camera motion, zoom or frame interpolation.
+## Use in Discord
 
-Motion is periodic, with a fixed 20 ms frame delay. The authoring script checks
-that every fully opaque foreground pixel remains unchanged throughout the raw
-animation and the decoded GIF, and that the loop's opening and closing images
-match exactly.
-GIF palette reuse and disabled dithering reduce noise in the stationary metal.
-
-## Discord setup
-
-The extension sets `assets.largeImage` to:
+The [presence extension](../../extensions/discord-presence/README.md) supplies this
+public HTTPS URL as `assets.largeImage`:
 
 ```text
 https://raw.githubusercontent.com/BRUN0R2/sideral-editor/main/assets/discord/sideralLightning.gif
 ```
 
-Publish these assets to `main` and make the repository public before expecting
-Discord to show the image. The URL must return the GIF without authentication.
-While the repository is private, no token or authenticated URL should be put
-in the presence payload. The source configuration is in
-`extensions/discord-presence/src/activity.ts`.
+Discord must fetch it anonymously. Publish assets to the public `main` branch;
+never embed an access token in a presence URL. Rebuild/install the extension and
+run **Discord: Refresh Discord Work Presence** after changing its artwork.
 
-Build and install the updated Discord Work Presence extension, then run
-**Discord: Refresh Discord Work Presence** in Sideral. The GIF is animated by
-Discord and introduces no application animation timers or per-frame RPC calls.
+Discord fetches and animates the GIF; the editor does not send per-frame updates.
+For a static application icon or uploaded Rich Presence asset, use the PNG.
+The application icon and presence artwork are separate settings. See Discord's
+[external asset documentation](https://docs.discord.com/developers/discord-social-sdk/development-guides/setting-rich-presence#uploading-assets).
 
-For a static application icon, upload `sideralLightning.png` to the app's icon
-field in the Discord Developer Portal. A Rich Presence art asset uploaded to
-the portal is also static. Discord documents support for GIF animation through
-[external asset URLs](https://docs.discord.com/developers/discord-social-sdk/development-guides/setting-rich-presence#uploading-assets).
-The application icon and Rich Presence artwork are separate settings.
+## Rebuild exports
 
-## Rebuild the exports
-
-Use Node.js 24 or later and sharp 0.35.5 as an isolated authoring dependency;
-neither the application nor the extension needs an image processing package.
-From the repository root:
+Use Node 24 or later and an isolated `sharp` authoring dependency:
 
 ```powershell
 npm install --prefix build/artworkTools --no-save --ignore-scripts sharp@0.35.5
 node scripts/buildDiscordArtwork.mjs build/artworkTools/node_modules/sharp
 ```
 
-The script keeps the transparent foreground unchanged and replaces the derived
-GIF and PNG. Dimensions, frame count, duration and infinite looping are checked
-after encoding. The `settings` and `lightning` objects contain framing, timing,
-terminal anchors, ray directions and glow parameters.
+The [script](../../scripts/buildDiscordArtwork.mjs) replaces derived GIF/PNG files,
+preserving the transparent foreground. Application and extension runtime do not
+depend on image-processing tools.
+
+Palette values come from [`base.css`](../../src/styles/base.css):
+graphite `#282c34`/`#1e2228` and silver `#aeb4bd`/`#d0d3d8`. Composition orders
+background, branching lightning, then the stationary S. Nearly opaque metal is
+made opaque so it covers the electricity and glow.
+
+The loop uses a 20 ms frame delay. Export validation checks dimensions, timing,
+infinite looping, unchanged opaque foreground pixels and matching first/last
+images after GIF decoding. Palette reuse and disabled dithering limit noise.
+Framing, anchors, directions and glow parameters live in the script.

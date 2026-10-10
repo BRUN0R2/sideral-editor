@@ -216,13 +216,14 @@ impl SideralExtensionState {
         self.service.mutation_gate.clone().lock_owned().await
     }
 
-    pub fn set_workspace_root(
+    pub fn set_workspace_folders(
         &self,
         window: &WebviewWindow,
-        root: Option<std::path::PathBuf>,
+        roots: Vec<std::path::PathBuf>,
+        active: Option<std::path::PathBuf>,
     ) -> Result<(), ExtensionError> {
         require_window(window, MAIN_WINDOW_LABEL)?;
-        self.service.broker.set_workspace_root(root)
+        self.service.broker.set_workspace_folders(roots, active)
     }
 
     pub fn snapshot(&self) -> Result<ExtensionSnapshot, ExtensionError> {

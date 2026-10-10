@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sideral://schemas/project-settings",
+  "title": "Sideral project settings",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion"],
+  "properties": {
+    "$schema": { "const": "sideral://schemas/project-settings" },
+    "schemaVersion": { "const": 1 },
+    "editor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tabSize": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "insertSpaces": { "type": "boolean" },
+        "wordWrap": { "enum": ["off", "on"] }
+      }
+    },
+    "files": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "autoSave": { "enum": ["off", "afterDelay"] }
+      }
+    }
+  }
+}

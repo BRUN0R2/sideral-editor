@@ -7,7 +7,8 @@
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://127.0.0.1:1420",
     "beforeBuildCommand": "npm run build",
-    "frontendDist": "../dist"
+    "beforeBundleCommand": "npm run desktop:associations",
+    "frontendDist": "../build/frontend"
   },
   "app": {
     "windows": [
@@ -34,6 +35,11 @@
     "active": true,
     "targets": ["nsis"],
     "createUpdaterArtifacts": false,
+    "windows": {
+      "nsis": {
+        "installerHooks": "../build/windows/fileAssociations.nsh"
+      }
+    },
     "resources": {
       "../assets/vscode-theme-seti/THIRD_PARTY_NOTICES.txt": "licenses/vscode-theme-seti.txt"
     },

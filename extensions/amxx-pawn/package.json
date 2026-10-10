@@ -4,16 +4,12 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "rolldown src/extension.ts --file dist/extension.mjs --format esm --platform browser --minify",
-    "test": "vitest run",
+    "build": "node ../../scripts/buildExtension.mjs amxx-pawn",
+    "test": "vitest run --config ../../vitest.config.ts --root .",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@sideral/extension-sdk": "0.2.0",
-    "@sideral/extension-testkit": "0.2.0",
-    "@types/node": "26.2.0",
-    "rolldown": "1.2.3",
-    "typescript": "7.0.2",
-    "vitest": "4.1.10"
+    "@sideral/extension-testkit": "0.2.0"
   }
 }

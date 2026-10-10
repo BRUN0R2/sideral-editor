@@ -4,6 +4,8 @@ import CssWorker from "monaco-editor/language/css/css.worker.js?worker";
 import HtmlWorker from "monaco-editor/language/html/html.worker.js?worker";
 import JsonWorker from "monaco-editor/language/json/json.worker.js?worker";
 import TypeScriptWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
+import projectSettingsSchema from "../../../schemas/project-settings.schema.json";
+import workspaceSchema from "../../../schemas/workspace.schema.json";
 import type { ResolvedJsonSchema } from "../../lib/contracts";
 import type { ResolvedScrollbarTheme } from "../../theme/scrollbar";
 import { monacoScrollbarColors } from "./monaco-scrollbar";
@@ -33,7 +35,21 @@ export function applyResolvedJsonSchemas(schemas: readonly ResolvedJsonSchema[])
     ...jsonDiagnosticsDefaults,
     enableSchemaRequest: false,
     schemaRequest: "ignore",
-    schemas: schemas.map(({ uri, schema }) => ({ uri, schema })),
+    schemas: [
+      {
+        uri: projectSettingsSchema.$id,
+        fileMatch: ["**/.sideral/settings.json"],
+        schema: projectSettingsSchema,
+      },
+      {
+        uri: workspaceSchema.$id,
+        fileMatch: ["**/.sideral/workspace.json"],
+        schema: workspaceSchema,
+      },
+      ...schemas
+        .filter(({ uri }) => uri !== projectSettingsSchema.$id && uri !== workspaceSchema.$id)
+        .map(({ uri, schema }) => ({ uri, schema })),
+    ],
   });
 }
 

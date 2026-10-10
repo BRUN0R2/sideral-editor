@@ -1,0 +1,18 @@
+{
+  "name": "sideral.markdown-preview",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "node ../../scripts/buildExtension.mjs markdown-preview",
+    "test": "vitest run --config ../../vitest.config.ts --root .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "marked": "18.0.9"
+  },
+  "devDependencies": {
+    "@sideral/extension-sdk": "0.2.0",
+    "@sideral/extension-testkit": "0.2.0"
+  }
+}

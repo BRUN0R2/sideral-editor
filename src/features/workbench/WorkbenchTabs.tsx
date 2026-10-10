@@ -1,9 +1,13 @@
-import { type DragEvent, useState } from "react";
+import { useState } from "react";
+import { createPortal } from "react-dom";
 import { FileTypeIcon } from "../../components/FileTypeIcon";
+import { Icon } from "../../components/Icon";
 import { ProductIcon, type ProductIconName } from "../../components/ProductIcon";
 import { TabCloseButton } from "../../components/TabCloseButton";
 import { useI18n } from "../i18n/I18nProvider";
 import { type EditorDocument, isDocumentDirty } from "../workspace/types";
+import { reorderTabAt, synchronizeTabOrder } from "./tab-order";
+import { useTabDrag } from "./useTabDrag";
 
 export interface WorkbenchResourceTab {
   readonly id: string;
@@ -21,12 +25,11 @@ interface WorkbenchTabsProps {
   readonly onActivateResource: (id: string) => void;
   readonly onCloseDocument: (id: string) => void;
   readonly onCloseResource: (id: string) => void;
-  readonly onReorderDocument: (id: string, insertionIndex: number) => void;
 }
 
-const TAB_DRAG_TYPE = "application/x-sideral-editor-tab";
-const DRAG_SCROLL_EDGE = 48;
-const DRAG_SCROLL_STEP = 14;
+type WorkbenchTab =
+  | { readonly kind: "document"; readonly document: EditorDocument }
+  | { readonly kind: "resource"; readonly resource: WorkbenchResourceTab };
 
 export function WorkbenchTabs({
   documents,
@@ -38,125 +41,150 @@ export function WorkbenchTabs({
   onActivateResource,
   onCloseDocument,
   onCloseResource,
-  onReorderDocument,
 }: WorkbenchTabsProps) {
   const { t } = useI18n();
-  const [draggedDocumentId, setDraggedDocumentId] = useState<string | null>(null);
-  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [tabOrder, setTabOrder] = useState<readonly string[]>([]);
+  const tabsById = new Map<string, WorkbenchTab>();
+  for (const document of documents) {
+    tabsById.set(`document:${document.id}`, { kind: "document", document });
+  }
+  for (const resource of resourceTabs) {
+    tabsById.set(`resource:${resource.id}`, { kind: "resource", resource });
+  }
+  const orderedTabIds = synchronizeTabOrder(tabOrder, [...tabsById.keys()]);
+  if (orderedTabIds !== tabOrder) {
+    setTabOrder(orderedTabIds);
+  }
 
-  const clearDragState = () => {
-    setDraggedDocumentId(null);
-    setDropIndex(null);
-  };
-
-  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
-    if (draggedDocumentId === null) {
-      return;
-    }
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-
-    const container = event.currentTarget;
-    const tabs = [...container.querySelectorAll<HTMLElement>("[data-document-tab]")];
-    const insertionIndex = tabs.findIndex((tab) => {
-      const bounds = tab.getBoundingClientRect();
-      return event.clientX < bounds.left + bounds.width / 2;
-    });
-    setDropIndex(insertionIndex < 0 ? tabs.length : insertionIndex);
-    scrollDuringDrag(container, event.clientX);
-  };
-
-  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
-    if (draggedDocumentId === null || dropIndex === null) {
-      return;
-    }
-    event.preventDefault();
-    const transferredId = event.dataTransfer.getData(TAB_DRAG_TYPE);
-    const documentId = transferredId.length > 0 ? transferredId : draggedDocumentId;
-    if (documents.some((document) => document.id === documentId)) {
-      onReorderDocument(documentId, dropIndex);
-    }
-    clearDragState();
-  };
+  const drag = useTabDrag({
+    tabIds: orderedTabIds,
+    onReorder: (tabId, insertionIndex) => {
+      setTabOrder((current) => reorderTabAt(current, tabId, insertionIndex));
+    },
+  });
+  const dropIndex = drag.feedback?.dropIndex ?? null;
+  const previewTab = drag.feedback?.dragging ? tabsById.get(drag.feedback.tabId) : undefined;
 
   return (
-    <div className="editor-tabs" role="tablist" onDragOver={handleDragOver} onDrop={handleDrop}>
-      {documents.map((document, index) => {
-        const active = document.id === activeDocumentId;
-        const dirty = isDocumentDirty(document);
-        const classNames = [
-          "workbench-tab",
-          active ? "workbench-tab--active" : "",
-          draggedDocumentId === document.id ? "workbench-tab--dragging" : "",
-          dropIndex === index ? "workbench-tab--drop-before" : "",
-          dropIndex === documents.length && index === documents.length - 1
-            ? "workbench-tab--drop-after"
-            : "",
-        ]
-          .filter(Boolean)
-          .join(" ");
-        return (
-          <div key={document.id} className={classNames} data-document-tab="">
-            <button
-              type="button"
-              className="workbench-tab__main"
-              role="tab"
-              aria-selected={active}
-              aria-label={`${document.name}${dirty ? ` — ${t("editor.dirty")}` : ""}`}
-              draggable
-              onClick={() => onActivateDocument(document.id)}
-              onDragStart={(event) => {
-                event.dataTransfer.effectAllowed = "move";
-                event.dataTransfer.setData(TAB_DRAG_TYPE, document.id);
-                setDraggedDocumentId(document.id);
-                setDropIndex(index);
-              }}
-              onDragEnd={clearDragState}
-              title={document.path ?? document.name}
+    <>
+      <div {...drag.stripProps} className="editor-tabs" role="tablist">
+        {orderedTabIds.map((tabId, index) => {
+          const tab = tabsById.get(tabId);
+          if (tab === undefined) {
+            return null;
+          }
+          const document = tab.kind === "document" ? tab.document : null;
+          const label = tab.kind === "document" ? tab.document.name : tab.resource.label;
+          const active =
+            tab.kind === "document"
+              ? tab.document.id === activeDocumentId
+              : tab.resource.id === activeResourceTabId;
+          const dirty = document !== null && isDocumentDirty(document);
+          const held = drag.feedback?.tabId === tabId;
+          const classNames = [
+            "workbench-tab",
+            tab.kind === "resource" ? "workbench-tab--resource" : "",
+            active ? "workbench-tab--active" : "",
+            held ? "workbench-tab--held" : "",
+            held && drag.feedback?.dragging ? "workbench-tab--dragging" : "",
+            dropIndex === index ? "workbench-tab--drop-before" : "",
+            dropIndex === orderedTabIds.length && index === orderedTabIds.length - 1
+              ? "workbench-tab--drop-after"
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+          return (
+            <div key={tabId} className={classNames} data-workbench-tab="">
+              <button
+                type="button"
+                className="workbench-tab__main"
+                role="tab"
+                aria-selected={active}
+                aria-label={`${label}${dirty ? ` — ${t("editor.dirty")}` : ""}`}
+                style={
+                  held ? { cursor: drag.feedback?.blocked ? "not-allowed" : "grabbing" } : undefined
+                }
+                draggable={false}
+                onPointerDown={(event) => drag.beginDrag(event, tabId)}
+                onClick={() => {
+                  if (tab.kind === "document") {
+                    onActivateDocument(tab.document.id);
+                  } else {
+                    onActivateResource(tab.resource.id);
+                  }
+                }}
+                title={held ? undefined : (document?.path ?? label)}
+              >
+                <WorkbenchTabContent tab={tab} savingIds={savingIds} />
+              </button>
+              <TabCloseButton
+                label={label}
+                onClose={() => {
+                  if (tab.kind === "document") {
+                    onCloseDocument(tab.document.id);
+                  } else {
+                    onCloseResource(tab.resource.id);
+                  }
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+      {drag.feedback !== null
+        ? createPortal(
+            <div
+              className="workbench-tab-drag-surface"
+              aria-hidden="true"
+              data-drop-blocked={drag.feedback.blocked || undefined}
             >
-              <FileTypeIcon name={document.name} />
-              <span>{document.name}</span>
-              {savingIds.has(document.id) ? (
-                <span className="tab-saving" aria-hidden="true" />
-              ) : dirty ? (
-                <span className="tab-dirty" aria-hidden="true" />
+              {previewTab !== undefined ? (
+                <div
+                  className="workbench-tab workbench-tab-drag-preview"
+                  style={{
+                    width: drag.feedback.preview.width,
+                    height: drag.feedback.preview.height,
+                    transform: `translate3d(${drag.feedback.preview.left}px, ${drag.feedback.preview.top}px, 0)`,
+                  }}
+                >
+                  <div className="workbench-tab__main">
+                    <WorkbenchTabContent tab={previewTab} savingIds={savingIds} />
+                  </div>
+                  <span className="workbench-tab__close">
+                    <Icon name="close" size={18} />
+                  </span>
+                </div>
               ) : null}
-            </button>
-            <TabCloseButton label={document.name} onClose={() => onCloseDocument(document.id)} />
-          </div>
-        );
-      })}
-      {resourceTabs.map((tab) => {
-        const active = tab.id === activeResourceTabId;
-        return (
-          <div
-            key={tab.id}
-            className={`workbench-tab workbench-tab--resource ${active ? "workbench-tab--active" : ""}`}
-          >
-            <button
-              type="button"
-              className="workbench-tab__main"
-              role="tab"
-              aria-selected={active}
-              onClick={() => onActivateResource(tab.id)}
-              title={tab.label}
-            >
-              <ProductIcon name={tab.icon} />
-              <span>{tab.label}</span>
-            </button>
-            <TabCloseButton label={tab.label} onClose={() => onCloseResource(tab.id)} />
-          </div>
-        );
-      })}
-    </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 
-function scrollDuringDrag(container: HTMLDivElement, pointerX: number): void {
-  const bounds = container.getBoundingClientRect();
-  if (pointerX < bounds.left + DRAG_SCROLL_EDGE) {
-    container.scrollLeft -= DRAG_SCROLL_STEP;
-  } else if (pointerX > bounds.right - DRAG_SCROLL_EDGE) {
-    container.scrollLeft += DRAG_SCROLL_STEP;
-  }
+function WorkbenchTabContent({
+  tab,
+  savingIds,
+}: {
+  readonly tab: WorkbenchTab;
+  readonly savingIds: ReadonlySet<string>;
+}) {
+  const document = tab.kind === "document" ? tab.document : null;
+  return (
+    <>
+      {tab.kind === "document" ? (
+        <FileTypeIcon name={tab.document.name} />
+      ) : (
+        <ProductIcon name={tab.resource.icon} />
+      )}
+      <span>{tab.kind === "document" ? tab.document.name : tab.resource.label}</span>
+      {document !== null && savingIds.has(document.id) ? (
+        <span className="tab-saving" aria-hidden="true" />
+      ) : document !== null && isDocumentDirty(document) ? (
+        <span className="tab-dirty" aria-hidden="true" />
+      ) : null}
+    </>
+  );
 }

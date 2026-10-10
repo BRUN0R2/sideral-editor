@@ -9,6 +9,10 @@ describe("languageForFile", () => {
     ["Dockerfile", "dockerfile"],
     ["README.md", "markdown"],
     ["unknown.custom", "plaintext"],
+    ["notes.txt", "plaintext"],
+    ["APP.TSX", "typescript"],
+    ["constructor", "plaintext"],
+    ["file.constructor", "plaintext"],
   ])("maps %s to %s", (fileName, expectedLanguage) => {
     expect(languageForFile(fileName)).toBe(expectedLanguage);
   });

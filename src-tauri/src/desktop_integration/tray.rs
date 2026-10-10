@@ -1,12 +1,11 @@
 use tauri::{
-    AppHandle, Manager,
+    AppHandle,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
 use crate::error::{AppError, AppResult};
 
-const MAIN_WINDOW_LABEL: &str = "main";
 const SHOW_MENU_ITEM_ID: &str = "show-main-window";
 const QUIT_MENU_ITEM_ID: &str = "quit-sideral-editor";
 
@@ -62,16 +61,7 @@ fn is_restore_click(event: &TrayIconEvent) -> bool {
 }
 
 fn restore_main_window(app: &AppHandle) {
-    let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
-        eprintln!("Tray restore failed: main window is unavailable.");
-        return;
-    };
-
-    if let Err(error) = window
-        .show()
-        .and_then(|()| window.unminimize())
-        .and_then(|()| window.set_focus())
-    {
+    if let Err(error) = super::show_main_window(app) {
         eprintln!("Tray restore failed: {error}");
     }
 }

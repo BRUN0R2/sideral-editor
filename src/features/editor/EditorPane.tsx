@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { isDesktopRuntime, openExternalUrl } from "../../lib/backend";
+import type { WorkspaceFolderSnapshot } from "../../lib/contracts";
 import { resolveScrollbarTheme, SIDERAL_THEME_CHANGE_EVENT } from "../../theme/scrollbar";
+import { editorSettings, workspaceFolderForPath } from "../workspace/project-settings";
 import type { CursorPosition, EditorDocument } from "../workspace/types";
 import { JsonSchemaTrustDialog } from "./JsonSchemaTrustDialog";
 import { applySideralTheme, monaco } from "./monaco";
@@ -12,7 +14,8 @@ interface EditorPaneProps {
   readonly documents: readonly EditorDocument[];
   readonly activeDocumentId: string;
   readonly active: boolean;
-  readonly workspaceRootPath: string | null;
+  readonly workspaceFolders: readonly WorkspaceFolderSnapshot[];
+  readonly selectedFolderPath: string | null;
   readonly jsonSchemaTrustRevision: number;
   readonly onContentChange: (id: string, content: string) => void;
   readonly onCursorChange: (position: CursorPosition) => void;
@@ -23,7 +26,8 @@ export function EditorPane({
   documents,
   activeDocumentId,
   active,
-  workspaceRootPath,
+  workspaceFolders,
+  selectedFolderPath,
   jsonSchemaTrustRevision,
   onContentChange,
   onCursorChange,
@@ -144,8 +148,24 @@ export function EditorPane({
           model.setValue(document.content);
         }
       }
+      const folder =
+        workspaceFolderForPath(workspaceFolders, document.path) ??
+        (document.path === null
+          ? workspaceFolders.find((folder) => folder.path === selectedFolderPath)
+          : undefined);
+      const settings = editorSettings(folder?.settings);
+      model.updateOptions({ tabSize: settings.tabSize, insertSpaces: settings.insertSpaces });
     }
-  }, [documents]);
+  }, [documents, selectedFolderPath, workspaceFolders]);
+
+  useEffect(() => {
+    const folder =
+      workspaceFolderForPath(workspaceFolders, activeDocument?.path ?? null) ??
+      (activeDocument?.path === null
+        ? workspaceFolders.find((folder) => folder.path === selectedFolderPath)
+        : undefined);
+    editorRef.current?.updateOptions({ wordWrap: editorSettings(folder?.settings).wordWrap });
+  }, [activeDocument?.path, selectedFolderPath, workspaceFolders]);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -168,7 +188,7 @@ export function EditorPane({
   const jsonSchemaSupport = useJsonSchemaSupport({
     active,
     documents,
-    workspaceRootPath,
+    workspaceFolders,
     trustRevision: jsonSchemaTrustRevision,
     models: modelsRef,
     onTrustChange: onJsonSchemaTrustChange,

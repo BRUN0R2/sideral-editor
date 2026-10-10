@@ -15,6 +15,7 @@ import { IconButton } from "../components/IconButton";
 import { SideralLogo } from "../components/SideralLogo";
 import { StatusBar } from "../features/editor/StatusBar";
 import { Explorer } from "../features/explorer/Explorer";
+import { useFileOpening } from "../features/file-opening/useFileOpening";
 import { useI18n } from "../features/i18n/I18nProvider";
 import { SettingsView } from "../features/settings/SettingsView";
 import { useDesktopPreferences } from "../features/settings/useDesktopPreferences";
@@ -36,7 +37,7 @@ import {
 import { UpdateModal } from "../features/updates/UpdateModal";
 import { UpdateProvider, useUpdates } from "../features/updates/UpdateProvider";
 import { type WorkbenchResourceTab, WorkbenchTabs } from "../features/workbench/WorkbenchTabs";
-import { editorDocumentUri } from "../features/workspace/document-uri";
+import { editorDocumentUri, toExtensionTextDocument } from "../features/workspace/document-uri";
 import { useWorkspace } from "../features/workspace/useWorkspace";
 import { installWebViewShortcutGuard } from "./webview-shortcuts";
 import {
@@ -51,9 +52,9 @@ const loadEditorPane = async () => {
   return { default: editorModule.EditorPane };
 };
 const EditorPane = lazy(loadEditorPane);
-const MarkdownPreview = lazy(async () => {
-  const module = await import("../features/sideral-extensions/MarkdownPreview");
-  return { default: module.MarkdownPreview };
+const ExtensionPreview = lazy(async () => {
+  const module = await import("../features/sideral-extensions/ExtensionPreview");
+  return { default: module.ExtensionPreview };
 });
 const IntegratedTerminal = lazy(async () => {
   const module = await import("../features/terminal/IntegratedTerminal");
@@ -84,7 +85,8 @@ function Workbench({ extensionHostConnection }: AppProps) {
   );
   const workspace = useWorkspace(desktopPreferences.preferences.autoSave);
   const extensions = useExtensionSystem(
-    workspace.workspaceRoot,
+    workspace.folders,
+    workspace.selectedFolder,
     workspace.activeDocument,
     extensionHostConnection,
     workspace.saveDocument,
@@ -111,6 +113,17 @@ function Workbench({ extensionHostConnection }: AppProps) {
   const visibleTerminalOutputs = extensions.outputs.filter(
     (output) => !terminalPanel.closedOutputIds.includes(output.resourceId),
   );
+  const openExternalFile = useCallback(
+    async (path: string) => {
+      navigate({ kind: "showEditor" });
+      await workspace.openFile(path);
+    },
+    [workspace.openFile],
+  );
+  useFileOpening(bootstrap.runtime === "desktop" && !workspace.restoringWorkspace, {
+    openFile: openExternalFile,
+    reportError: workspace.reportError,
+  });
   const terminalAvailable = bootstrap.runtime === "desktop";
   const toggleTerminal = useCallback(() => {
     if (!terminalAvailable) {
@@ -250,6 +263,37 @@ function Workbench({ extensionHostConnection }: AppProps) {
       : (workspace.documents.find(
           (document) => editorDocumentUri(document) === visiblePreview.sourceUri,
         ) ?? null);
+  const previewResourceId = visiblePreview?.resourceId;
+  const previewExtensionId = visiblePreview?.extensionId;
+  useEffect(() => {
+    if (
+      extensionHostConnection === null ||
+      previewSource === null ||
+      previewResourceId === undefined ||
+      previewExtensionId === undefined
+    )
+      return;
+    let current = true;
+    void extensionHostConnection
+      .then((host) => {
+        if (current)
+          host.updatePreviewSource(
+            previewExtensionId,
+            previewResourceId,
+            toExtensionTextDocument(previewSource),
+          );
+      })
+      .catch(extensions.reportError);
+    return () => {
+      current = false;
+    };
+  }, [
+    extensions.reportError,
+    extensionHostConnection,
+    previewExtensionId,
+    previewResourceId,
+    previewSource,
+  ]);
   const openPreviewDocument = useCallback(
     (path: string) => {
       navigate({ kind: "showEditor" });
@@ -344,11 +388,12 @@ function Workbench({ extensionHostConnection }: AppProps) {
             hidden={primarySidebar !== "explorer"}
           >
             <Explorer
-              root={workspace.workspaceRoot}
-              entries={workspace.entries}
+              folders={workspace.folders}
+              issues={workspace.issues}
+              selectedFolderPath={workspace.selectedFolder?.path ?? null}
               restoring={workspace.restoringWorkspace}
-              onCreateFile={async (name) => {
-                await workspace.createWorkspaceFile(name);
+              onCreateFile={async (path, name) => {
+                await workspace.createWorkspaceFile(path, name);
                 navigate({ kind: "showEditor" });
               }}
               onOpenFile={() => {
@@ -364,6 +409,13 @@ function Workbench({ extensionHostConnection }: AppProps) {
                 void workspace.openFile(path);
               }}
               onToggleDirectory={(path) => void workspace.toggleDirectory(path)}
+              onToggleFolder={workspace.toggleFolder}
+              onSelectFolder={workspace.selectFolder}
+              onRemoveFolder={(path) => void workspace.removeFolder(path)}
+              onConfigureFolder={(path) => {
+                navigate({ kind: "showEditor" });
+                void workspace.configureFolder(path);
+              }}
             />
           </div>
           <ExtensionsSidebar
@@ -395,7 +447,6 @@ function Workbench({ extensionHostConnection }: AppProps) {
               }
               onCloseDocument={workspace.requestCloseDocument}
               onCloseResource={(resourceId) => navigate({ kind: "closeResource", resourceId })}
-              onReorderDocument={workspace.reorderDocument}
             />
           ) : null}
           <div className="workspace-surfaces">
@@ -411,7 +462,8 @@ function Workbench({ extensionHostConnection }: AppProps) {
                         documents={workspace.documents}
                         activeDocumentId={workspace.activeDocument.id}
                         active={navigation.surface.kind === "editor"}
-                        workspaceRootPath={workspace.workspaceRoot?.path ?? null}
+                        workspaceFolders={workspace.folders}
+                        selectedFolderPath={workspace.selectedFolder?.path ?? null}
                         jsonSchemaTrustRevision={jsonSchemaTrustRevision}
                         onContentChange={workspace.updateDocumentContent}
                         onCursorChange={workspace.setCursor}
@@ -419,11 +471,11 @@ function Workbench({ extensionHostConnection }: AppProps) {
                       />
                     </div>
                     {visiblePreview === null ? null : (
-                      <Suspense fallback={<aside className="markdown-preview" aria-busy="true" />}>
-                        <MarkdownPreview
+                      <Suspense fallback={<aside className="extension-preview" aria-busy="true" />}>
+                        <ExtensionPreview
                           preview={visiblePreview}
-                          content={previewSource?.content ?? visiblePreview.content}
                           onOpenDocument={openPreviewDocument}
+                          onError={extensions.reportError}
                           onClose={() => {
                             void extensions
                               .dismissPreview(visiblePreview.resourceId, visiblePreview.sourceUri)
@@ -472,7 +524,9 @@ function Workbench({ extensionHostConnection }: AppProps) {
                 outputs={visibleTerminalOutputs}
                 shellVisible={terminalPanel.shellVisible}
                 view={terminalPanel.view}
-                workspaceRoot={workspace.workspaceRoot?.path ?? null}
+                workspaceRoot={workspace.selectedFolder?.path ?? null}
+                workspaceFolders={workspace.folders}
+                onSelectWorkspace={workspace.selectFolder}
                 onClose={() => updateTerminalPanel({ kind: "close" })}
                 onCloseView={(view) =>
                   updateTerminalPanel({

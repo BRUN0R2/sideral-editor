@@ -37,7 +37,7 @@ name = "sideral_editor_lib"
 crate-type = ["rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.6.3", features = [] }
+tauri-build = { version = "2.7.1", features = [] }
 
 [dependencies]
 base64 = { workspace = true }
@@ -51,11 +51,12 @@ serde_json = { workspace = true }
 sha2 = { workspace = true }
 sideral-extension-core = { path = "crates/sideral-extension-core" }
 sideral-extension-package = { path = "crates/sideral-extension-package" }
-tauri = { version = "2.11.5", features = ["tray-icon"] }
+tauri = { version = "2.12.2", features = ["tray-icon"] }
 tauri-plugin-dialog = "2.7.2"
 tauri-plugin-autostart = "2.5.1"
 tauri-plugin-opener = "2.5.4"
 tauri-plugin-process = "2.3.1"
+tauri-plugin-single-instance = "2.5.2"
 tauri-plugin-updater = "2.10.1"
 tempfile = "3.27.0"
 thiserror = { workspace = true }

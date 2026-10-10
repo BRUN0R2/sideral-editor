@@ -150,15 +150,22 @@ pub fn cancel_extension_broker_request(
         .map_err(ExtensionCommandError::from)
 }
 
-#[tauri::command]
-pub async fn set_extension_workspace(
+#[tauri::command(rename_all = "camelCase")]
+pub async fn set_extension_workspaces(
     window: WebviewWindow,
     state: State<'_, SideralExtensionState>,
-    root: Option<String>,
+    roots: Vec<String>,
+    active_root: Option<String>,
 ) -> ExtensionCommandResult<()> {
     let state = state.inner().clone();
-    spawn_extension_blocking(move || state.set_workspace_root(&window, root.map(PathBuf::from)))
-        .await
+    spawn_extension_blocking(move || {
+        state.set_workspace_folders(
+            &window,
+            roots.into_iter().map(PathBuf::from).collect(),
+            active_root.map(PathBuf::from),
+        )
+    })
+    .await
 }
 
 #[tauri::command]

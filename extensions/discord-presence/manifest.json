@@ -3,7 +3,7 @@
   "apiVersion": 1,
   "id": "sideral.discord-presence",
   "displayName": "Discord Work Presence",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "engines": {
     "sideral": "^0.1.1"
   },

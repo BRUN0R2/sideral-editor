@@ -11,35 +11,36 @@
   "workspaces": [
     "packages/sideral-extension-sdk",
     "packages/sideral-extension-testkit",
-    "examples/hello-sideral",
-    "examples/markdown-preview",
-    "extensions/amxx-pawn",
-    "extensions/discord-presence"
+    "extensions/*"
   ],
   "packageManager": "npm@11.18.0",
   "engines": {
     "node": ">=22.12.0"
   },
   "scripts": {
+    "clean": "node scripts/cleanBuild.mjs",
     "dev": "vite",
-    "build": "npm run sdk:build && npm run typecheck && npm run extension:examples:check && npm run frontend:bundle",
+    "build": "npm run typecheck && npm run sdk:build && npm run extensions:build && npm run frontend:bundle",
     "frontend:bundle": "vite build && node scripts/check-bundle-budgets.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "biome check .",
     "format": "biome check --write .",
-    "architecture": "node scripts/check-extension-boundaries.mjs && node scripts/check-scrollbar-contract.mjs",
-    "sdk:build": "tsc --project packages/sideral-extension-sdk/tsconfig.json && tsc --project packages/sideral-extension-testkit/tsconfig.json",
+    "architecture": "node scripts/checkBuildLayout.mjs && node scripts/check-extension-boundaries.mjs && node scripts/check-scrollbar-contract.mjs && node --test scripts/fileAssociations.test.mjs",
+    "docs:check": "node scripts/checkDocumentation.mjs",
+    "desktop:associations": "node scripts/buildFileAssociations.mjs",
+    "sdk:build": "npm run build --workspace @sideral/extension-sdk && npm run build --workspace @sideral/extension-testkit",
     "extension:tool": "cargo run --quiet --manifest-path src-tauri/Cargo.toml -p sideral-extension-tool --",
-    "extension:hello:build": "npm run build --workspace sideral.hello",
-    "extension:hello:check": "npm run typecheck --workspace sideral.hello && npm run build --workspace sideral.hello",
     "extension:markdown:build": "npm run build --workspace sideral.markdown-preview",
-    "extension:markdown:check": "npm run typecheck --workspace sideral.markdown-preview && npm run build --workspace sideral.markdown-preview",
+    "extension:markdown:check": "npm run typecheck --workspace sideral.markdown-preview && npm run test --workspace sideral.markdown-preview && npm run build --workspace sideral.markdown-preview && npm run extension:tool -- check build/extensions/markdown-preview",
     "extension:amxx:build": "npm run build --workspace sideral.amxx-pawn",
-    "extension:amxx:check": "npm run typecheck --workspace sideral.amxx-pawn && npm run test --workspace sideral.amxx-pawn && npm run build --workspace sideral.amxx-pawn && npm run extension:tool -- check extensions/amxx-pawn",
+    "extension:amxx:check": "npm run typecheck --workspace sideral.amxx-pawn && npm run test --workspace sideral.amxx-pawn && npm run build --workspace sideral.amxx-pawn && npm run extension:tool -- check build/extensions/amxx-pawn",
     "extension:discord:build": "npm run build --workspace sideral.discord-presence",
-    "extension:discord:check": "npm run typecheck --workspace sideral.discord-presence && npm run test --workspace sideral.discord-presence && npm run build --workspace sideral.discord-presence && npm run extension:tool -- check extensions/discord-presence",
-    "extension:examples:check": "npm run extension:hello:check && npm run extension:markdown:check && npm run extension:amxx:check && npm run extension:discord:check",
+    "extension:discord:check": "npm run typecheck --workspace sideral.discord-presence && npm run test --workspace sideral.discord-presence && npm run build --workspace sideral.discord-presence && npm run extension:tool -- check build/extensions/discord-presence",
+    "extensions:build": "npm run extension:markdown:build && npm run extension:amxx:build && npm run extension:discord:build",
+    "extensions:package": "npm run extensions:build && node scripts/packageExtensions.mjs",
+    "extensions:package:dev": "npm run extensions:build && node scripts/packageExtensions.mjs --development",
+    "extensions:check": "npm run extension:markdown:check && npm run extension:amxx:check && npm run extension:discord:check",
     "rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
     "rust:check": "cargo check --manifest-path src-tauri/Cargo.toml --workspace",
     "rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings",
@@ -48,12 +49,13 @@
     "security:rust": "node scripts/check-rust-advisories.mjs",
     "security": "npm run security:npm && npm run security:rust",
     "runtime:observe": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/observe-runtime-resources.ps1",
+    "release:local": "npm run tauri build && npm run extensions:package:dev",
     "release:config": "node scripts/create-release-config.mjs",
-    "check": "npm run architecture && npm run lint && npm run typecheck && npm run sdk:build && npm run extension:examples:check && npm run test && npm run rust:fmt && npm run rust:clippy && npm run rust:test && npm run frontend:bundle && npm run security",
+    "check": "npm run architecture && npm run docs:check && npm run lint && npm run typecheck && npm run sdk:build && npm run extensions:check && npm run test && npm run rust:fmt && npm run rust:clippy && npm run rust:test && npm run frontend:bundle && npm run security",
     "tauri": "tauri"
   },
   "dependencies": {
-    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/api": "2.12.2",
     "@tauri-apps/plugin-dialog": "2.7.2",
     "@tauri-apps/plugin-process": "2.3.1",
     "@tauri-apps/plugin-updater": "2.10.1",
@@ -61,7 +63,6 @@
     "@xterm/addon-fit": "0.11.0",
     "@xterm/xterm": "6.0.0",
     "jsonc-parser": "3.3.1",
-    "marked": "18.0.9",
     "monaco-editor": "0.56.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
@@ -70,17 +71,18 @@
     "@sideral/extension-sdk": "0.2.0",
     "@sideral/extension-testkit": "0.2.0",
     "@biomejs/biome": "2.5.8",
-    "@tauri-apps/cli": "2.11.4",
+    "@tauri-apps/cli": "2.12.1",
     "@types/node": "26.2.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "@vitejs/plugin-react": "6.0.5",
+    "rolldown": "1.2.3",
     "typescript": "7.0.2",
     "vite": "8.2.1",
-    "vitest": "4.1.10"
+    "vitest": "5.0.3"
   },
   "overrides": {
-    "dompurify": "3.4.13"
+    "dompurify": "3.4.16"
   },
   "allowScripts": {
     "esbuild@0.28.2": true

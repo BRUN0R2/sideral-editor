@@ -18,7 +18,7 @@
     }
   },
   "scripts": {
-    "build": "tsc --project tsconfig.json"
+    "build": "node ../../scripts/buildSdkPackage.mjs sideral-extension-sdk"
   },
   "engines": {
     "node": ">=22.12.0"

@@ -64,6 +64,19 @@
   align-items: center;
 }
 
+.terminal-panel__workspace {
+  max-width: 140px;
+  height: 27px;
+  margin-inline-end: 5px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+}
+
 .terminal-panel__tabs {
   height: 100%;
   flex: 1;

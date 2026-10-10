@@ -1,6 +1,7 @@
 import type { Disposable, JsonValue, WorkspaceContext } from "@sideral/extension-sdk";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isDesktopRuntime } from "../../lib/backend";
+import type { WorkspaceFolderSnapshot } from "../../lib/contracts";
 import { toApplicationError } from "../../lib/errors";
 import { toExtensionTextDocument } from "../workspace/document-uri";
 import type { EditorDocument, WorkspaceRoot } from "../workspace/types";
@@ -17,7 +18,7 @@ import {
   restartExtension,
   rollbackExtension,
   setExtensionEnabled,
-  setExtensionWorkspace,
+  setExtensionWorkspaces,
   uninstallExtension,
   updateExtensionKeybinding,
 } from "./backend";
@@ -84,6 +85,7 @@ export interface ExtensionSystem {
 }
 
 export function useExtensionSystem(
+  workspaceFolders: readonly WorkspaceFolderSnapshot[],
   workspaceRoot: WorkspaceRoot | null,
   activeDocument: EditorDocument | null,
   hostConnection: Promise<ExtensionHostConnection> | null,
@@ -108,6 +110,38 @@ export function useExtensionSystem(
   const outputRevealSequences = useRef<ReadonlyMap<string, number>>(new Map());
   const workspaceRootRef = useRef(workspaceRoot);
   workspaceRootRef.current = workspaceRoot;
+  const requestedPaths = workspaceFolders
+    .filter((folder) => folder.available)
+    .map((folder) => folder.path);
+  const workspacePathsRef = useRef(requestedPaths);
+  if (
+    requestedPaths.length !== workspacePathsRef.current.length ||
+    requestedPaths.some((path, index) => path !== workspacePathsRef.current[index])
+  ) {
+    workspacePathsRef.current = requestedPaths;
+  }
+  const workspacePaths = workspacePathsRef.current;
+  const workspaceScopeQueue = useRef<Promise<void>>(Promise.resolve());
+  const latestWorkspaceScope = useRef<{ key: string; request: Promise<void> } | null>(null);
+  const synchronizeWorkspaceScope = useCallback(
+    (roots: readonly string[], activeRoot: string | null): Promise<void> => {
+      const key = JSON.stringify([roots, activeRoot]);
+      if (latestWorkspaceScope.current?.key === key) return latestWorkspaceScope.current.request;
+      const request = workspaceScopeQueue.current.then(() =>
+        setExtensionWorkspaces(roots, activeRoot),
+      );
+      workspaceScopeQueue.current = request.then(
+        () => undefined,
+        () => undefined,
+      );
+      latestWorkspaceScope.current = { key, request };
+      void request.catch(() => {
+        if (latestWorkspaceScope.current?.request === request) latestWorkspaceScope.current = null;
+      });
+      return request;
+    },
+    [],
+  );
   const activeDocumentRef = useRef(activeDocument);
   activeDocumentRef.current = activeDocument;
   const saveDocumentRef = useRef(saveDocument);
@@ -123,14 +157,16 @@ export function useExtensionSystem(
   const workspaceContextRef = useRef(workspaceContext);
   workspaceContextRef.current = workspaceContext;
 
-  const replayActivationEvents = useCallback(
-    () =>
-      replayCurrentActivationEvents(
-        activateExtensionEvent,
-        activeDocumentRef.current?.languageId ?? null,
-      ),
-    [],
-  );
+  const replayActivationEvents = useCallback(async () => {
+    await synchronizeWorkspaceScope(
+      workspacePathsRef.current,
+      workspaceRootRef.current?.path ?? null,
+    );
+    await replayCurrentActivationEvents(
+      activateExtensionEvent,
+      activeDocumentRef.current?.languageId ?? null,
+    );
+  }, [synchronizeWorkspaceScope]);
 
   const updateBusyCount = useCallback((extensionId: string, change: 1 | -1): void => {
     setBusyCounts((current) => {
@@ -269,7 +305,11 @@ export function useExtensionSystem(
       );
       setOutputs(connectedOutputs);
       setPreviews(visiblePreviewMap(connected.previews));
-      await setExtensionWorkspace(workspaceRootRef.current?.path ?? null);
+      await synchronizeWorkspaceScope(
+        workspacePathsRef.current,
+        workspaceRootRef.current?.path ?? null,
+      );
+      if (cancelled) return;
       setStatus("ready");
       void activateExtensionEvent({ kind: "workbenchReady" }).catch((reason: unknown) => {
         if (!cancelled) {
@@ -290,7 +330,7 @@ export function useExtensionSystem(
         });
       }
     };
-  }, [acceptInstruction, applySnapshot, desktop, hostConnection]);
+  }, [acceptInstruction, applySnapshot, desktop, hostConnection, synchronizeWorkspaceScope]);
 
   useEffect(() => {
     if (!desktop || hostConnection === null) {
@@ -298,7 +338,11 @@ export function useExtensionSystem(
     }
     let current = true;
     void hostConnection
-      .then((host) => {
+      .then(async (host) => {
+        await synchronizeWorkspaceScope(
+          workspacePathsRef.current,
+          workspaceRootRef.current?.path ?? null,
+        );
         if (current) {
           host.updateWorkspaceContext(workspaceContext);
         }
@@ -311,7 +355,7 @@ export function useExtensionSystem(
     return () => {
       current = false;
     };
-  }, [desktop, hostConnection, workspaceContext]);
+  }, [desktop, hostConnection, synchronizeWorkspaceScope, workspaceContext]);
 
   useEffect(() => {
     if (!desktop || hostConnection === null) {
@@ -348,22 +392,27 @@ export function useExtensionSystem(
     if (status !== "ready") {
       return;
     }
-    void setExtensionWorkspace(workspaceRoot?.path ?? null).catch((reason: unknown) => {
-      setError(errorMessage(reason));
-    });
-  }, [status, workspaceRoot?.path]);
+    void synchronizeWorkspaceScope(workspacePaths, workspaceRoot?.path ?? null).catch(
+      (reason: unknown) => {
+        setError(errorMessage(reason));
+      },
+    );
+  }, [status, synchronizeWorkspaceScope, workspacePaths, workspaceRoot?.path]);
 
   useEffect(() => {
     const activeLanguageId = activeDocument?.languageId ?? null;
     if (status !== "ready" || activeLanguageId === null) {
       return;
     }
-    void activateExtensionEvent({ kind: "language", languageId: activeLanguageId }).catch(
-      (reason: unknown) => {
+    void synchronizeWorkspaceScope(
+      workspacePathsRef.current,
+      workspaceRootRef.current?.path ?? null,
+    )
+      .then(() => activateExtensionEvent({ kind: "language", languageId: activeLanguageId }))
+      .catch((reason: unknown) => {
         setError(errorMessage(reason));
-      },
-    );
-  }, [activeDocument?.languageId, status]);
+      });
+  }, [activeDocument?.languageId, status, synchronizeWorkspaceScope]);
 
   const runExtensionMutation = useCallback(
     async (
@@ -438,6 +487,10 @@ export function useExtensionSystem(
             command?.invocation === "activeTextDocument" && active !== null
               ? toExtensionTextDocument(active)
               : null;
+          await synchronizeWorkspaceScope(
+            workspacePathsRef.current,
+            workspaceRootRef.current?.path ?? null,
+          );
           return await executeExtensionCommand(commandId, arguments_, document);
         } catch (reason: unknown) {
           setError(errorMessage(reason));
@@ -523,6 +576,7 @@ export function useExtensionSystem(
       runExtensionMutation,
       snapshot,
       status,
+      synchronizeWorkspaceScope,
       updateBusyCount,
     ],
   );

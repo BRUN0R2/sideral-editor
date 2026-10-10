@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     fs,
     path::{Path, PathBuf},
     sync::Arc,
@@ -157,11 +157,12 @@ impl CapabilityBroker {
             .build()
             .map_err(|error| ExtensionError::InvalidRequest(format!("invalid glob: {error}")))?
             .compile_matcher();
-        let root = self.workspace_root()?;
-        let mut queue = VecDeque::from([root.clone()]);
+        let roots = self.workspace_roots()?;
+        let mut queue: VecDeque<_> = roots.into_iter().map(|root| (root.clone(), root)).collect();
         let mut matches = Vec::new();
+        let mut matched_uris = HashSet::new();
         let mut traversed = 0_usize;
-        while let Some(directory) = queue.pop_front() {
+        while let Some((root, directory)) = queue.pop_front() {
             if cancellation.is_cancelled() {
                 return Err(ExtensionError::Cancelled);
             }
@@ -195,7 +196,7 @@ impl CapabilityBroker {
                     continue;
                 }
                 if file_type.is_dir() {
-                    queue.push_back(entry.path());
+                    queue.push_back((root.clone(), entry.path()));
                     continue;
                 }
                 if !file_type.is_file() {
@@ -207,7 +208,11 @@ impl CapabilityBroker {
                 })?;
                 let candidate = relative.to_string_lossy().replace('\\', "/");
                 if matcher.is_match(&candidate) {
-                    matches.push(file_uri(&path)?);
+                    let uri = file_uri(&path)?;
+                    if !matched_uris.insert(uri.clone()) {
+                        continue;
+                    }
+                    matches.push(uri);
                     if matches.len() == limit {
                         matches.sort();
                         return serde_json::to_value(matches)
@@ -221,12 +226,12 @@ impl CapabilityBroker {
     }
 
     pub(super) fn canonical_workspace_file(&self, uri: &str) -> Result<PathBuf, ExtensionError> {
-        let root = self.workspace_root()?;
+        let roots = self.workspace_roots()?;
         let path = workspace_uri_path(uri)?;
         let canonical = fs::canonicalize(&path).map_err(|error| {
             ExtensionError::io(format!("could not resolve {}", path.display()), error)
         })?;
-        if !canonical.starts_with(&root) || !canonical.is_file() {
+        if !roots.iter().any(|root| canonical.starts_with(root)) || !canonical.is_file() {
             return Err(ExtensionError::PermissionDenied(format!(
                 "{} is outside the active workspace or is not a file",
                 canonical.display()
@@ -239,12 +244,12 @@ impl CapabilityBroker {
         &self,
         uri: &str,
     ) -> Result<PathBuf, ExtensionError> {
-        let root = self.workspace_root()?;
+        let roots = self.workspace_roots()?;
         let path = workspace_uri_path(uri)?;
         let canonical = fs::canonicalize(&path).map_err(|error| {
             ExtensionError::io(format!("could not resolve {}", path.display()), error)
         })?;
-        if !canonical.starts_with(&root) || !canonical.is_dir() {
+        if !roots.iter().any(|root| canonical.starts_with(root)) || !canonical.is_dir() {
             return Err(ExtensionError::PermissionDenied(format!(
                 "{} is outside the active workspace or is not a directory",
                 canonical.display()
@@ -254,7 +259,7 @@ impl CapabilityBroker {
     }
 
     pub(super) fn workspace_output_file(&self, uri: &str) -> Result<PathBuf, ExtensionError> {
-        let root = self.workspace_root()?;
+        let roots = self.workspace_roots()?;
         let path = workspace_uri_path(uri)?;
         let file_name = path.file_name().ok_or_else(|| {
             ExtensionError::InvalidRequest("workspace output URI has no file name".to_owned())
@@ -268,7 +273,7 @@ impl CapabilityBroker {
             let canonical = fs::canonicalize(&path).map_err(|error| {
                 ExtensionError::io(format!("could not resolve {}", path.display()), error)
             })?;
-            if !canonical.starts_with(&root) || !canonical.is_file() {
+            if !roots.iter().any(|root| canonical.starts_with(root)) || !canonical.is_file() {
                 return Err(ExtensionError::PermissionDenied(format!(
                     "{} is outside the active workspace or is not a file",
                     canonical.display()
@@ -282,7 +287,9 @@ impl CapabilityBroker {
         let canonical_parent = fs::canonicalize(parent).map_err(|error| {
             ExtensionError::io(format!("could not resolve {}", parent.display()), error)
         })?;
-        if !canonical_parent.starts_with(&root) || !canonical_parent.is_dir() {
+        if !roots.iter().any(|root| canonical_parent.starts_with(root))
+            || !canonical_parent.is_dir()
+        {
             return Err(ExtensionError::PermissionDenied(format!(
                 "{} is outside the active workspace or is not a directory",
                 canonical_parent.display()
@@ -292,9 +299,24 @@ impl CapabilityBroker {
     }
 
     pub(super) fn workspace_root(&self) -> Result<PathBuf, ExtensionError> {
-        read_lock(&self.shared.workspace_root, "extension workspace")?
+        read_lock(&self.shared.workspace_scope, "extension workspace")?
+            .active
             .clone()
-            .ok_or_else(|| ExtensionError::InvalidRequest("no workspace is open".to_owned()))
+            .ok_or_else(|| {
+                ExtensionError::InvalidRequest("select an open workspace folder".to_owned())
+            })
+    }
+
+    pub(super) fn workspace_roots(&self) -> Result<Vec<PathBuf>, ExtensionError> {
+        let roots = read_lock(&self.shared.workspace_scope, "extension workspace")?
+            .roots
+            .clone();
+        if roots.is_empty() {
+            return Err(ExtensionError::InvalidRequest(
+                "no workspace is open".to_owned(),
+            ));
+        }
+        Ok(roots)
     }
 }
 

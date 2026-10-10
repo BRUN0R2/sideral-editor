@@ -1,4 +1,4 @@
-import type { DirectoryEntryKind } from "../../lib/contracts";
+import type { DirectoryEntryKind, WorkspaceFolderSnapshot } from "../../lib/contracts";
 
 export interface WorkspaceNode {
   readonly path: string;
@@ -12,6 +12,13 @@ export interface WorkspaceNode {
 export interface WorkspaceRoot {
   readonly path: string;
   readonly name: string;
+}
+
+export interface WorkspaceFolder extends WorkspaceFolderSnapshot {
+  readonly generation: number;
+  readonly expanded: boolean;
+  readonly loading: boolean;
+  readonly entries: readonly WorkspaceNode[] | null;
 }
 
 export interface EditorDocument {

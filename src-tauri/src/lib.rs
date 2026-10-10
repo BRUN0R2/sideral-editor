@@ -6,13 +6,16 @@ mod desktop_integration;
 mod documents;
 mod error;
 mod external_links;
+mod file_opening;
 mod i18n;
 mod integrated_terminal;
 mod json_schemas;
 mod network_security;
+mod project_settings;
 mod settings;
 mod sideral_extensions;
 mod updater;
+mod workspace;
 mod workspace_session;
 
 use std::path::PathBuf;
@@ -28,7 +31,6 @@ use serde::Serialize;
 use sideral_extensions::SideralExtensionState;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_opener::OpenerExt;
-use workspace_session::WorkspaceSession;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -38,13 +40,6 @@ struct ApplicationBootstrap {
     updater_enabled: bool,
     desktop_preferences: DesktopPreferences,
     localization: LocaleSelection,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WorkspaceSnapshot {
-    root: String,
-    entries: Vec<DirectoryEntry>,
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -120,45 +115,6 @@ async fn list_directory(path: String) -> CommandResult<Vec<DirectoryEntry>> {
     run_blocking(move || documents::list_directory(PathBuf::from(path))).await
 }
 
-#[tauri::command]
-async fn restore_workspace(app: AppHandle) -> CommandResult<Option<WorkspaceSnapshot>> {
-    let session_path = workspace_session_path(&app)?;
-    run_blocking(move || {
-        let Some(session) = workspace_session::read(&session_path)? else {
-            return Ok(None);
-        };
-        let entries = documents::list_directory(PathBuf::from(session.root()))?;
-        Ok(Some(WorkspaceSnapshot {
-            root: session.into_root(),
-            entries,
-        }))
-    })
-    .await
-}
-
-#[tauri::command(rename_all = "camelCase")]
-async fn open_workspace(app: AppHandle, root: String) -> CommandResult<WorkspaceSnapshot> {
-    let session_path = workspace_session_path(&app)?;
-    run_blocking(move || {
-        let session = WorkspaceSession::from_root(root)?;
-        let entries = documents::list_directory(PathBuf::from(session.root()))?;
-        workspace_session::write(&session_path, &session)?;
-        Ok(WorkspaceSnapshot {
-            root: session.into_root(),
-            entries,
-        })
-    })
-    .await
-}
-
-fn workspace_session_path(app: &AppHandle) -> error::AppResult<PathBuf> {
-    let config_directory = app
-        .path()
-        .app_config_dir()
-        .map_err(|error| AppError::InvalidPath(error.to_string()))?;
-    Ok(workspace_session::file_path(&config_directory))
-}
-
 #[tauri::command(rename_all = "camelCase")]
 async fn validate_sideral_extension_manifest(
     source: String,
@@ -226,6 +182,10 @@ where
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let context = tauri::generate_context!();
     let builder = tauri::Builder::default()
+        .manage(file_opening::FileOpeningState::from_initial_launch()?)
+        .plugin(tauri_plugin_single_instance::init(
+            file_opening::receive_launch,
+        ))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -241,6 +201,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     builder
         .setup(|app| {
+            if !app.manage(workspace::state_for_app(app.handle())?) {
+                return Err(
+                    AppError::Runtime("workspace state is already managed".to_owned()).into(),
+                );
+            }
             let desktop_preferences = DesktopPreferencesState::load(app.handle())?;
             if !app.manage(desktop_preferences) {
                 return Err(AppError::Runtime(
@@ -275,11 +240,17 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             let main_window = app
                 .get_webview_window("main")
                 .ok_or_else(|| AppError::Runtime("main window is unavailable".to_owned()))?;
-            desktop_integration::apply_initial_window_state(&main_window)?;
+            let reveal_requested = app
+                .state::<file_opening::FileOpeningState>()
+                .requires_visible_startup()?;
+            desktop_integration::apply_initial_window_state(&main_window, reveal_requested)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             bootstrap_application,
+            file_opening::connect_file_opening,
+            file_opening::disconnect_file_opening,
+            file_opening::acknowledge_file_opening,
             desktop_integration::preferences::save_desktop_preferences,
             refresh_locales,
             set_language_preference,
@@ -289,8 +260,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             create_text_file,
             write_text_file,
             list_directory,
-            restore_workspace,
-            open_workspace,
+            workspace::restore_workspace,
+            workspace::add_workspace_folders,
+            workspace::remove_workspace_folder,
+            workspace::refresh_workspace,
+            workspace::initialize_workspace_folder,
             validate_sideral_extension_manifest,
             resolve_json_schema,
             json_schema_trust_settings,
@@ -311,7 +285,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             sideral_extensions::extension_host_bundle,
             sideral_extensions::extension_broker_request,
             sideral_extensions::cancel_extension_broker_request,
-            sideral_extensions::set_extension_workspace,
+            sideral_extensions::set_extension_workspaces,
             sideral_extensions::dismiss_extension_preview,
             sideral_extensions::update_extension_keybinding,
             sideral_extensions::extension_configurations,
@@ -324,6 +298,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             sideral_extensions::uninstall_extension,
         ])
         .on_window_event(|window, event| {
+            file_opening::handle_window_event(window, event);
             sideral_extensions::handle_window_event(window, event);
             desktop_integration::handle_main_window_event(window, event);
         })
