@@ -1104,7 +1104,9 @@ mod tests {
             &Cancellation::default(),
         )?;
 
-        assert_eq!(matches, serde_json::json!([file_uri(&first)?]));
+        // Search returns canonical URIs, including when TEMP uses a Windows short-path alias.
+        let expected = file_uri(&fs::canonicalize(&first)?)?;
+        assert_eq!(matches, serde_json::json!([expected]));
         Ok(())
     }
 
@@ -1184,7 +1186,10 @@ mod tests {
             },
             &Cancellation::default(),
         )?;
-        let mut expected = vec![file_uri(&first)?, file_uri(&second)?];
+        let mut expected = vec![
+            file_uri(&fs::canonicalize(&first)?)?,
+            file_uri(&fs::canonicalize(&second)?)?,
+        ];
         expected.sort();
         assert_eq!(result, serde_json::json!(expected));
         let limited = broker.find_workspace_files_blocking(
