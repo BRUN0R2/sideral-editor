@@ -60,6 +60,10 @@ export interface TextDocumentPayload {
   readonly content: string;
 }
 
+export type OpenTarget =
+  | { readonly kind: "file"; readonly document: TextDocumentPayload }
+  | { readonly kind: "directory"; readonly path: string };
+
 export interface SavedDocumentPayload {
   readonly path: string;
   readonly bytesWritten: number;

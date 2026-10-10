@@ -54,7 +54,7 @@ describe("file-opening connection", () => {
       return null;
     });
     const connection = connectFileOpening({
-      async openFile(path) {
+      async openPath(path) {
         opened.push(path);
         if (path === "first.ts") {
           await firstFile.promise;
@@ -80,7 +80,7 @@ describe("file-opening connection", () => {
   it("does not create a native subscription for a disposed StrictMode owner", async () => {
     const invoke = vi.fn(() => null);
     mockIPC(invoke);
-    const connection = connectFileOpening({ openFile: vi.fn(), reportError: vi.fn() });
+    const connection = connectFileOpening({ openPath: vi.fn(), reportError: vi.fn() });
     await connection.dispose();
     await connection.ready;
     expect(invoke).not.toHaveBeenCalled();
@@ -90,7 +90,7 @@ describe("file-opening connection", () => {
     const commands: string[] = [];
     const pendingFile = deferred();
     const finishedFile = deferred();
-    const openFile = vi.fn(async () => {
+    const openPath = vi.fn(async () => {
       await pendingFile.promise;
       finishedFile.resolve();
     });
@@ -104,17 +104,17 @@ describe("file-opening connection", () => {
       }
       return null;
     });
-    const connection = connectFileOpening({ openFile, reportError: vi.fn() });
+    const connection = connectFileOpening({ openPath, reportError: vi.fn() });
     await connection.ready;
     await connection.dispose();
     pendingFile.resolve();
     await finishedFile.promise;
-    expect(openFile).toHaveBeenCalledTimes(1);
+    expect(openPath).toHaveBeenCalledTimes(1);
     expect(commands).not.toContain("acknowledge_file_opening");
   });
 
   it("reports malformed native instructions without opening or acknowledging files", async () => {
-    const openFile = vi.fn();
+    const openPath = vi.fn();
     const reportError = vi.fn();
     mockIPC((command, argumentsValue) => {
       if (command === "connect_file_opening") {
@@ -125,9 +125,9 @@ describe("file-opening connection", () => {
       }
       return null;
     });
-    const connection = connectFileOpening({ openFile, reportError });
+    const connection = connectFileOpening({ openPath, reportError });
     await connection.ready;
-    expect(openFile).not.toHaveBeenCalled();
+    expect(openPath).not.toHaveBeenCalled();
     expect(reportError).toHaveBeenCalledOnce();
     await connection.dispose();
   });

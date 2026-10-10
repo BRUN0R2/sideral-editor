@@ -169,6 +169,25 @@ export function useWorkspaceFolders(reportError: (value: unknown) => void) {
     return () => window.removeEventListener("focus", refresh);
   }, [refreshFolders]);
 
+  const addFolders = useCallback(
+    (paths: readonly string[]): Promise<void> =>
+      runWorkspaceOperation(async () => {
+        const snapshot = await addWorkspaceFolders(paths);
+        applySnapshot(snapshot);
+        const keys = new Set(paths.map(workspacePathKey));
+        updateFolders((current) =>
+          current.map((folder) =>
+            keys.has(workspacePathKey(folder.path)) ? { ...folder, expanded: true } : folder,
+          ),
+        );
+        const selected = snapshot.folders.find(
+          (folder) => folder.available && keys.has(workspacePathKey(folder.path)),
+        );
+        if (selected !== undefined) selectFolder(selected.path);
+      }),
+    [applySnapshot, runWorkspaceOperation, selectFolder, updateFolders],
+  );
+
   const openFolder = useCallback((): Promise<void> => {
     const currentRequest = openFolderRequest.current;
     if (currentRequest !== null) {
@@ -188,7 +207,7 @@ export function useWorkspaceFolders(reportError: (value: unknown) => void) {
         if (selectedPaths === null) return;
         if (!mounted.current) return;
         const paths = typeof selectedPaths === "string" ? [selectedPaths] : selectedPaths;
-        await runWorkspaceOperation(async () => applySnapshot(await addWorkspaceFolders(paths)));
+        await addFolders(paths);
       } catch (caught) {
         reportError(caught);
       }
@@ -201,7 +220,7 @@ export function useWorkspaceFolders(reportError: (value: unknown) => void) {
     };
     void request.then(releaseRequest, releaseRequest);
     return request;
-  }, [applySnapshot, reportError, runWorkspaceOperation]);
+  }, [addFolders, reportError]);
 
   const removeFolder = useCallback(
     async (path: string) => {
@@ -351,6 +370,7 @@ export function useWorkspaceFolders(reportError: (value: unknown) => void) {
     selectFolder,
     restoringWorkspace,
     refreshFolders,
+    addFolders,
     openFolder,
     removeFolder,
     initializeFolder,

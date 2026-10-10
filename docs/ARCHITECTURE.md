@@ -17,7 +17,7 @@ See [development](DEVELOPMENT.md) for commands and build paths, and
 | [`src/features/editor`](../src/features/editor) | Monaco models, theme, workers and JSON schema integration |
 | [`src/features/workspace`](../src/features/workspace) | Documents, saves, tabs, root context and session restoration |
 | [`src/features/explorer`](../src/features/explorer) | Lazy folder-tree presentation |
-| [`src/features/file-opening`](../src/features/file-opening) | Ordered external file requests through injected callbacks |
+| [`src/features/file-opening`](../src/features/file-opening) | Ordered external path requests through injected callbacks |
 | [`src/features/terminal`](../src/features/terminal) | Bottom panel, xterm shell and extension output views |
 | [`src/features/sideral-extensions`](../src/features/sideral-extensions) | Extension UI, protocol validation and trusted Worker supervisor |
 | [`src/features/settings`](../src/features/settings) | Desktop, locale, schema-trust and extension settings |
@@ -58,14 +58,19 @@ no filesystem I/O; a bounded native queue retains each ordered request until the
 frontend acknowledges its attempted files. A generation-owned Tauri `Channel`
 delivers requests after workspace restoration.
 
-The feature receives `openFile` and `reportError` callbacks rather than importing
-workspace behavior. A bad file does not stop the rest of a request. New launches
-reveal a tray-hidden or minimized window.
+The feature receives `openPath` and `reportError` callbacks rather than importing
+workspace behavior. The workspace classifies a new target through one typed
+native command: text documents use the existing bounded reader; canonical
+directory paths use the existing serialized root operations. A bad target does
+not stop the rest of a request. New launches reveal a tray-hidden or minimized
+window.
 
 One [file-type catalog](../config/fileTypes.json) drives language selection and
 generated NSIS hooks. Hooks register an available editor and remove only owned
 entries; default applications and Windows `UserChoice` remain untouched.
 [Windows file opening](FILE-OPENING.md) covers use, installation and validation.
+Codex discovery uses its official user-level custom-handler configuration;
+the editor runtime has no dependency on Codex settings or application internals.
 
 ## Workbench and terminal ownership
 

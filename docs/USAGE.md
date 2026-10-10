@@ -26,7 +26,7 @@ have a path; it does not open save dialogs for untitled files.
 | `Ctrl+Shift+P` or `F1` | Command palette |
 | `Ctrl+Shift+X` | Extensions |
 
-For Explorer setup, see [Windows file opening](FILE-OPENING.md).
+For Explorer setup and the Codex editor menu, see [external opening](FILE-OPENING.md).
 For per-project settings, see [workspaces](WORKSPACES.md).
 
 ## Terminal and output

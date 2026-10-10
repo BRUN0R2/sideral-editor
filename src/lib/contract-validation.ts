@@ -9,6 +9,7 @@ import type {
   LocaleCatalog,
   LocaleIssue,
   LocaleSelection,
+  OpenTarget,
   ProjectSettings,
   ResolvedJsonSchema,
   SavedDocumentPayload,
@@ -23,6 +24,7 @@ import {
   enumeration,
   jsonValue,
   literal,
+  nonEmptyString,
   nullable,
   optional,
   record,
@@ -76,6 +78,21 @@ export function decodeDesktopPreferencesResponse(value: unknown): DesktopPrefere
 
 export function decodeTextDocumentResponse(value: unknown): TextDocumentPayload {
   return decodeTextDocument(value, "text document response");
+}
+
+export function decodeOpenTargetResponse(value: unknown): OpenTarget {
+  const path = "open target response";
+  const source = record(value, path);
+  const kind = enumeration(required(source, "kind", path), ["file", "directory"], `${path}.kind`);
+  if (kind === "directory") {
+    record(source, path, ["kind", "path"]);
+    return { kind, path: nonEmptyString(required(source, "path", path), `${path}.path`) };
+  }
+  record(source, path, ["kind", "document"]);
+  return {
+    kind,
+    document: decodeTextDocument(required(source, "document", path), `${path}.document`),
+  };
 }
 
 export function decodeSavedDocumentResponse(value: unknown): SavedDocumentPayload {

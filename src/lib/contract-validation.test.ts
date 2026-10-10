@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   decodeApplicationBootstrap,
   decodeInitializedWorkspaceResponse,
+  decodeOpenTargetResponse,
   decodeWorkspaceResponse,
 } from "./contract-validation";
 
@@ -54,6 +55,28 @@ describe("native application contracts", () => {
         desktopPreferences: incompletePreferences,
       }),
     ).toThrow(/autoSave is required/u);
+  });
+});
+
+describe("external path boundary", () => {
+  it("decodes text documents and directory paths as distinct targets", () => {
+    const file = {
+      kind: "file",
+      document: { path: "C:/work/ação.ts", name: "ação.ts", content: "const value = 42;" },
+    };
+    const directory = { kind: "directory", path: "C:/work/project with spaces" };
+    expect(decodeOpenTargetResponse(file)).toEqual(file);
+    expect(decodeOpenTargetResponse(directory)).toEqual(directory);
+  });
+
+  it.each([
+    { kind: "unknown", path: "C:/work" },
+    { kind: "directory", path: "" },
+    { kind: "directory", path: "C:/work", document: {} },
+    { kind: "file", path: "C:/work/main.ts" },
+    { kind: "file", document: { path: "C:/work/main.ts", name: "main.ts" } },
+  ])("rejects incomplete and ambiguous target payloads %#", (value) => {
+    expect(() => decodeOpenTargetResponse(value)).toThrow();
   });
 });
 

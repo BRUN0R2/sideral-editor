@@ -1,6 +1,6 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createTextFile, isDesktopRuntime, readTextFile, writeTextFile } from "../../lib/backend";
+import { createTextFile, isDesktopRuntime, readOpenTarget, writeTextFile } from "../../lib/backend";
 import type { AutoSaveMode } from "../../lib/contracts";
 import { ApplicationError, toApplicationError } from "../../lib/errors";
 import { AUTO_SAVE_DELAY_MS, autoSaveDocuments } from "./auto-save";
@@ -29,7 +29,7 @@ export function useWorkspace(autoSave: AutoSaveMode) {
   const [cursor, setCursor] = useState<CursorPosition>(INITIAL_CURSOR);
   const [error, setError] = useState<ApplicationError | null>(null);
   const untitledSequence = useRef(0);
-  const fileRequests = useRef(new Map<string, Promise<void>>());
+  const pathRequests = useRef(new Map<string, Promise<void>>());
   const saveRequests = useRef(new Map<string, Promise<boolean>>());
   const autoSaveTimers = useRef(new Map<string, AutoSaveTimer>());
   const mounted = useRef(false);
@@ -39,10 +39,10 @@ export function useWorkspace(autoSave: AutoSaveMode) {
 
   useEffect(() => {
     mounted.current = true;
-    const files = fileRequests.current;
+    const paths = pathRequests.current;
     return () => {
       mounted.current = false;
-      files.clear();
+      paths.clear();
     };
   }, []);
 
@@ -63,6 +63,7 @@ export function useWorkspace(autoSave: AutoSaveMode) {
     selectFolder,
     restoringWorkspace,
     refreshFolders,
+    addFolders,
     openFolder,
     removeFolder,
     initializeFolder,
@@ -138,6 +139,60 @@ export function useWorkspace(autoSave: AutoSaveMode) {
     [getFolders, insertFile, selectFolder],
   );
 
+  const openPath = useCallback(
+    async (selectedPath: string): Promise<void> => {
+      if (!isDesktopRuntime()) {
+        throw new ApplicationError("native_only", "Opening paths requires the desktop app.");
+      }
+
+      const key = workspacePathKey(selectedPath);
+      const existing = documentsRef.current.find(
+        (document) => document.path !== null && workspacePathKey(document.path) === key,
+      );
+      if (existing !== undefined) {
+        setActiveDocumentId(existing.id);
+        return;
+      }
+      const pending = pathRequests.current.get(key);
+      if (pending !== undefined) {
+        return await pending;
+      }
+
+      const request = readOpenTarget(selectedPath)
+        .then(async (target) => {
+          if (!mounted.current) return;
+          if (target.kind === "directory") {
+            await addFolders([target.path]);
+            return;
+          }
+          const payload = target.document;
+          const document: EditorDocument = {
+            id: `file:${workspacePathKey(payload.path)}`,
+            path: payload.path,
+            name: payload.name,
+            content: payload.content,
+            savedContent: payload.content,
+            languageId: languageForFile(payload.name, extensionLanguagesRef.current),
+            version: 1,
+          };
+          setDocuments((current) => {
+            const alreadyOpen = current.some((item) => item.id === document.id);
+            return alreadyOpen ? current : [...current, document];
+          });
+          updateActiveDocumentId(document.id);
+          const owner = workspaceFolderForPath(getFolders(), payload.path);
+          if (owner !== undefined) selectFolder(owner.path);
+          setCursor(INITIAL_CURSOR);
+        })
+        .finally(() => {
+          if (pathRequests.current.get(key) === request) pathRequests.current.delete(key);
+        });
+      pathRequests.current.set(key, request);
+      return await request;
+    },
+    [addFolders, getFolders, selectFolder, setActiveDocumentId],
+  );
+
   const openFile = useCallback(
     async (requestedPath?: string) => {
       try {
@@ -145,60 +200,13 @@ export function useWorkspace(autoSave: AutoSaveMode) {
           throw new ApplicationError("native_only", "Opening files requires the desktop app.");
         }
         const selectedPath =
-          requestedPath ??
-          (await open({
-            multiple: false,
-            directory: false,
-            title: "Open file",
-          }));
-        if (typeof selectedPath !== "string") {
-          return;
-        }
-
-        const key = workspacePathKey(selectedPath);
-        const existing = documentsRef.current.find(
-          (document) => document.path !== null && workspacePathKey(document.path) === key,
-        );
-        if (existing !== undefined) {
-          setActiveDocumentId(existing.id);
-          return;
-        }
-        const pending = fileRequests.current.get(key);
-        if (pending !== undefined) {
-          return await pending;
-        }
-
-        const request = readTextFile(selectedPath)
-          .then((payload) => {
-            if (!mounted.current) return;
-            const document: EditorDocument = {
-              id: `file:${workspacePathKey(payload.path)}`,
-              path: payload.path,
-              name: payload.name,
-              content: payload.content,
-              savedContent: payload.content,
-              languageId: languageForFile(payload.name, extensionLanguagesRef.current),
-              version: 1,
-            };
-            setDocuments((current) => {
-              const alreadyOpen = current.some((item) => item.id === document.id);
-              return alreadyOpen ? current : [...current, document];
-            });
-            updateActiveDocumentId(document.id);
-            const owner = workspaceFolderForPath(getFolders(), payload.path);
-            if (owner !== undefined) selectFolder(owner.path);
-            setCursor(INITIAL_CURSOR);
-          })
-          .finally(() => {
-            fileRequests.current.delete(key);
-          });
-        fileRequests.current.set(key, request);
-        return await request;
+          requestedPath ?? (await open({ multiple: false, directory: false, title: "Open file" }));
+        if (typeof selectedPath === "string") await openPath(selectedPath);
       } catch (caught) {
         reportError(caught);
       }
     },
-    [getFolders, reportError, selectFolder, setActiveDocumentId],
+    [openPath, reportError],
   );
 
   const configureFolder = useCallback(
@@ -401,6 +409,7 @@ export function useWorkspace(autoSave: AutoSaveMode) {
     createFile,
     createWorkspaceFile,
     openFile,
+    openPath,
     openFolder,
     toggleDirectory,
     updateDocumentContent,
