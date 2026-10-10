@@ -71,7 +71,7 @@ impl AppError {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandError {
     pub code: &'static str,

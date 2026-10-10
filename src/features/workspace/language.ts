@@ -1,57 +1,18 @@
-const LANGUAGE_BY_EXTENSION: Readonly<Record<string, string>> = {
-  bat: "bat",
-  c: "c",
-  cc: "cpp",
-  cpp: "cpp",
-  cs: "csharp",
-  css: "css",
-  dart: "dart",
-  go: "go",
-  h: "cpp",
-  hpp: "cpp",
-  htm: "html",
-  html: "html",
-  java: "java",
-  js: "javascript",
-  jsx: "javascript",
-  json: "json",
-  jsonc: "json",
-  kt: "kotlin",
-  kts: "kotlin",
-  less: "less",
-  lua: "lua",
-  md: "markdown",
-  php: "php",
-  ps1: "powershell",
-  py: "python",
-  rb: "ruby",
-  rs: "rust",
-  scss: "scss",
-  sh: "shell",
-  sql: "sql",
-  swift: "swift",
-  toml: "ini",
-  ts: "typescript",
-  tsx: "typescript",
-  vue: "html",
-  xml: "xml",
-  yaml: "yaml",
-  yml: "yaml",
-};
+import fileTypes from "../../../config/fileTypes.json";
 
-const LANGUAGE_BY_FILENAME: Readonly<Record<string, string>> = {
-  dockerfile: "dockerfile",
-  makefile: "makefile",
-  ".gitignore": "plaintext",
-  ".editorconfig": "ini",
-};
+const languageByExtension: Readonly<Record<string, string>> = fileTypes.extensions;
+const languageByFilename: Readonly<Record<string, string>> = fileTypes.fileNames;
 
 export function languageForFile(name: string): string {
   const normalized = name.toLowerCase();
-  const byName = LANGUAGE_BY_FILENAME[normalized];
+  const byName = Object.hasOwn(languageByFilename, normalized)
+    ? languageByFilename[normalized]
+    : undefined;
   if (byName !== undefined) {
     return byName;
   }
   const extension = normalized.includes(".") ? normalized.split(".").at(-1) : undefined;
-  return extension === undefined ? "plaintext" : (LANGUAGE_BY_EXTENSION[extension] ?? "plaintext");
+  return extension !== undefined && Object.hasOwn(languageByExtension, extension)
+    ? (languageByExtension[extension] ?? "plaintext")
+    : "plaintext";
 }

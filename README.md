@@ -7,6 +7,8 @@ editors while keeping its own small, explicit codebase.
 The first working foundation includes:
 
 - a native Tauri 2 shell for Windows;
+- Windows **Open with** and Explorer context-menu integration, default-app
+  discovery and ordered file opening in the existing editor window;
 - Monaco editing with explicit model and listener disposal;
 - native open-folder, versioned workspace restoration, open-file and atomic
   save flows;
@@ -33,7 +35,7 @@ research only and is never a build or runtime dependency.
 
 - Rust 1.97.1, edition 2024
 - Node.js 24 and npm 11.18
-- Tauri 2.11
+- Tauri 2.12
 - TypeScript 7.0
 - Vite 8.2
 - React 19.2
@@ -74,6 +76,7 @@ that preview.
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Opening files from Windows](docs/FILE-OPENING.md)
 - [Project rules](docs/RULES.md)
 - [Creating a translation](docs/TRANSLATING.md)
 - [Signed updates](docs/UPDATES.md)
