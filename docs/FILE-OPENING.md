@@ -50,6 +50,11 @@ only building the frontend does not update the executable registered with Window
 Close existing editor processes before replacing the installed application;
 an already-running process continues using its old executable code.
 
+For a portable copy, close the application and replace the executable at the path
+Windows already launches. This updates file launch handling while preserving
+existing associations. Registering the Explorer commands and supported file types
+still requires the NSIS installer.
+
 If Explorer creates another editor window and ignores the file, check which
 executable its association launches. An installed build without the native launch
 commands and the single-instance plugin cannot open forwarded files, even when
