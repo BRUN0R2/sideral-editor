@@ -5,28 +5,11 @@ const MAX_AUDIT_OUTPUT_BYTES = 8 * 1024 * 1024;
 
 const LINUX_TAURI_SCOPE =
   "Linux-only dependency of the official Tauri runtime; absent from the Windows dependency graph.";
-const TAURI_URL_PATTERN_SCOPE =
-  "Informational dependency inherited from the current official Tauri tauri-utils/urlpattern graph; no patched release is available.";
 
 const EXPECTED_WARNINGS = new Map(
   [
-    ["RUSTSEC-2024-0413", "atk", "0.18.2", "unmaintained", LINUX_TAURI_SCOPE],
-    ["RUSTSEC-2024-0416", "atk-sys", "0.18.2", "unmaintained", LINUX_TAURI_SCOPE],
-    ["RUSTSEC-2024-0412", "gdk", "0.18.2", "unmaintained", LINUX_TAURI_SCOPE],
-    ["RUSTSEC-2024-0418", "gdk-sys", "0.18.2", "unmaintained", LINUX_TAURI_SCOPE],
-    ["RUSTSEC-2024-0411", "gdkwayland-sys", "0.18.2", "unmaintained", LINUX_TAURI_SCOPE],
-    ["RUSTSEC-2024-0417", "gdkx11", "0.18.2", "unmaintained", LINUX_TAURI_SCOPE],
-    ["RUSTSEC-2024-0414", "gdkx11-sys", "0.18.2", "unmaintained", LINUX_TAURI_SCOPE],
-    ["RUSTSEC-2024-0415", "gtk", "0.18.2", "unmaintained", LINUX_TAURI_SCOPE],
-    ["RUSTSEC-2024-0420", "gtk-sys", "0.18.2", "unmaintained", LINUX_TAURI_SCOPE],
-    ["RUSTSEC-2024-0419", "gtk3-macros", "0.18.2", "unmaintained", LINUX_TAURI_SCOPE],
     ["RUSTSEC-2024-0370", "proc-macro-error", "1.0.4", "unmaintained", LINUX_TAURI_SCOPE],
     ["RUSTSEC-2024-0429", "glib", "0.18.5", "unsound", LINUX_TAURI_SCOPE],
-    ["RUSTSEC-2025-0081", "unic-char-property", "0.9.0", "unmaintained", TAURI_URL_PATTERN_SCOPE],
-    ["RUSTSEC-2025-0075", "unic-char-range", "0.9.0", "unmaintained", TAURI_URL_PATTERN_SCOPE],
-    ["RUSTSEC-2025-0080", "unic-common", "0.9.0", "unmaintained", TAURI_URL_PATTERN_SCOPE],
-    ["RUSTSEC-2025-0100", "unic-ucd-ident", "0.9.0", "unmaintained", TAURI_URL_PATTERN_SCOPE],
-    ["RUSTSEC-2025-0098", "unic-ucd-version", "0.9.0", "unmaintained", TAURI_URL_PATTERN_SCOPE],
   ].map(([advisoryId, packageName, version, kind, scope]) => [
     advisoryId,
     { packageName, version, kind, scope },
@@ -78,8 +61,13 @@ function parseAuditReport(output) {
     ).entries()) {
       const path = `report.warnings.${category}[${index}]`;
       const entry = requireObject(entryValue, path);
-      const advisory = requireObject(entry.advisory, `${path}.advisory`);
       const packageDetails = requireObject(entry.package, `${path}.package`);
+      if (category === "yanked") {
+        throw new Error(
+          `Yanked Rust package: ${requireString(packageDetails.name, `${path}.package.name`)}@${requireString(packageDetails.version, `${path}.package.version`)}. Update the lockfile.`,
+        );
+      }
+      const advisory = requireObject(entry.advisory, `${path}.advisory`);
       warnings.push({
         advisoryId: requireString(advisory.id, `${path}.advisory.id`),
         kind: requireString(entry.kind, `${path}.kind`),

@@ -6,6 +6,7 @@ mod desktop_integration;
 mod documents;
 mod error;
 mod external_links;
+mod file_opening;
 mod i18n;
 mod integrated_terminal;
 mod json_schemas;
@@ -181,6 +182,10 @@ where
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let context = tauri::generate_context!();
     let builder = tauri::Builder::default()
+        .manage(file_opening::FileOpeningState::from_initial_launch()?)
+        .plugin(tauri_plugin_single_instance::init(
+            file_opening::receive_launch,
+        ))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -235,11 +240,17 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             let main_window = app
                 .get_webview_window("main")
                 .ok_or_else(|| AppError::Runtime("main window is unavailable".to_owned()))?;
-            desktop_integration::apply_initial_window_state(&main_window)?;
+            let reveal_requested = app
+                .state::<file_opening::FileOpeningState>()
+                .requires_visible_startup()?;
+            desktop_integration::apply_initial_window_state(&main_window, reveal_requested)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             bootstrap_application,
+            file_opening::connect_file_opening,
+            file_opening::disconnect_file_opening,
+            file_opening::acknowledge_file_opening,
             desktop_integration::preferences::save_desktop_preferences,
             refresh_locales,
             set_language_preference,
@@ -287,6 +298,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             sideral_extensions::uninstall_extension,
         ])
         .on_window_event(|window, event| {
+            file_opening::handle_window_event(window, event);
             sideral_extensions::handle_window_event(window, event);
             desktop_integration::handle_main_window_event(window, event);
         })

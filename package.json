@@ -28,7 +28,8 @@
     "test": "vitest run",
     "lint": "biome check .",
     "format": "biome check --write .",
-    "architecture": "node scripts/check-extension-boundaries.mjs && node scripts/check-scrollbar-contract.mjs",
+    "architecture": "node scripts/check-extension-boundaries.mjs && node scripts/check-scrollbar-contract.mjs && node --test scripts/fileAssociations.test.mjs",
+    "desktop:associations": "node scripts/buildFileAssociations.mjs",
     "sdk:build": "tsc --project packages/sideral-extension-sdk/tsconfig.json && tsc --project packages/sideral-extension-testkit/tsconfig.json",
     "extension:tool": "cargo run --quiet --manifest-path src-tauri/Cargo.toml -p sideral-extension-tool --",
     "extension:hello:build": "npm run build --workspace sideral.hello",
@@ -53,7 +54,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/api": "2.12.2",
     "@tauri-apps/plugin-dialog": "2.7.2",
     "@tauri-apps/plugin-process": "2.3.1",
     "@tauri-apps/plugin-updater": "2.10.1",
@@ -70,17 +71,17 @@
     "@sideral/extension-sdk": "0.2.0",
     "@sideral/extension-testkit": "0.2.0",
     "@biomejs/biome": "2.5.8",
-    "@tauri-apps/cli": "2.11.4",
+    "@tauri-apps/cli": "2.12.1",
     "@types/node": "26.2.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "@vitejs/plugin-react": "6.0.5",
     "typescript": "7.0.2",
     "vite": "8.2.1",
-    "vitest": "4.1.10"
+    "vitest": "5.0.3"
   },
   "overrides": {
-    "dompurify": "3.4.13"
+    "dompurify": "3.4.16"
   },
   "allowScripts": {
     "esbuild@0.28.2": true

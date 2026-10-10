@@ -18,6 +18,7 @@ target is declared supported.
 
 ```text
 React workbench
+  ├─ file-opening feature ── acknowledged Channel requests ── native launch queue
   ├─ workspace feature ── explicit Tauri commands ── Rust filesystem modules
   ├─ i18n provider ────── one bootstrap command ─── locale/settings modules
   ├─ Monaco pane ──────── owned models + native JSON schema resolver
@@ -63,6 +64,21 @@ time-based speed. Release, Escape, lost capture, pointer cancellation, window
 blur, hidden document, closed source tab and unmount dispose capture, listeners,
 cursor feedback, the preview and the animation frame. Drop coordinates are
 checked again at release, so stale visual feedback cannot allow an outside drop.
+
+## Windows file opening
+
+File opening is an independent feature with a pure native launch parser, a bounded
+queue and an owned frontend Channel connection. The official Tauri single-instance
+plugin routes additional launches to that queue. The workbench supplies document
+opening and error callbacks after workspace restoration; the feature does not own
+documents or import workspace state. Requests remain pending until acknowledged,
+and stale client cleanup cannot disconnect a newer owner.
+
+The shared `config/fileTypes.json` catalog drives language selection and generated
+NSIS hooks. Windows registration offers Sideral as an available editor and checks
+installation ownership during removal. Default application choice remains with
+Windows. See [the file-opening contract](FILE-OPENING.md) for lifecycle, installer,
+limits and usage details.
 
 ## Extension system
 
@@ -392,10 +408,11 @@ The quality gate accepts no npm or Rust vulnerability. RustSec informational
 advisories are parsed from the live JSON report and compared with an exact,
 versioned policy in `scripts/check-rust-advisories.mjs`; a new, changed or
 resolved advisory fails the gate and requires an explicit review. The current
-reviewed set is inherited from official Tauri dependencies: GTK entries exist
-only in the Linux graph, while the Unicode entries come from
-`tauri-utils -> urlpattern` and have no patched release. None is silently
-ignored.
+reviewed set contains two Linux-only entries inherited from the official Tauri
+runtime (`proc-macro-error` and `glib`), absent from the Windows dependency graph.
+Tauri 2.12 removed the old Unicode dependencies, and the current advisory database
+no longer reports the retired GTK maintenance notices. Yanked packages also fail
+the gate with an explicit package/version diagnostic. None is silently ignored.
 
 ## Update security
 

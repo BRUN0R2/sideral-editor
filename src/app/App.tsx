@@ -15,6 +15,7 @@ import { IconButton } from "../components/IconButton";
 import { SideralLogo } from "../components/SideralLogo";
 import { StatusBar } from "../features/editor/StatusBar";
 import { Explorer } from "../features/explorer/Explorer";
+import { useFileOpening } from "../features/file-opening/useFileOpening";
 import { useI18n } from "../features/i18n/I18nProvider";
 import { SettingsView } from "../features/settings/SettingsView";
 import { useDesktopPreferences } from "../features/settings/useDesktopPreferences";
@@ -112,6 +113,17 @@ function Workbench({ extensionHostConnection }: AppProps) {
   const visibleTerminalOutputs = extensions.outputs.filter(
     (output) => !terminalPanel.closedOutputIds.includes(output.resourceId),
   );
+  const openExternalFile = useCallback(
+    async (path: string) => {
+      navigate({ kind: "showEditor" });
+      await workspace.openFile(path);
+    },
+    [workspace.openFile],
+  );
+  useFileOpening(bootstrap.runtime === "desktop" && !workspace.restoringWorkspace, {
+    openFile: openExternalFile,
+    reportError: workspace.reportError,
+  });
   const terminalAvailable = bootstrap.runtime === "desktop";
   const toggleTerminal = useCallback(() => {
     if (!terminalAvailable) {

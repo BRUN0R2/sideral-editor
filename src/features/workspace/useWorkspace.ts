@@ -396,6 +396,7 @@ export function useWorkspace(autoSave: AutoSaveMode) {
     savingIds,
     cursor,
     error,
+    reportError,
     restoringWorkspace,
     createFile,
     createWorkspaceFile,
