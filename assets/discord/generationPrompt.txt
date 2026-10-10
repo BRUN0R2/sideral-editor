@@ -17,4 +17,3 @@ Remove the entire graphite background, including all space outside the S and the
 Preserve the S exactly: original silhouette, sharp silver beveled edges, metallic texture, proportions, color, static lighting, position and scale within the same square canvas. Preserve only the actual opaque metal and fine antialiasing around its silhouette. No extra shadow rectangle, no background-colored halo, no background glow.
 Do not crop or recenter the canvas. Do not add any lightning, sparks, colored light, symbols, text, grid, checkerboard pattern or backdrop. The S must be fully opaque everywhere on its metal body so animated lightning composited BEHIND it will never show through. Outside and between the strokes, use genuinely transparent pixels.
 The cutout will be the stationary foreground layer in an animation. No different poses, no animation frames, no camera movement.
-
