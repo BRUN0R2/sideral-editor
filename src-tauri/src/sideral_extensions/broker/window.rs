@@ -4,6 +4,7 @@ use serde_json::Value;
 use sideral_extension_core::ExtensionManifest;
 use url::Url;
 
+use super::preview::validate_preview_content;
 use super::{
     CapabilityBroker, OutputResource, PreviewDocumentPayload, PreviewResource,
     PreviewUpdatePayload, lock,
@@ -12,7 +13,7 @@ use crate::sideral_extensions::{
     error::ExtensionError,
     protocol::{
         ExtensionClientInstruction, MessageSeverity, OutputChannelView, PreviewAppearance,
-        PreviewDocumentView,
+        PreviewDocumentView, PreviewNode,
     },
     service::SideralExtensionState,
 };
@@ -22,7 +23,6 @@ const MAX_OUTPUT_CHANNELS_PER_EXTENSION: usize = 32;
 const MAX_OUTPUT_CHANNEL_BYTES: usize = 1024 * 1024;
 const MAX_OUTPUT_APPEND_BYTES: usize = 64 * 1024;
 const MAX_PREVIEW_PANELS_PER_EXTENSION: usize = 8;
-const MAX_PREVIEW_CONTENT_BYTES: usize = 192 * 1024;
 const DEFAULT_SCROLLBAR_TRACK_SIZE: u16 = 14;
 const DEFAULT_SCROLLBAR_THUMB_SIZE: u16 = 10;
 const DEFAULT_SCROLLBAR_BUTTON_SIZE: u16 = 22;
@@ -388,21 +388,12 @@ fn owned_output_mut<'a>(
 
 pub(super) fn validate_preview_document(
     title: &str,
-    content: &str,
+    content: &[PreviewNode],
     source_uri: Option<&str>,
     appearance: Option<&PreviewAppearance>,
 ) -> Result<(), ExtensionError> {
     validate_text("preview title", title, 160)?;
-    if content.len() > MAX_PREVIEW_CONTENT_BYTES {
-        return Err(ExtensionError::InvalidRequest(format!(
-            "preview content exceeds {MAX_PREVIEW_CONTENT_BYTES} bytes"
-        )));
-    }
-    if content.contains('\0') {
-        return Err(ExtensionError::InvalidRequest(
-            "preview content cannot contain NUL bytes".to_owned(),
-        ));
-    }
+    validate_preview_content(content)?;
     if let Some(source_uri) = source_uri {
         if source_uri.len() > 4_096 {
             return Err(ExtensionError::InvalidRequest(

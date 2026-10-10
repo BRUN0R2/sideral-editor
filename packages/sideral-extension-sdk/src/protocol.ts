@@ -8,7 +8,7 @@ import type {
   WorkspaceContext,
 } from "./runtime";
 
-export type ExtensionProtocolVersion = 3;
+export type ExtensionProtocolVersion = 4;
 
 export type ExtensionRuntimeState =
   | "dormant"
@@ -75,6 +75,11 @@ export type HostToWorkerMessage =
       readonly workspaceAccess: WorkspaceAccess;
       readonly workspaceContext: WorkspaceContext | null;
       readonly windowActivityState: WindowActivityState;
+    })
+  | (WorkerEnvelope & {
+      readonly kind: "previewSourceChanged";
+      readonly resourceId: string;
+      readonly document: TextDocument;
     })
   | (WorkerEnvelope & {
       readonly kind: "workspaceContextChanged";

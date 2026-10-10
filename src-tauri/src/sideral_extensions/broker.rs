@@ -19,6 +19,7 @@ use tokio::sync::{Mutex as AsyncMutex, Notify, Semaphore};
 mod configuration;
 mod discord_presence;
 mod network;
+mod preview;
 mod process;
 mod storage;
 mod window;
@@ -42,7 +43,7 @@ use super::{
     error::ExtensionError,
     protocol::{
         BrokerMethod, BrokerRequest, BrokerResponse, MessageSeverity, PreviewAppearance,
-        PreviewFormat, ProtocolFailure,
+        PreviewFormat, PreviewNode, ProtocolFailure,
     },
     service::SideralExtensionState,
 };
@@ -149,7 +150,7 @@ struct PreviewResource {
     extension_id: String,
     title: String,
     format: PreviewFormat,
-    content: String,
+    content: Vec<PreviewNode>,
     source_uri: Option<String>,
     appearance: Option<PreviewAppearance>,
     visible: bool,
@@ -250,7 +251,7 @@ struct OutputAppendPayload {
 struct PreviewDocumentPayload {
     title: String,
     format: PreviewFormat,
-    content: String,
+    content: Vec<PreviewNode>,
     #[serde(default)]
     source_uri: Option<String>,
     #[serde(default)]
@@ -263,7 +264,7 @@ struct PreviewUpdatePayload {
     resource_id: String,
     title: String,
     format: PreviewFormat,
-    content: String,
+    content: Vec<PreviewNode>,
     #[serde(default)]
     source_uri: Option<String>,
     #[serde(default)]
@@ -807,7 +808,7 @@ mod tests {
         validate_store_key,
     };
     use crate::sideral_extensions::protocol::{
-        PreviewAppearance, PreviewFormat, PreviewScrollbarAppearance,
+        PreviewAppearance, PreviewFormat, PreviewNode, PreviewScrollbarAppearance,
     };
 
     type TestResult = Result<(), Box<dyn Error>>;
@@ -845,7 +846,7 @@ mod tests {
         assert!(
             validate_preview_document(
                 "README preview",
-                "# Safe Markdown",
+                &[PreviewNode::Text("Safe content".to_owned())],
                 Some("file:///D:/workspace/README.md"),
                 None,
             )
@@ -854,13 +855,21 @@ mod tests {
         assert!(
             validate_preview_document(
                 "Remote preview",
-                "content",
+                &[PreviewNode::Text("content".to_owned())],
                 Some("https://example.com/README.md"),
                 None,
             )
             .is_err()
         );
-        assert!(validate_preview_document("Invalid", "contains\0nul", None, None).is_err());
+        assert!(
+            validate_preview_document(
+                "Invalid",
+                &[PreviewNode::Text("contains\0nul".to_owned())],
+                None,
+                None
+            )
+            .is_err()
+        );
         let custom_scrollbar = PreviewScrollbarAppearance {
             track_size: Some(16),
             thumb_size: Some(10),
@@ -881,7 +890,13 @@ mod tests {
             scrollbar: Some(custom_scrollbar.clone()),
         };
         assert!(
-            validate_preview_document("Custom", "content", None, Some(&custom_appearance)).is_ok()
+            validate_preview_document(
+                "Custom",
+                &[PreviewNode::Text("content".to_owned())],
+                None,
+                Some(&custom_appearance)
+            )
+            .is_ok()
         );
         let narrow_appearance = PreviewAppearance {
             scrollbar: Some(PreviewScrollbarAppearance {
@@ -893,7 +908,13 @@ mod tests {
             }),
         };
         assert!(
-            validate_preview_document("Narrow", "content", None, Some(&narrow_appearance)).is_ok()
+            validate_preview_document(
+                "Narrow",
+                &[PreviewNode::Text("content".to_owned())],
+                None,
+                Some(&narrow_appearance)
+            )
+            .is_ok()
         );
         let invalid_appearance = PreviewAppearance {
             scrollbar: Some(PreviewScrollbarAppearance {
@@ -902,8 +923,13 @@ mod tests {
             }),
         };
         assert!(
-            validate_preview_document("Invalid", "content", None, Some(&invalid_appearance))
-                .is_err()
+            validate_preview_document(
+                "Invalid",
+                &[PreviewNode::Text("content".to_owned())],
+                None,
+                Some(&invalid_appearance)
+            )
+            .is_err()
         );
         let invalid_arrow = PreviewAppearance {
             scrollbar: Some(PreviewScrollbarAppearance {
@@ -915,7 +941,13 @@ mod tests {
             }),
         };
         assert!(
-            validate_preview_document("Invalid", "content", None, Some(&invalid_arrow)).is_err()
+            validate_preview_document(
+                "Invalid",
+                &[PreviewNode::Text("content".to_owned())],
+                None,
+                Some(&invalid_arrow)
+            )
+            .is_err()
         );
         let invalid_color = PreviewAppearance {
             scrollbar: Some(PreviewScrollbarAppearance {
@@ -924,7 +956,13 @@ mod tests {
             }),
         };
         assert!(
-            validate_preview_document("Invalid", "content", None, Some(&invalid_color)).is_err()
+            validate_preview_document(
+                "Invalid",
+                &[PreviewNode::Text("content".to_owned())],
+                None,
+                Some(&invalid_color)
+            )
+            .is_err()
         );
     }
 
@@ -935,8 +973,8 @@ mod tests {
         let preview = |title: &str, visible: bool| PreviewResource {
             extension_id: "sample.extension".to_owned(),
             title: title.to_owned(),
-            format: PreviewFormat::Markdown,
-            content: format!("# {title}"),
+            format: PreviewFormat::Tree,
+            content: vec![PreviewNode::Text(title.to_owned())],
             source_uri: None,
             appearance: None,
             visible,
@@ -962,8 +1000,8 @@ mod tests {
         let preview = PreviewResource {
             extension_id: "sample.extension".to_owned(),
             title: "Second document".to_owned(),
-            format: PreviewFormat::Markdown,
-            content: "# Second document".to_owned(),
+            format: PreviewFormat::Tree,
+            content: vec![PreviewNode::Text("Second document".to_owned())],
             source_uri: Some("file:///D:/workspace/SECOND.md".to_owned()),
             appearance: None,
             visible: true,

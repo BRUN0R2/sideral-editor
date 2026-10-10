@@ -126,8 +126,8 @@ describe("Sideral extension test kit", () => {
       async activate(context, api) {
         const preview = api.window.createPreviewPanel({
           title: "Custom preview",
-          format: "markdown",
-          content: "# Preview",
+          format: "tree",
+          content: ["Preview"],
           appearance,
         });
         context.subscriptions.add(preview);

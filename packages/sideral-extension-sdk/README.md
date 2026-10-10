@@ -1,7 +1,7 @@
 # Sideral Extension SDK
 
 This package contains the versioned compile-time contracts for Sideral manifest
-v1, API v1 and host/Worker protocol v3. Install it as a development dependency
+v1, API v1 and host/Worker protocol v4. Install it as a development dependency
 and use `import type`; it contributes zero runtime bytes to an extension bundle.
 Projects created by the official scaffold receive an exact local snapshot of
 this package, so they are immediately installable and buildable outside the
@@ -53,8 +53,8 @@ export const activate: ExtensionModule["activate"] = (context, api) => {
     api.commands.registerTextEditorCommand("acme.sample.preview", async (document) => {
       const panel = api.window.createPreviewPanel({
         title: "Preview",
-        format: "markdown",
-        content: document.content,
+        format: "tree",
+        content: [{ key: "document", tag: "pre", children: [document.content] }],
         sourceUri: document.uri
       });
       context.subscriptions.add(panel);

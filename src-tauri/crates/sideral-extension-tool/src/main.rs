@@ -593,7 +593,7 @@ fn scaffold_package_json(extension_id: &str) -> String {
     "@sideral/extension-testkit": "file:vendor/sideral-extension-testkit",
     "rolldown": "1.2.3",
     "typescript": "7.0.2",
-    "vitest": "4.1.10"
+    "vitest": "5.0.3"
   }}
 }}
 "#

@@ -4,15 +4,24 @@
     "lib": ["ES2024", "WebWorker"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "paths": {
+      "@sideral/extension-sdk": ["../../build/packages/sideral-extension-sdk/dist/index.d.ts"],
+      "@sideral/extension-sdk/protocol": [
+        "../../build/packages/sideral-extension-sdk/dist/protocol.d.ts"
+      ],
+      "@sideral/extension-testkit": [
+        "../../build/packages/sideral-extension-testkit/dist/index.d.ts"
+      ]
+    },
     "isolatedModules": true,
     "moduleDetection": "force",
     "strict": true,
-    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
     "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": true,
-    "noEmit": true,
     "verbatimModuleSyntax": true,
     "forceConsistentCasingInFileNames": true
   },

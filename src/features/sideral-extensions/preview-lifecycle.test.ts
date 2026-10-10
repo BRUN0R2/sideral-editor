@@ -70,8 +70,8 @@ function preview(
     ...overrides,
     extensionId: "sideral.markdown-preview",
     title: "Preview",
-    format: "markdown",
-    content: "# Preview",
+    format: "tree",
+    content: ["Preview"],
     appearance: null,
     visible: true,
   };

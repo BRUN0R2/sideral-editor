@@ -12,7 +12,9 @@ import type {
   OutputChannel,
   PreviewAppearance,
   PreviewDocument,
+  PreviewNode,
   PreviewPanel,
+  PreviewSourceDocumentListener,
   ProcessRequest,
   ProcessResult,
   TextDocument,
@@ -38,7 +40,7 @@ export interface TestOutputChannel {
 export interface TestPreviewPanel {
   readonly title: string;
   readonly format: PreviewDocument["format"];
-  readonly content: string;
+  readonly content: readonly PreviewNode[];
   readonly sourceUri: string | undefined;
   readonly appearance: PreviewAppearance | undefined;
   readonly visible: boolean;
@@ -85,6 +87,7 @@ export interface ExtensionHarness {
   ): Promise<JsonValue | undefined>;
   updateWorkspaceContext(context: WorkspaceContext): Promise<void>;
   updateWindowActivityState(state: WindowActivityState): Promise<void>;
+  updatePreviewSource(document: TextDocument): Promise<void>;
   dispose(): Promise<void>;
 }
 
@@ -212,6 +215,18 @@ class Harness implements ExtensionHarness {
       for (const listener of this.#windowActivityStateListeners) {
         await listener(state);
       }
+    });
+    this.#extensionOperationQueue = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    await operation;
+  }
+
+  async updatePreviewSource(document: TextDocument): Promise<void> {
+    if (this.#disposed) throw new Error("The extension harness is disposed.");
+    const operation = this.#extensionOperationQueue.then(async () => {
+      for (const preview of this.#previews) await preview.updateSource(document);
     });
     this.#extensionOperationQueue = operation.then(
       () => undefined,
@@ -470,25 +485,37 @@ class MutableOutputChannel implements OutputChannel, TestOutputChannel {
 class MutablePreviewPanel implements PreviewPanel, TestPreviewPanel {
   title: string;
   format: PreviewDocument["format"];
-  content: string;
+  content: readonly PreviewNode[];
   sourceUri: string | undefined;
   appearance: PreviewAppearance | undefined;
   visible = false;
   disposed = false;
+  readonly #sourceListeners = new Set<PreviewSourceDocumentListener>();
 
   constructor(document: PreviewDocument) {
     this.title = document.title;
     this.format = document.format;
-    this.content = document.content;
+    this.content = structuredClone(document.content);
     this.sourceUri = document.sourceUri;
     this.appearance = clonePreviewAppearance(document.appearance);
+  }
+
+  onDidChangeSourceDocument(listener: PreviewSourceDocumentListener): Disposable {
+    this.#assertActive();
+    this.#sourceListeners.add(listener);
+    return once(() => this.#sourceListeners.delete(listener));
+  }
+
+  async updateSource(document: TextDocument): Promise<void> {
+    if (this.disposed || this.sourceUri !== document.uri) return;
+    for (const listener of this.#sourceListeners) await listener(structuredClone(document));
   }
 
   async update(document: PreviewDocument): Promise<void> {
     this.#assertActive();
     this.title = document.title;
     this.format = document.format;
-    this.content = document.content;
+    this.content = structuredClone(document.content);
     this.sourceUri = document.sourceUri;
     this.appearance = clonePreviewAppearance(document.appearance);
   }
@@ -512,6 +539,7 @@ class MutablePreviewPanel implements PreviewPanel, TestPreviewPanel {
   dispose(): void {
     this.disposed = true;
     this.visible = false;
+    this.#sourceListeners.clear();
   }
 
   #assertActive(): void {

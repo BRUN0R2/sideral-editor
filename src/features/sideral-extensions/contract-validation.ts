@@ -50,6 +50,7 @@ import type {
   RuntimeDiagnostic,
   SideralExtensionInspection,
 } from "./contracts";
+import { decodePreviewContent } from "./preview-content";
 
 const RUNTIME_STATES: readonly ExtensionRuntimeState[] = [
   "dormant",
@@ -890,8 +891,8 @@ function decodePreviewDocument(value: unknown, path: string): PreviewDocumentVie
     resourceId: stringValue(required(source, "resourceId", path), `${path}.resourceId`),
     extensionId: stringValue(required(source, "extensionId", path), `${path}.extensionId`),
     title: stringValue(required(source, "title", path), `${path}.title`),
-    format: literal(required(source, "format", path), "markdown", `${path}.format`),
-    content: stringValue(required(source, "content", path), `${path}.content`),
+    format: literal(required(source, "format", path), "tree", `${path}.format`),
+    content: decodePreviewContent(required(source, "content", path), `${path}.content`),
     sourceUri: nullable(required(source, "sourceUri", path), `${path}.sourceUri`, stringValue),
     appearance: nullable(
       required(source, "appearance", path),

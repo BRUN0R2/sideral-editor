@@ -45,6 +45,7 @@ research only and is never a build or runtime dependency.
 - Tauri 2.12
 - TypeScript 7.0
 - Vite 8.2
+- Vitest 5.0
 - React 19.2
 - Monaco Editor 0.56
 
@@ -63,18 +64,38 @@ On Windows, run `sideral.cmd` from the project root for a small menu that starts
 the Tauri development mode, compiles a release, cleans build artifacts or exits.
 Before development starts, the launcher reclaims port `1420` only from a stale
 Vite process whose command line belongs to this project; unrelated listeners are
-reported and left untouched.
+reported and left untouched. A local release also creates installable,
+development-signed `.sideralx` files under `build/extensions/packages`; the
+development publisher key is generated once outside the repository under the
+current user's local application-data directory and reused on later builds.
 
 Useful validation commands:
 
 ```powershell
 npm run check
 npm run build
+npm run extensions:package:dev
 ```
 
 `npm run check` is the complete local and CI gate: architecture contracts,
-format/lint, strict type checking, SDK and examples, TypeScript and Rust tests,
+format/lint, strict type checking, SDK and extensions, TypeScript and Rust tests,
 Clippy, production bundle budgets and deterministic dependency-advisory checks.
+
+All application build artifacts are rooted at `build/`: Cargo and Tauri use
+`build/cargo`, Vite uses `build/frontend`, and first-party extension staging uses
+`build/extensions`. Compiled SDK packages use `build/packages`. This layout is
+enforced by `npm run architecture`; do not introduce a project-level `target/`
+or source-local `dist/` output. `npm run clean` removes the complete generated
+tree after validating that the deletion target is exactly the root `build/`
+directory.
+
+Extension implementations live under `extensions/` and use the public SDK.
+The repository shares one npm installation and lockfile, with build tools
+pinned at the root to avoid duplicate toolchains. `npm run build` type-checks the
+editor, builds the SDK packages, stages every first-party extension and bundles
+the frontend before Tauri compiles the native application. See
+[the extension directory](extensions/README.md) for development and packaging
+commands.
 
 `npm run dev` opens an explicit browser-only visual preview. Native file,
 translation-folder and updater operations intentionally remain unavailable in

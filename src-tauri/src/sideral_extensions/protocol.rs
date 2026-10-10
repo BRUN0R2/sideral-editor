@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sideral_extension_core::{
@@ -5,7 +7,7 @@ use sideral_extension_core::{
     KeybindingContribution, LanguageContribution, PermissionSet, WorkspaceAccess,
 };
 
-pub const EXTENSION_PROTOCOL_VERSION: u16 = 3;
+pub const EXTENSION_PROTOCOL_VERSION: u16 = 4;
 pub const WORKER_START_DEADLINE_MILLISECONDS: u64 = 5_000;
 pub const WORKER_ACTIVATION_DEADLINE_MILLISECONDS: u64 = 10_000;
 pub const COMMAND_EXECUTION_DEADLINE_MILLISECONDS: u64 = 30_000;
@@ -345,7 +347,39 @@ pub struct OutputChannelView {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PreviewFormat {
-    Markdown,
+    Tree,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum PreviewNode {
+    Text(String),
+    Element(PreviewElement),
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PreviewElement {
+    pub key: String,
+    pub tag: String,
+    pub children: Vec<PreviewNode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attributes: Option<PreviewAttributes>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub style: BTreeMap<String, String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PreviewAttributes {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub href: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -395,7 +429,7 @@ pub struct PreviewDocumentView {
     pub extension_id: String,
     pub title: String,
     pub format: PreviewFormat,
-    pub content: String,
+    pub content: Vec<PreviewNode>,
     pub source_uri: Option<String>,
     pub appearance: Option<PreviewAppearance>,
     pub visible: bool,
@@ -587,7 +621,7 @@ mod tests {
     use super::{
         ActivationReason, EXTENSION_PROTOCOL_VERSION, ExtensionClientInstruction, HostEvent,
         HostInstruction, OutputChannelView, PreviewAppearance, PreviewDocumentView, PreviewFormat,
-        PreviewScrollbarAppearance,
+        PreviewNode, PreviewScrollbarAppearance,
     };
 
     #[test]
@@ -700,8 +734,8 @@ mod tests {
                 resource_id: "preview:sample:1".to_owned(),
                 extension_id: "sample.extension".to_owned(),
                 title: "README preview".to_owned(),
-                format: PreviewFormat::Markdown,
-                content: "# README".to_owned(),
+                format: PreviewFormat::Tree,
+                content: vec![PreviewNode::Text("README".to_owned())],
                 source_uri: Some("file:///D:/workspace/README.md".to_owned()),
                 appearance: Some(PreviewAppearance {
                     scrollbar: Some(PreviewScrollbarAppearance {
@@ -733,8 +767,8 @@ mod tests {
                     "resourceId": "preview:sample:1",
                     "extensionId": "sample.extension",
                     "title": "README preview",
-                    "format": "markdown",
-                    "content": "# README",
+                    "format": "tree",
+                    "content": ["README"],
                     "sourceUri": "file:///D:/workspace/README.md",
                     "appearance": {
                         "scrollbar": {

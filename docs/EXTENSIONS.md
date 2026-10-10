@@ -32,9 +32,16 @@ key, exact package hash and capabilities, then trust and install it. The tool
 never overwrites a key, package or scaffold directory. Both `check` and `pack`
 reject an `engines.sideral` range that excludes the Sideral version targeted by
 the tool, so the supported workflow cannot produce an incompatible package.
-`examples/hello-sideral`
-is the minimal reference and `examples/markdown-preview` is the first visual,
-document-aware reference extension. `extensions/amxx-pawn` is a complete
+Repository extension projects live in `extensions/<name>`, with their own
+manifest, source, tests and runtime dependency declarations. They share npm
+workspaces, one root lockfile and a hoisted installation of the pinned build
+tools. Run `npm ci` at the root, then `npm run sdk:build` before checking
+extensions. The main application build rebuilds and stages all first-party
+extensions under `build/extensions`; focused tests and package validation remain
+part of `npm run extensions:check`. Installed extension packages contain no
+development dependencies or `node_modules`.
+`extensions/markdown-preview` owns its Markdown parser and visual presentation.
+`extensions/amxx-pawn` is a complete
 third-party-style compiler extension with its own tests and package manifest.
 `extensions/discord-presence` demonstrates metadata-only workspace events,
 a signed literal Application ID and a local native integration without a
@@ -46,6 +53,35 @@ outside this repository without waiting for registry publication. The `check`
 command validates the strict manifest, built Worker, assets and size budgets
 without creating or requiring a signing key. Vendored development files never
 enter the `.sideralx` package.
+
+For repository extensions, run the named root build command and pass its staged
+directory to the package tool. For example:
+
+```powershell
+npm run extension:discord:build
+npm run extension:tool -- check build/extensions/discord-presence
+npm run extension:tool -- pack build/extensions/discord-presence D:\private\sideral-key.json build/extensions/sideral.discord-presence.sideralx
+```
+
+The manifest entry remains `dist/extension.mjs` because it describes the path
+inside the signed package; the physical staging root remains the repository's
+top-level `build/` directory.
+
+For a normal local build, package every first-party extension with one stable
+development publisher identity:
+
+```powershell
+npm run extensions:package:dev
+```
+
+The command creates or reuses
+`%LOCALAPPDATA%\dev.sideral.editor\development\extension-signing-key.json` and
+writes the installable files to `build/extensions/packages`. The private key is
+never copied into the repository or build output. The first installation asks
+the user to trust that development publisher key; subsequent packages reuse the
+same identity. Production packaging uses `npm run extensions:package` and
+requires `SIDERAL_EXTENSION_SIGNING_KEY` to point to the existing production
+key, so release builds never invent or rotate publisher identity.
 
 ## Manifest v1
 
@@ -249,18 +285,26 @@ focus. Closing a channel tab hides its workbench view without disposing the
 extension-owned channel; a later `show()` reveals it again. Output channels
 never inject text into the interactive shell PTY.
 
-Visual extensions create typed preview resources rather than sending HTML to
-the workbench. A Markdown panel receives Markdown text plus an optional source
-URI. When that URI belongs to an open editor document, the workbench renders
-the current in-memory content, including unsaved changes, without polling or
-repeated full-document IPC. The host parses Markdown into React elements; raw
-HTML is displayed as text and remote images are not fetched. HTTP(S) links use
-the native external-link boundary. Relative document links are resolved only
-from a local `file:` source URI and open through the editor's native file
-boundary; unsupported schemes remain inert. Fenced blocks identified as
-`powershell` receive a compact
-PowerShell code-block presentation, but their contents remain inert, selectable
-text and are never executed.
+Visual extensions create typed preview resources with `format: "tree"`.
+`content` is an array of text strings and elements with a stable `key`, an
+allowed semantic `tag`, `children`, optional bounded `attributes` and optional
+inert inline `style` properties. Extensions own parsing and document
+presentation; the editor renders the validated tree without knowing its source
+language. Rust and the client reject executable elements, event handlers,
+unsupported links, resource-loading CSS, positioning, duplicate sibling keys
+and content beyond 192 KiB, 10,000 nodes or 24 levels of nesting.
+
+HTTP(S) links use the native external-link boundary and local `file:` links
+open through the editor's file boundary. The extension resolves relative links
+against its source document. Arbitrary HTML and global CSS are never injected
+into the workbench. Markdown Preview keeps raw HTML and images inert and owns
+its GFM and PowerShell code-block presentation inside its Worker.
+
+`panel.onDidChangeSourceDocument` delivers the current in-memory source,
+including unsaved edits, only to the owning active extension with workspace
+read access. The listener produces a new visual tree with `panel.update`.
+Events are generation-scoped and serialized with commands; they are not
+broadcast to other Workers and do not use polling or read the file again.
 
 A panel with `sourceUri` is rendered only beside that active editor document.
 Switching to another open tab removes the preview surface without destroying
@@ -276,12 +320,20 @@ again. The native resource remains bounded and extension-owned until
 api.commands.registerTextEditorCommand("acme.sample.preview", async (document) => {
   const panel = api.window.createPreviewPanel({
     title: "Preview",
-    format: "markdown",
-    content: document.content,
+    format: "tree",
+    content: [{ key: "document", tag: "pre", children: [document.content] }],
     sourceUri: document.uri
   });
   await panel.show();
   context.subscriptions.add(panel);
+  context.subscriptions.add(panel.onDidChangeSourceDocument(async (source) => {
+    await panel.update({
+      title: "Preview",
+      format: "tree",
+      content: [{ key: "document", tag: "pre", children: [source.content] }],
+      sourceUri: source.uri
+    });
+  }));
 });
 ```
 
@@ -350,9 +402,9 @@ provided explicitly, so a test cannot accidentally access the machine. The
 official scaffold pins the matching testkit locally together with the SDK.
 
 Root type checking resolves the in-repository SDK and testkit directly from
-their sources. Generated declarations are built before workspace checks and
-runtime tests, so a clean `npm ci` never depends on stale or pre-existing
-`dist` output.
+their sources. Extensions use these public packages, whose declarations and
+harness are built explicitly with `npm run sdk:build` before extension checks.
+CI installs every workspace from the shared root lockfile with `npm ci`.
 
 ```ts
 import { createExtensionHarness } from "@sideral/extension-testkit";
@@ -448,7 +500,7 @@ See `extensions/discord-presence/README.md` for setup and development commands.
 
 `manifestVersion`, `apiVersion` and the host protocol are independent. Manifest
 and API version 1 reject unknown versions instead of guessing a fallback. The
-internal host/Worker protocol is version 3 and is upgraded atomically with the
+internal host/Worker protocol is version 4 and is upgraded atomically with the
 editor; there is no compatibility branch. `engines.sideral`
 is checked during project validation and packaging, then again before
 installation, enablement, rollback and bundle loading.

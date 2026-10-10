@@ -1,5 +1,6 @@
 import type {
   ProtocolFailure,
+  TextDocument,
   WindowActivityState,
   WorkspaceContext,
 } from "@sideral/extension-sdk";
@@ -28,6 +29,10 @@ export class ExtensionHostSupervisor {
   #workspaceContext: WorkspaceContext = { workspaceName: null, activeDocument: null };
   #windowActivityState: WindowActivityState = "active";
   #disposed = false;
+
+  updatePreviewSource(extensionId: string, resourceId: string, document: TextDocument): void {
+    if (!this.#disposed) this.#workers.get(extensionId)?.updatePreviewSource(resourceId, document);
+  }
 
   updateWorkspaceContext(context: WorkspaceContext): void {
     if (this.#disposed || sameWorkspaceContext(this.#workspaceContext, context)) {

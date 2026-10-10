@@ -37,7 +37,7 @@ import {
 import { UpdateModal } from "../features/updates/UpdateModal";
 import { UpdateProvider, useUpdates } from "../features/updates/UpdateProvider";
 import { type WorkbenchResourceTab, WorkbenchTabs } from "../features/workbench/WorkbenchTabs";
-import { editorDocumentUri } from "../features/workspace/document-uri";
+import { editorDocumentUri, toExtensionTextDocument } from "../features/workspace/document-uri";
 import { useWorkspace } from "../features/workspace/useWorkspace";
 import { installWebViewShortcutGuard } from "./webview-shortcuts";
 import {
@@ -52,9 +52,9 @@ const loadEditorPane = async () => {
   return { default: editorModule.EditorPane };
 };
 const EditorPane = lazy(loadEditorPane);
-const MarkdownPreview = lazy(async () => {
-  const module = await import("../features/sideral-extensions/MarkdownPreview");
-  return { default: module.MarkdownPreview };
+const ExtensionPreview = lazy(async () => {
+  const module = await import("../features/sideral-extensions/ExtensionPreview");
+  return { default: module.ExtensionPreview };
 });
 const IntegratedTerminal = lazy(async () => {
   const module = await import("../features/terminal/IntegratedTerminal");
@@ -263,6 +263,37 @@ function Workbench({ extensionHostConnection }: AppProps) {
       : (workspace.documents.find(
           (document) => editorDocumentUri(document) === visiblePreview.sourceUri,
         ) ?? null);
+  const previewResourceId = visiblePreview?.resourceId;
+  const previewExtensionId = visiblePreview?.extensionId;
+  useEffect(() => {
+    if (
+      extensionHostConnection === null ||
+      previewSource === null ||
+      previewResourceId === undefined ||
+      previewExtensionId === undefined
+    )
+      return;
+    let current = true;
+    void extensionHostConnection
+      .then((host) => {
+        if (current)
+          host.updatePreviewSource(
+            previewExtensionId,
+            previewResourceId,
+            toExtensionTextDocument(previewSource),
+          );
+      })
+      .catch(extensions.reportError);
+    return () => {
+      current = false;
+    };
+  }, [
+    extensions.reportError,
+    extensionHostConnection,
+    previewExtensionId,
+    previewResourceId,
+    previewSource,
+  ]);
   const openPreviewDocument = useCallback(
     (path: string) => {
       navigate({ kind: "showEditor" });
@@ -440,11 +471,11 @@ function Workbench({ extensionHostConnection }: AppProps) {
                       />
                     </div>
                     {visiblePreview === null ? null : (
-                      <Suspense fallback={<aside className="markdown-preview" aria-busy="true" />}>
-                        <MarkdownPreview
+                      <Suspense fallback={<aside className="extension-preview" aria-busy="true" />}>
+                        <ExtensionPreview
                           preview={visiblePreview}
-                          content={previewSource?.content ?? visiblePreview.content}
                           onOpenDocument={openPreviewDocument}
+                          onError={extensions.reportError}
                           onClose={() => {
                             void extensions
                               .dismissPreview(visiblePreview.resourceId, visiblePreview.sourceUri)

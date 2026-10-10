@@ -18,6 +18,7 @@ import type {
   PreviewDocument,
   PreviewPanel,
   PreviewScrollbarAppearance,
+  PreviewSourceDocumentListener,
   ProcessRequest,
   ProcessResult,
   ProtocolFailure,
@@ -35,6 +36,7 @@ import {
   safeInteger,
   stringRecord,
 } from "../../../lib/runtime-validation";
+import { decodePreviewContent } from "../preview-content";
 import { decodeHostToWorkerMessage } from "./protocol-validation";
 import { EXTENSION_PROTOCOL_VERSION as PROTOCOL_VERSION } from "./protocol-version";
 
@@ -95,6 +97,10 @@ const subscriptions: Disposable[] = [];
 const localCommandStack: string[] = [];
 const windowActivityStateListeners = new Set<WindowActivityStateListener>();
 const workspaceContextListeners = new Set<WorkspaceContextListener>();
+const previewSources = new Map<
+  string,
+  { sourceUri: string | undefined; readonly listeners: Set<PreviewSourceDocumentListener> }
+>();
 const extensionCancellation = new AbortController();
 const cleanupCancellation = new AbortController();
 
@@ -136,6 +142,21 @@ async function handleMessage(value: unknown): Promise<void> {
     return;
   }
   switch (message.kind) {
+    case "previewSourceChanged": {
+      await enqueueExtensionOperation(async () => {
+        const source = previewSources.get(message.resourceId);
+        if (
+          !activated ||
+          deactivating ||
+          source?.sourceUri !== message.document.uri ||
+          !["read", "readWrite"].includes(workspaceAccess)
+        )
+          return;
+        for (const listener of source.listeners)
+          await listener(Object.freeze({ ...message.document }));
+      });
+      return;
+    }
     case "workspaceContextChanged": {
       const operation = enqueueExtensionOperation(() => updateWorkspaceContext(message.context));
       await operation;
@@ -750,11 +771,16 @@ function createOutputChannel(name: string): OutputChannel {
 }
 
 function createPreviewPanel(document: PreviewDocument): PreviewPanel {
+  const source = {
+    sourceUri: document.sourceUri,
+    listeners: new Set<PreviewSourceDocumentListener>(),
+  };
   const resource = brokerRequest("window.preview.create", previewPayload(document)).then(
     (value) => {
       if (typeof value !== "string") {
         throw new Error("The preview broker returned an invalid resource id.");
       }
+      previewSources.set(value, source);
       return value;
     },
   );
@@ -773,12 +799,26 @@ function createPreviewPanel(document: PreviewDocument): PreviewPanel {
   };
 
   return {
+    onDidChangeSourceDocument(listener) {
+      if (disposed) throw new Error("The preview panel is disposed.");
+      if (typeof listener !== "function")
+        throw new TypeError("The preview source listener must be a function.");
+      if (!["read", "readWrite"].includes(workspaceAccess))
+        throw new Error("Preview source events require workspace read access.");
+      source.listeners.add(listener);
+      return {
+        dispose() {
+          source.listeners.delete(listener);
+        },
+      };
+    },
     update(nextDocument) {
       return enqueue(async (resourceId) => {
         await brokerRequest("window.preview.update", {
           resourceId,
           ...previewPayload(nextDocument),
         });
+        source.sourceUri = nextDocument.sourceUri;
       });
     },
     show() {
@@ -803,6 +843,10 @@ function createPreviewPanel(document: PreviewDocument): PreviewPanel {
     dispose() {
       if (disposal === null) {
         disposed = true;
+        source.listeners.clear();
+        void resource
+          .then((resourceId) => previewSources.delete(resourceId))
+          .catch(() => undefined);
         disposal = extensionCancellation.signal.aborted
           ? Promise.resolve()
           : tail.then(async () => {
@@ -819,7 +863,7 @@ function previewPayload(document: PreviewDocument): JsonObject {
   return {
     title: document.title,
     format: document.format,
-    content: document.content,
+    content: decodeJsonValue(decodePreviewContent(document.content), "preview content"),
     ...(document.sourceUri === undefined ? {} : { sourceUri: document.sourceUri }),
     ...(document.appearance === undefined
       ? {}

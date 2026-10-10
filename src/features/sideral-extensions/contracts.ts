@@ -13,6 +13,7 @@ import type {
   NetworkPermission,
   PermissionSet,
   PreviewAppearance,
+  PreviewNode,
   ProcessPermission,
   ProtocolFailure,
   TextDocument,
@@ -282,8 +283,8 @@ export interface PreviewDocumentView {
   readonly resourceId: string;
   readonly extensionId: string;
   readonly title: string;
-  readonly format: "markdown";
-  readonly content: string;
+  readonly format: "tree";
+  readonly content: readonly PreviewNode[];
   readonly sourceUri: string | null;
   readonly appearance: PreviewAppearance | null;
   readonly visible: boolean;

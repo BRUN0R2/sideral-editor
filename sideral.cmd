@@ -57,24 +57,19 @@ if errorlevel 1 goto action_failed
 echo.
 echo Compilando a release do Sideral Editor...
 echo.
-call npm run tauri build
+call npm run release:local
 set "ACTION_EXIT=%errorlevel%"
 goto action_finished
 
 :clean
 set "ACTION_EXIT=0"
-call :require_tool cargo
+call :require_tool npm
 if errorlevel 1 goto action_failed
 
 echo.
 echo Limpando os artefatos de build...
-call cargo clean --manifest-path "%PROJECT_DIR%src-tauri\Cargo.toml"
+call npm run clean
 set "ACTION_EXIT=%errorlevel%"
-
-if exist "%PROJECT_DIR%dist" (
-  rmdir /s /q "%PROJECT_DIR%dist"
-  if exist "%PROJECT_DIR%dist" set "ACTION_EXIT=1"
-)
 goto action_finished
 
 :require_tool

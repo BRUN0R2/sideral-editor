@@ -21,6 +21,7 @@ import {
 } from "../../../lib/runtime-validation";
 import { decodeActivationReason, decodeTextDocument } from "../contract-validation";
 import type { HostInstruction } from "../contracts";
+import { EXTENSION_PROTOCOL_VERSION } from "./protocol-version";
 
 const BROKER_METHODS: readonly BrokerMethod[] = [
   "commands.execute",
@@ -227,7 +228,7 @@ export function decodeWorkerToHostMessage(value: unknown): WorkerToHostMessage {
   );
   const protocolVersion = literal(
     required(envelope, "protocolVersion", path),
-    3,
+    EXTENSION_PROTOCOL_VERSION,
     `${path}.protocolVersion`,
   );
   const generation = safeInteger(required(envelope, "generation", path), `${path}.generation`);
@@ -320,6 +321,7 @@ export function decodeHostToWorkerMessage(value: unknown): HostToWorkerMessage {
     [
       "initialize",
       "workspaceContextChanged",
+      "previewSourceChanged",
       "windowActivityStateChanged",
       "activate",
       "executeCommand",
@@ -331,7 +333,7 @@ export function decodeHostToWorkerMessage(value: unknown): HostToWorkerMessage {
   );
   const protocolVersion = literal(
     required(envelope, "protocolVersion", path),
-    3,
+    EXTENSION_PROTOCOL_VERSION,
     `${path}.protocolVersion`,
   );
   const generation = safeInteger(required(envelope, "generation", path), `${path}.generation`);
@@ -385,6 +387,26 @@ export function decodeHostToWorkerMessage(value: unknown): HostToWorkerMessage {
         ["active", "idle"],
         `${path}.windowActivityState`,
       ),
+    };
+  }
+  if (kind === "previewSourceChanged") {
+    const source = record(value, path, [
+      "kind",
+      "protocolVersion",
+      "generation",
+      "resourceId",
+      "document",
+    ]);
+    return {
+      kind,
+      protocolVersion,
+      generation,
+      resourceId: boundedString(
+        required(source, "resourceId", path),
+        `${path}.resourceId`,
+        MAX_PROTOCOL_TEXT_BYTES,
+      ),
+      document: decodeTextDocument(required(source, "document", path), `${path}.document`),
     };
   }
   if (kind === "workspaceContextChanged") {

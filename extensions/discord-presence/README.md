@@ -61,8 +61,10 @@ operational target uses the native Windows named pipe directly.
 ## Develop
 
 ```powershell
+npm ci
+npm run sdk:build
 npm run typecheck --workspace sideral.discord-presence
 npm run test --workspace sideral.discord-presence
 npm run build --workspace sideral.discord-presence
-npm run extension:tool -- check extensions/discord-presence
+npm run extension:tool -- check build/extensions/discord-presence
 ```

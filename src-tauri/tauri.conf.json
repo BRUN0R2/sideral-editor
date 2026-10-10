@@ -8,7 +8,7 @@
     "devUrl": "http://127.0.0.1:1420",
     "beforeBuildCommand": "npm run build",
     "beforeBundleCommand": "npm run desktop:associations",
-    "frontendDist": "../dist"
+    "frontendDist": "../build/frontend"
   },
   "app": {
     "windows": [

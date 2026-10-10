@@ -944,6 +944,7 @@ mod tests {
     use super::{DiscordActivityPayload, DiscordPresenceSessions, validate_application_id};
 
     const APPLICATION_ID: &str = "123456789012345678";
+    const LARGE_IMAGE_URL: &str = "https://raw.githubusercontent.com/BRUN0R2/sideral-editor/main/assets/discord/sideralLightning.gif";
 
     #[test]
     fn validates_bounded_activity_payloads() -> Result<(), Box<dyn std::error::Error>> {
@@ -952,12 +953,23 @@ mod tests {
             "details": "🧑‍💻 main.rs",
             "state": "📁 sideral-editor",
             "startTimestamp": 1_725_000_000,
+            "assets": {
+                "largeImage": LARGE_IMAGE_URL,
+                "largeText": "Sideral Editor"
+            },
             "buttons": [{
                 "label": "Download",
                 "url": "https://github.com/BRUN0R2/sideral-editor/releases/latest"
             }]
         }))?;
         let activity = valid.validate()?;
+        assert_eq!(
+            activity.rpc_value()["assets"],
+            json!({
+                "large_image": LARGE_IMAGE_URL,
+                "large_text": "Sideral Editor"
+            })
+        );
         assert_eq!(
             activity.rpc_value()["buttons"],
             json!([{
