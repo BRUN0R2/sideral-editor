@@ -113,15 +113,16 @@ function Workbench({ extensionHostConnection }: AppProps) {
   const visibleTerminalOutputs = extensions.outputs.filter(
     (output) => !terminalPanel.closedOutputIds.includes(output.resourceId),
   );
-  const openExternalFile = useCallback(
+  const openExternalPath = useCallback(
     async (path: string) => {
       navigate({ kind: "showEditor" });
-      await workspace.openFile(path);
+      setPrimarySidebar("explorer");
+      await workspace.openPath(path);
     },
-    [workspace.openFile],
+    [workspace.openPath],
   );
   useFileOpening(bootstrap.runtime === "desktop" && !workspace.restoringWorkspace, {
-    openFile: openExternalFile,
+    openPath: openExternalPath,
     reportError: workspace.reportError,
   });
   const terminalAvailable = bootstrap.runtime === "desktop";

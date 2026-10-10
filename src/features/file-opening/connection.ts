@@ -5,7 +5,7 @@ import type { FileOpenRequest } from "./contracts";
 import { decodeFileOpenInstruction } from "./contractValidation";
 
 export interface FileOpeningOptions {
-  openFile(path: string): Promise<void>;
+  openPath(path: string): Promise<void>;
   reportError(error: unknown): void;
 }
 
@@ -62,7 +62,7 @@ export function connectFileOpening(options: FileOpeningOptions): FileOpeningConn
         return;
       }
       try {
-        await options.openFile(path);
+        await options.openPath(path);
       } catch (error: unknown) {
         errors.push(toApplicationError(error));
       }

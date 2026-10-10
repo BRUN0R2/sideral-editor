@@ -8,7 +8,7 @@ follow [development](DEVELOPMENT.md) and [contributing](../CONTRIBUTING.md).
 | Guide | Covers |
 | --- | --- |
 | [Getting started](USAGE.md) | Files, tabs, terminal, Settings and extensions |
-| [Windows file opening](FILE-OPENING.md) | Double-click, context menu and executable troubleshooting |
+| [External opening](FILE-OPENING.md) | Windows associations, Codex integration and executable troubleshooting |
 | [Project workspaces](WORKSPACES.md) | Multiple folders, project settings and session restoration |
 | [Translations](TRANSLATING.md) | Add a display language without build tools |
 

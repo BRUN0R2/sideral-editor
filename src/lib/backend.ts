@@ -10,6 +10,7 @@ import {
   decodeJsonSchemaTrustSettingsResponse,
   decodeLocaleSelectionResponse,
   decodeNullableWorkspaceResponse,
+  decodeOpenTargetResponse,
   decodeSavedDocumentResponse,
   decodeTextDocumentResponse,
   decodeWorkspaceResponse,
@@ -24,6 +25,7 @@ import type {
   JsonSchemaTrustSettings,
   LocaleBundle,
   LocaleSelection,
+  OpenTarget,
   SavedDocumentPayload,
   TextDocumentPayload,
   WorkspaceSnapshot,
@@ -99,9 +101,9 @@ export function saveDesktopPreferences(
   );
 }
 
-export function readTextFile(path: string): Promise<TextDocumentPayload> {
+export function readOpenTarget(path: string): Promise<OpenTarget> {
   assertDesktopRuntime();
-  return invokeDecoded("read_text_file", { path }, decodeTextDocumentResponse);
+  return invokeDecoded("read_open_target", { path }, decodeOpenTargetResponse);
 }
 
 export function createTextFile(directory: string, name: string): Promise<TextDocumentPayload> {

@@ -22,6 +22,13 @@ pub struct TextDocument {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum OpenTarget {
+    File { document: TextDocument },
+    Directory { path: String },
+}
+
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SavedDocument {
     pub path: String,
@@ -44,12 +51,24 @@ pub struct DirectoryEntry {
     pub kind: DirectoryEntryKind,
 }
 
-pub fn read_text_file(path: PathBuf) -> AppResult<TextDocument> {
+pub fn read_open_target(path: PathBuf) -> AppResult<OpenTarget> {
     validate_non_empty_path(&path)?;
-
     let metadata = fs::metadata(&path)
         .map_err(|source| AppError::io(format!("could not inspect {}", path.display()), source))?;
+    if metadata.is_dir() {
+        let canonical = fs::canonicalize(&path).map_err(|source| {
+            AppError::io(format!("could not resolve {}", path.display()), source)
+        })?;
+        return Ok(OpenTarget::Directory {
+            path: crate::project_settings::display_path(&canonical),
+        });
+    }
+    Ok(OpenTarget::File {
+        document: read_file_document(&path, &metadata)?,
+    })
+}
 
+fn read_file_document(path: &Path, metadata: &fs::Metadata) -> AppResult<TextDocument> {
     if !metadata.is_file() {
         return Err(AppError::InvalidPath(format!(
             "{} is not a file",
@@ -63,7 +82,7 @@ pub fn read_text_file(path: PathBuf) -> AppResult<TextDocument> {
         });
     }
 
-    let bytes = fs::read(&path)
+    let bytes = fs::read(path)
         .map_err(|source| AppError::io(format!("could not read {}", path.display()), source))?;
 
     if bytes.contains(&0) {
@@ -77,7 +96,7 @@ pub fn read_text_file(path: PathBuf) -> AppResult<TextDocument> {
         .ok_or_else(|| AppError::InvalidPath("the file name is not valid Unicode".to_owned()))?;
 
     Ok(TextDocument {
-        path: display_path(&path),
+        path: display_path(path),
         name: name.to_owned(),
         content,
     })
@@ -291,9 +310,61 @@ mod tests {
 
     use crate::error::AppError;
 
-    use super::{create_text_file, validate_file_name};
+    use super::{
+        MAX_TEXT_FILE_BYTES, OpenTarget, create_text_file, read_open_target, validate_file_name,
+    };
 
     type TestResult = Result<(), Box<dyn Error>>;
+
+    #[test]
+    fn opens_files_and_directories_without_changing_their_contents() -> TestResult {
+        let directory = tempdir()?;
+        let path = directory.path().join("ação com espaços.ts");
+        fs::write(&path, "export const value = 42;\n")?;
+        let OpenTarget::File { document } = read_open_target(path.clone())? else {
+            return Err("expected a text document".into());
+        };
+        assert_eq!(document.name, "ação com espaços.ts");
+        assert_eq!(document.content, "export const value = 42;\n");
+        let OpenTarget::Directory { path: opened_path } =
+            read_open_target(directory.path().to_path_buf())?
+        else {
+            return Err("expected a directory".into());
+        };
+        assert_eq!(
+            opened_path,
+            crate::project_settings::display_path(&fs::canonicalize(directory.path())?)
+        );
+        assert_eq!(fs::read_to_string(path)?, document.content);
+        assert!(!directory.path().join(".sideral").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn external_targets_preserve_text_file_safety_checks() -> TestResult {
+        let directory = tempdir()?;
+        let binary = directory.path().join("binary.dat");
+        fs::write(&binary, [0, 1, 2])?;
+        assert!(matches!(
+            read_open_target(binary),
+            Err(AppError::BinaryFile)
+        ));
+        let invalid = directory.path().join("invalid.txt");
+        fs::write(&invalid, [255])?;
+        assert!(matches!(
+            read_open_target(invalid),
+            Err(AppError::InvalidUtf8)
+        ));
+        let oversized = directory.path().join("oversized.txt");
+        fs::File::create(&oversized)?.set_len(MAX_TEXT_FILE_BYTES + 1)?;
+        assert!(matches!(
+            read_open_target(oversized),
+            Err(AppError::FileTooLarge { .. })
+        ));
+        assert!(read_open_target(directory.path().join("missing.rs")).is_err());
+        assert!(read_open_target(std::path::PathBuf::new()).is_err());
+        Ok(())
+    }
 
     #[test]
     fn creates_an_empty_file_with_the_requested_extension() -> TestResult {

@@ -21,7 +21,7 @@ mod workspace_session;
 use std::path::PathBuf;
 
 use desktop_integration::{DesktopPreferences, DesktopPreferencesState};
-use documents::{DirectoryEntry, SavedDocument, TextDocument};
+use documents::{DirectoryEntry, OpenTarget, SavedDocument, TextDocument};
 use error::{AppError, CommandError, CommandResult};
 use i18n::LocaleSelection;
 use json_schemas::{
@@ -96,8 +96,8 @@ fn open_external_url(app: AppHandle, url: String) -> CommandResult<()> {
 }
 
 #[tauri::command(rename_all = "camelCase")]
-async fn read_text_file(path: String) -> CommandResult<TextDocument> {
-    run_blocking(move || documents::read_text_file(PathBuf::from(path))).await
+async fn read_open_target(path: String) -> CommandResult<OpenTarget> {
+    run_blocking(move || documents::read_open_target(PathBuf::from(path))).await
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -256,7 +256,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             set_language_preference,
             open_locale_directory,
             open_external_url,
-            read_text_file,
+            read_open_target,
             create_text_file,
             write_text_file,
             list_directory,
